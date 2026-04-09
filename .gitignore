@@ -1,0 +1,45 @@
+# dune build artifacts
+_build/
+*.install
+
+# ocaml compiled files
+*.cmx
+*.cmi
+*.cmo
+*.cmxs
+*.o
+*.a
+
+# bytecode / native executables
+*.byte
+*.native
+
+# toplevel / utop
+.utop-history
+
+# ocamlformat cache
+._ocamlformat
+
+# merlin / editor stuff
+.merlin
+.ocamlmerlin
+
+# opam / local switches
+_opam/
+
+# nix / flake
+/result
+/result-*
+
+# logs
+*.log
+
+# macOS
+.DS_Store
+
+# vscode
+.vscode/
+
+# temp files
+*~
+*.swp
