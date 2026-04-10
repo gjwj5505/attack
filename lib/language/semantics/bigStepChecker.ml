@@ -8,7 +8,7 @@ let (>>=) res f = match res with Ok -> f () | Error _ as err -> err
 
 (* 식(Expression) 검증 *)
 let rec check_etree = function
-| EInt ((), (env, e, v)) ->
+| EInt ((), (_env, e, v)) ->
     (match e with
         | Exp.Int n -> if n = v then Ok else Error (Printf.sprintf "E-Int: %d != %d" n v)
         | _ -> Error "E-Int: Syntax mismatch")
@@ -20,7 +20,7 @@ let rec check_etree = function
             else Error (Printf.sprintf "E-Var: Lookup %s failed" x)
         | _ -> Error "E-Var: Syntax mismatch")
 
-| EBop ((t1, t2), (env, e, v)) ->
+| EBop ((t1, t2), (_env, e, v)) ->
     check_etree t1 >>= fun () ->
     check_etree t2 >>= fun () ->
     (match e with
@@ -35,7 +35,7 @@ let rec check_etree = function
             if v = expected then Ok else Error "E-Bop: Result mismatch"
         | _ -> Error "E-Bop: Syntax mismatch")
 
-| EUop (t1, (env, e, v)) ->
+| EUop (t1, (_env, e, v)) ->
     check_etree t1 >>= fun () ->
     (match e with
         | Exp.Uop (op, _) ->
@@ -55,7 +55,7 @@ let rec check_ctree = function
               else Error "S-Assign: Environment update mismatch"
           | _ -> Error "S-Assign: Syntax mismatch")
 
-  | Seq ((t1, t2), (env, c, env_final)) ->
+  | Seq ((t1, t2), (_env, _c, env_final)) ->
       check_ctree t1 >>= fun () ->
       check_ctree t2 >>= fun () ->
       let env_mid = get_last_env t1 in
@@ -65,34 +65,34 @@ let rec check_ctree = function
       if env_mid = env_start2 && get_last_env t2 = env_final then Ok
       else Error "S-Seq: Environment flow broken"
 
-  | IfTrue ((et, ct), (env, c, env_final)) ->
+  | IfTrue ((et, ct), (_env, _c, env_final)) ->
       check_etree et >>= fun () ->
       check_ctree ct >>= fun () ->
-      let v_cond = get_eval_val et in
-      if v_cond = 0 then Error "S-IfTrue: Condition should be non-zero"
+      let v_If = get_eval_val et in
+      if v_If = 0 then Error "S-IfTrue: If Condition should be non-zero"
       else
           let env_after_branch = get_last_env ct in
           if env_after_branch = env_final then Ok
           else Error "S-IfTrue: Final environment mismatch"
 
-  | IfFalse ((et, ct), (env, c, env_final)) ->
+  | IfFalse ((et, ct), (_env, _c, env_final)) ->
       check_etree et >>= fun () ->
       check_ctree ct >>= fun () ->
-      let v_cond = get_eval_val et in
-      if v_cond <> 0 then Error "S-IfFalse: Condition should be zero"
+      let v_If = get_eval_val et in
+      if v_If <> 0 then Error "S-IfFalse: If Condition should be zero"
       else
           let env_after_branch = get_last_env ct in
           if env_after_branch = env_final then Ok
           else Error "S-IfFalse: Final environment mismatch"
 
-  | WhileTrue ((et, t_body, t_rest), (env, c, env_final)) ->
+  | WhileTrue ((et, t_body, t_rest), (_env, _c, env_final)) ->
       check_etree et >>= fun () ->
       check_ctree t_body >>= fun () ->
       check_ctree t_rest >>= fun () ->
       if get_eval_val et <> 0 && get_last_env t_rest = env_final then Ok
       else Error "S-WhileTrue: Logic or environment mismatch"
 
-  | WhileFalse (et, (env, c, env_final)) ->
+  | WhileFalse (et, (env, _c, env_final)) ->
       check_etree et >>= fun () ->
       if get_eval_val et = 0 && env = env_final then Ok
-      else Error "S-WhileFalse: Should not change state or condition not zero"
+      else Error "S-WhileFalse: Should not change state or If Condition not zero"

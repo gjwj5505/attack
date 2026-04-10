@@ -1,6 +1,6 @@
-open Environment
 open BigStep
 open Syntax
+open Size
 
 (* --- 데이터 구조 정의 --- *)
 type box = { lines: string list; width: int; height: int }
@@ -67,14 +67,13 @@ let make_conclusion env_obj cmd_str res_str =
   let total_w = List.fold_left (fun acc b -> acc + b.width) 0 adjusted_boxes + (List.length adjusted_boxes - 1) in
   { lines = combined_lines; width = total_w; height = max_h }
 
-let build_proof rule_name premises conclusion_box =
+let build_proof rule_name size premises conclusion_box =
   let gap = 3 in
   let premise_box = match premises with
     | [] -> empty_box
     | [p] -> p
     | ps -> 
         let max_ph = List.fold_left (fun acc b -> max acc b.height) 0 ps in
-        (* 전제들은 바닥(Bottom)을 맞춰서 구분선 위에 배치 *)
         let padded_ps = List.map (fun b -> { b with lines = pad Bottom b max_ph; height = max_ph }) ps in
         List.fold_left (fun acc b -> 
           let combined = List.map2 (fun s1 s2 -> s1 ^ (String.make gap ' ') ^ s2) acc.lines b.lines in
@@ -82,7 +81,7 @@ let build_proof rule_name premises conclusion_box =
         ) (List.hd padded_ps) (List.tl padded_ps)
   in
 
-  let rule_label = "[" ^ rule_name ^ "] " in
+  let rule_label = Printf.sprintf "[%s | prog=%d | proof=%d] " rule_name size.prog_size size.proof_size in
   let b_label = make_box rule_label in
   let full_h = max b_label.height conclusion_box.height in
   
@@ -111,29 +110,32 @@ let build_proof rule_name premises conclusion_box =
 
 (* --- 구문 트리 순회 (AST -> Box) --- *)
 
-let rec box_of_etree = function
+let rec box_of_etree t =
+  match t with
   | EInt (_, (env, e, v)) -> 
-      build_proof "E-Int" [] (make_conclusion env (Exp.string_of_t e) (string_of_int v))
+      build_proof "E-Int" (sizeof_etree t) [] (make_conclusion env (Exp.string_of_t e) (string_of_int v))
   | EVar (_, (env, e, v)) -> 
-      build_proof "E-Var" [] (make_conclusion env (Exp.string_of_t e) (string_of_int v))
+      build_proof "E-Var" (sizeof_etree t) [] (make_conclusion env (Exp.string_of_t e) (string_of_int v))
   | EBop ((t1, t2), (env, e, v)) -> 
-      build_proof "E-Bop" [box_of_etree t1; box_of_etree t2] (make_conclusion env (Exp.string_of_t e) (string_of_int v))
+      build_proof "E-Bop" (sizeof_etree t) [box_of_etree t1; box_of_etree t2] (make_conclusion env (Exp.string_of_t e) (string_of_int v))
   | EUop (t1, (env, e, v)) -> 
-      build_proof "E-Uop" [box_of_etree t1] (make_conclusion env (Exp.string_of_t e) (string_of_int v))
+      build_proof "E-Uop" (sizeof_etree t) [box_of_etree t1] (make_conclusion env (Exp.string_of_t e) (string_of_int v))
 
-let rec box_of_ctree = function
+let rec box_of_ctree t =
+  match t with
   | Assign (et, (env, c, env')) -> 
-      build_proof "S-Assign" [box_of_etree et] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
+      build_proof "S-Assign" (sizeof_ctree t) [box_of_etree et] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
   | Seq ((t1, t2), (env, c, env')) -> 
-      build_proof "S-Seq" [box_of_ctree t1; box_of_ctree t2] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
+      build_proof "S-Seq" (sizeof_ctree t) [box_of_ctree t1; box_of_ctree t2] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
   | IfTrue ((et, ct), (env, c, env')) -> 
-      build_proof "S-IfTrue" [box_of_etree et; box_of_ctree ct] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
+      build_proof "S-IfTrue" (sizeof_ctree t) [box_of_etree et; box_of_ctree ct] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
   | IfFalse ((et, ct), (env, c, env')) -> 
-      build_proof "S-IfFalse" [box_of_etree et; box_of_ctree ct] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
+      build_proof "S-IfFalse" (sizeof_ctree t) [box_of_etree et; box_of_ctree ct] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
   | WhileTrue ((et, t_body, t_rest), (env, c, env')) -> 
-      build_proof "S-WhileTrue" [box_of_etree et; box_of_ctree t_body; box_of_ctree t_rest] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
+      build_proof "S-WhileTrue" (sizeof_ctree t) [box_of_etree et; box_of_ctree t_body; box_of_ctree t_rest] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
   | WhileFalse (et, (env, c, env')) -> 
-      build_proof "S-WhileFalse" [box_of_etree et] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
+      build_proof "S-WhileFalse" (sizeof_ctree t) [box_of_etree et] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
+
 
 let print_tree tree =
   let final_box = match tree with 

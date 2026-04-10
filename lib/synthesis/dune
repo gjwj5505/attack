@@ -1,0 +1,4 @@
+(library
+ (name synthesis)
+ (modules :standard)
+ (libraries language))

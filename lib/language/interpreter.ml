@@ -103,7 +103,7 @@ let trans_intp (prog : Cmd.lbl_t) : Mem.t =
         let mem = Loc.Map.add x v mem in
         run mem (next lbl)
       | Seq _ -> run mem (next lbl)
-      | Cond (pred, _, _) -> (
+      | If (pred, _, _) -> (
         match intp_exp mem pred with
         | Int i ->
             if i <> 0 then run mem (next_true lbl)
@@ -125,7 +125,7 @@ let def_intp (prog : Cmd.lbl_t) : Mem.t =
     | Seq (c1, c2) ->
         let mem = run mem c1.cmd in
         run mem c2.cmd
-    | Cond (pred, con, alt) -> (
+    | If (pred, con, alt) -> (
         match intp_exp mem pred with
         | Int i -> if i <> 0 then run mem con.cmd else run mem alt.cmd)
     | While (pred, c) as whl ->

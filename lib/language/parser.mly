@@ -37,7 +37,7 @@ cmd:
       { $1 }
     | mkcmd(c1 = cmd; SEMI; c2 = cmd                                { Seq (c1, c2) })
       { $1 }
-    | mkcmd(IF; pred = exp; THEN; con = cmd; SEMI?; ELSE; alt = cmd { Cond (pred, con, alt) })
+    | mkcmd(IF; pred = exp; THEN; con = cmd; SEMI?; ELSE; alt = cmd { If (pred, con, alt) })
       { $1 }
     | mkcmd(WHILE; pred = exp; DO; body = cmd; END                   { While (pred, body) })
       { $1 }

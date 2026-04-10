@@ -128,7 +128,7 @@ let rec filter_t e mem =
             match (e1, e2) with
             | Var x, Var y -> 
                 Abs_mem.add x new_v (Abs_mem.add y new_v mem)
-            | Var x, e' | e', Var x ->
+            | Var x, _ | _, Var x ->
                 Abs_mem.add x new_v mem
             | _, _ -> mem (* 포기 *)
           )
@@ -230,7 +230,7 @@ let analysis (prog : Cmd.lbl_t) : Abs_mem.t =
       | Cmd.Assign (x, e) ->
           let v = antp_exp cur_mem e in
           [(next cur, Abs_mem.Mem (Loc.Map.add x v (match cur_mem with Abs_mem.Mem m -> m | Abs_mem.Bot -> Loc.Map.empty)))]
-      | Cmd.Cond (e, _, _) | Cmd.While (e, _) ->
+      | Cmd.If (e, _, _) | Cmd.While (e, _) ->
           [(next_true cur, filter_t e cur_mem); (next_false cur, filter_f e cur_mem)]
       | _ -> [(next cur, cur_mem)] in
     List.iter (fun (nex, mem) ->

@@ -42,7 +42,7 @@ module Cmd = struct
   and t =
     | Assign of string * Exp.t
     | Seq of lbl_t * lbl_t
-    | Cond of Exp.t * lbl_t * lbl_t
+    | If of Exp.t * lbl_t * lbl_t
     | While of Exp.t * lbl_t
 
   module Lbl_map = struct
@@ -61,7 +61,7 @@ module Cmd = struct
       let tbl = Lbl_map.add lbl cmd tbl in
       match cmd with
       | Seq (c1, c2) -> tbl |> tabulate' c1 |> tabulate' c2
-      | Cond (_, c1, c2) -> tbl |> tabulate' c1 |> tabulate' c2
+      | If (_, c1, c2) -> tbl |> tabulate' c1 |> tabulate' c2
       | While (_, c) ->
           tbl |> tabulate' c
       | _ -> tbl
@@ -77,10 +77,10 @@ module Cmd = struct
             let c1, lbl = relabel' lbl c1 in
             let c2, lbl = relabel' lbl c2 in
             (Seq (c1, c2), lbl)
-        | Cond (pred, con, alt) ->
+        | If (pred, con, alt) ->
             let con, lbl = relabel' lbl con in
             let alt, lbl = relabel' lbl alt in
-            (Cond (pred, con, alt), lbl)
+            (If (pred, con, alt), lbl)
         | While (pred, c) ->
             let c, lbl = relabel' lbl c in
             (While (pred, c), lbl)
@@ -103,7 +103,7 @@ module Cmd = struct
         (* let lvl = lvl + 1 in *)
         Printf.sprintf "\n%s;\n%s" (string_of_lbl_t ~lvl c1)
           (string_of_lbl_t ~lvl c2)
-    | Cond (pred, con, alt) ->
+    | If (pred, con, alt) ->
         let lvl = lvl + 1 in
         Printf.sprintf "if %s then\n%s else\n%s" (Exp.string_of_t pred)
           (string_of_lbl_t ~lvl con) (string_of_lbl_t ~lvl alt)
@@ -136,7 +136,7 @@ module Cfg = struct
       | Seq (c1, c2) ->
           { cfg with next = next @+ (l, c1.lbl) }
           |> make' c1 (c2.lbl) |> make' c2 exit
-      | Cond (_, c1, c2) ->
+      | If (_, c1, c2) ->
           {
             cfg with
             next_true = next_true @+ (l, c1.lbl);

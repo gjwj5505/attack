@@ -1,4 +1,3 @@
-open Analyzer
 open Language
 
 let src = ref ""

@@ -1,4 +1,3 @@
-open Environment
 open Syntax
 
 type env = Environment.t

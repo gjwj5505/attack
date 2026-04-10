@@ -45,7 +45,7 @@ let rec derive_cmd (lc : Cmd.lbl_t) (env : Environment.t) : ctree =
       let env_final = get_last_env t2 in
       Seq ((t1, t2), (env, cmd_raw, env_final))
 
-  | Cmd.Cond (pred, con, alt) ->
+  | Cmd.If (pred, con, alt) ->
       let pt = derive_exp pred env in
       if (get_eval_val pt) <> 0 then
         let t_con = derive_cmd con env in

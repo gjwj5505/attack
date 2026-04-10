@@ -207,28 +207,28 @@ let or_ i1 i2 =
 let filter_lt cut i = 
   match (cut, i) with
   | Bot, _ | _, Bot -> failwith "filter_lt: unexpected Bot"
-  | Itv (l1, r1), Itv (l2, r2) ->
+  | Itv (_l1, r1), Itv (l2, r2) ->
       let open Bound in
       Itv(l2, min r2 (r1 + Z (-1)))
 
 let filter_gt cut i = 
   match (cut, i) with
   | Bot, _ | _, Bot -> failwith "filter_gt: unexpected Bot"
-  | Itv (l1, r1), Itv (l2, r2) ->
+  | Itv (l1, r1), Itv (l2, _r2) ->
       let open Bound in
       Itv(max l2 (l1 + Z 1), r1)
       
 let filter_le cut i = 
   match (cut, i) with
   | Bot, _ | _, Bot -> failwith "filter_le: unexpected Bot"
-  | Itv (l1, r1), Itv (l2, r2) ->
+  | Itv (_l1, r1), Itv (l2, r2) ->
       let open Bound in
       Itv(l2, min r2 r1)
 
 let filter_ge cut i = 
   match (cut, i) with
   | Bot, _ | _, Bot -> failwith "filter_ge: unexpected Bot"
-  | Itv (l1, r1), Itv (l2, r2) ->
+  | Itv (l1, _r1), Itv (l2, r2) ->
       let open Bound in
       Itv(max l1 l2, r2)
 
