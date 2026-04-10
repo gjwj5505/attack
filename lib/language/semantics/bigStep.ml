@@ -27,32 +27,25 @@ and ctree =
   | WhileFalse of etree * c_concl
 
   
+let get_e_concl = function
+  | EInt (_, c) | EVar (_, c) | EBop (_, c) | EUop (_, c) -> c
+
+let get_c_concl = function
+  | Assign (_, c) | Seq (_, c) | IfTrue (_, c) | IfFalse (_, c) 
+  | WhileTrue (_, c) | WhileFalse (_, c) -> c
+
 let get_start_env = function
-  | ETree (EInt (_, (env, _, _)))   | ETree (EVar (_, (env, _, _)))
-  | ETree (EBop (_, (env, _, _)))   | ETree (EUop (_, (env, _, _)))
-  | CTree (Assign (_, (env, _, _))) | CTree (Seq (_, (env, _, _)))
-  | CTree (IfTrue (_, (env, _, _))) | CTree (IfFalse (_, (env, _, _)))
-  | CTree (WhileTrue (_, (env, _, _))) | CTree (WhileFalse (_, (env, _, _))) -> env
+  | ETree et -> let (env, _, _) = get_e_concl et in env
+  | CTree ct -> let (env, _, _) = get_c_concl ct in env
 
 type result = V of value | E of env
 
 let get_result = function
-  | ETree (EInt (_, (_, _, v)))   | ETree (EVar (_, (_, _, v)))
-  | ETree (EBop (_, (_, _, v)))   | ETree (EUop (_, (_, _, v))) -> V v
-  | CTree (Assign (_, (_, _, e))) | CTree (Seq (_, (_, _, e)))
-  | CTree (IfTrue (_, (_, _, e))) | CTree (IfFalse (_, (_, _, e)))
-  | CTree (WhileTrue (_, (_, _, e))) | CTree (WhileFalse (_, (_, _, e))) -> E e
+  | ETree et -> let (_, _, v) = get_e_concl et in V v
+  | CTree ct -> let (_, _, e) = get_c_concl ct in E e
 
-let get_eval_val = function
-  | EInt (_, (_, _, v))
-  | EVar (_, (_, _, v))
-  | EBop (_, (_, _, v))
-  | EUop (_, (_, _, v)) -> v
+let get_eval_val et = 
+  let (_, _, v) = get_e_concl et in v
 
-let get_last_env = function
-  | Assign (_, (_, _, env'))
-  | Seq (_, (_, _, env'))
-  | IfTrue (_, (_, _, env'))
-  | IfFalse (_, (_, _, env'))
-  | WhileTrue (_, (_, _, env'))
-  | WhileFalse (_, (_, _, env')) -> env'
+let get_last_env ct = 
+  let (_, _, env) = get_c_concl ct in env
