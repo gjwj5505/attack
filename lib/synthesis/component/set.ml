@@ -1,39 +1,108 @@
-open Language.Syntax
-open Language.Syntax.BigStep
+open Language
+open Size
 
-module Size = Component_size
+module ExpSet = Set.Make (struct
+  type t = Syntax.Exp.t
 
-module ExpOrd = struct
-  type t = Exp.t
   let compare = Stdlib.compare
-end
+end)
 
-module CmdOrd = struct
-  type t = Cmd.t
+module CmdSet = Set.Make (struct
+  type t = Syntax.Cmd.t
+
   let compare = Stdlib.compare
-end
+end)
 
-module ETreeOrd = struct
-  type t = etree
+module ETreeSet = Set.Make (struct
+  type t = BigStep.etree
+
   let compare = Stdlib.compare
-end
+end)
 
-module CTreeOrd = struct
-  type t = ctree
+module CTreeSet = Set.Make (struct
+  type t = BigStep.ctree
+
   let compare = Stdlib.compare
-end
+end)
 
-module ExpSet = Set.Make(ExpOrd)
-module CmdSet = Set.Make(CmdOrd)
-module ETreeSet = Set.Make(ETreeOrd)
-module CTreeSet = Set.Make(CTreeOrd)
+type bucket = {
+  exps : ExpSet.t;
+  cmds : CmdSet.t;
+  etrees : ETreeSet.t;
+  ctrees : CTreeSet.t;
+}
 
-type component_bucket =
-  { exps   : ExpSet.t
-  ; cmds   : CmdSet.t
-  ; etrees : ETreeSet.t
-  ; ctrees : CTreeSet.t
+type t = bucket Size.Map.t
+
+let empty_bucket =
+  {
+    exps = ExpSet.empty;
+    cmds = CmdSet.empty;
+    etrees = ETreeSet.empty;
+    ctrees = CTreeSet.empty;
   }
 
-type component_table = component_bucket array
+let empty = Size.Map.empty
 
+let get_bucket size tbl =
+  match Size.Map.find_opt size tbl with
+  | Some b -> b
+  | None -> empty_bucket
+
+let update_bucket size f tbl =
+  let bucket = get_bucket size tbl in
+  Size.Map.add size (f bucket) tbl
+
+let add_exp size e tbl =
+  update_bucket size (fun b -> { b with exps = ExpSet.add e b.exps }) tbl
+
+let add_cmd size c tbl =
+  update_bucket size (fun b -> { b with cmds = CmdSet.add c b.cmds }) tbl
+
+let add_etree size et tbl =
+  update_bucket size (fun b -> { b with etrees = ETreeSet.add et b.etrees }) tbl
+
+let add_ctree size ct tbl =
+  update_bucket size (fun b -> { b with ctrees = CTreeSet.add ct b.ctrees }) tbl
+
+let add_exp_exact e tbl =
+  let size = Size.make (Size.sizeof_Exp e) 0 in
+  add_exp size e tbl
+
+let add_cmd_exact c tbl =
+  let size = Size.make (Size.sizeof_Cmd c) 0 in
+  add_cmd size c tbl
+
+let add_etree_exact et tbl =
+  add_etree (Size.sizeof_etree et) et tbl
+
+let add_ctree_exact ct tbl =
+  add_ctree (Size.sizeof_ctree ct) ct tbl
+
+let exps_of_size size tbl = (get_bucket size tbl).exps
+let cmds_of_size size tbl = (get_bucket size tbl).cmds
+let etrees_of_size size tbl = (get_bucket size tbl).etrees
+let ctrees_of_size size tbl = (get_bucket size tbl).ctrees
+
+let fold_sizes f tbl init = Size.Map.fold f tbl init
+
+let bucket_cardinal b =
+  ExpSet.cardinal b.exps + CmdSet.cardinal b.cmds + ETreeSet.cardinal b.etrees
+  + CTreeSet.cardinal b.ctrees
+
+let string_of_bucket b =
+  Printf.sprintf "{exp=%d; cmd=%d; etree=%d; ctree=%d}"
+    (ExpSet.cardinal b.exps) (CmdSet.cardinal b.cmds) (ETreeSet.cardinal b.etrees)
+    (CTreeSet.cardinal b.ctrees)
+
+let string_of_table tbl =
+  fold_sizes
+    (fun size bucket acc ->
+      if bucket_cardinal bucket = 0 then acc
+      else
+        let line =
+          Printf.sprintf "%s -> %s" (Size.to_string size)
+            (string_of_bucket bucket)
+        in
+        if acc = "" then line else acc ^ "\n" ^ line)
+    tbl ""
