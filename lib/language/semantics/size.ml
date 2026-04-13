@@ -86,7 +86,7 @@ and sizeof_ctree = function
       1 + sizeof_etree et + sizeof_ctree body + sizeof_ctree rest
   | WhileFalse (et, _) -> 1 + sizeof_etree et
 
-let sizeof_prog = function
+let sizeof_conclusion_prog = function
   | ETree et ->
       (match et with
        | EInt (_, (_, e, _))
@@ -106,7 +106,7 @@ let sizeof_prog = function
 
 let sizeof_tree t =
   {
-    prog_size = sizeof_prog t;
+    prog_size = sizeof_conclusion_prog t;
     proof_size = sizeof_proof t;
   }
 
