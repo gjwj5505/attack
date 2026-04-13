@@ -34,7 +34,7 @@ let sub a b =
 let is_valid { prog_size; proof_size } =
   prog_size >= 0 && proof_size >= 0
 
-let is_raw_component { prog_size; proof_size } =
+let is_prog_component { prog_size; proof_size } =
   prog_size >= 1 && proof_size = 0
 
 let is_proof_component { prog_size; proof_size } =
@@ -42,25 +42,6 @@ let is_proof_component { prog_size; proof_size } =
 
 let to_string s =
   Printf.sprintf "(%d,%d)" s.prog_size s.proof_size
-
-let diagonal_up_to bound =
-  let rec collect diag acc =
-    if diag > total bound then List.rev acc
-    else
-      let rec row prog acc =
-        let proof = diag - prog in
-        if prog < 1 then acc
-        else
-          let cur = { prog_size = prog; proof_size = proof } in
-          let acc = if proof >= 0 && compare cur bound <= 0 then cur :: acc else acc in
-          row (prog - 1) acc
-      in
-      collect (diag + 1) (row (diag - 1) acc)
-  in
-  collect 1 []
-
-let all_smaller target =
-  diagonal_up_to target |> List.filter (fun s -> compare s target < 0)
 
 module Map = Map.Make (struct
   type nonrec t = size
