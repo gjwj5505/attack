@@ -12,18 +12,29 @@ let any_component s =
 let exact ~prog_size ~proof_size s =
   Size.prog_size s = prog_size && Size.proof_size s = proof_size
 
-let diagonal_up_to bound =
+let rectangular_up_to bound =
   let acc = ref [] in
-  for prog = 1 to Size.prog_size bound do
+  for prog = 0 to Size.prog_size bound do
     for proof = 0 to Size.proof_size bound do
       acc := Size.make prog proof :: !acc
     done
   done;
-  List.sort Size.compare !acc
+  List.rev !acc
+
+let diagonal_up_to bound =
+  let acc = ref [] in
+  for total = 0 to Size.total bound do
+    for prog = total downto 0 do
+      let proof = total - prog in
+      let cur = Size.make prog proof in
+      if Size.compare cur bound <= 0 then acc := cur :: !acc
+    done
+  done;
+  List.rev !acc
 
 let partition_with_constraints (target : piece) (constraints : constraint_ list) :
     piece list list =
-  let pool = diagonal_up_to target in
+  let pool = rectangular_up_to target in
   let rec aux remaining pending =
     match pending with
     | [] ->

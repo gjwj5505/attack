@@ -1,5 +1,4 @@
 open Language
-open Size
 
 module ExpSet = Set.Make (struct
   type t = Syntax.Exp.t
