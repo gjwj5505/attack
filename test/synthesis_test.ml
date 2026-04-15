@@ -39,18 +39,19 @@ let string_of_cmds cmds =
   if List.length cmds > 10 then String.concat "\n" cmds
   else String.concat "; " cmds
 
-let string_of_etree = function
-  | BigStep.EInt (_, (env, e, v))
-  | EVar (_, (env, e, v))
-  | EBop (_, (env, e, v))
-  | EUop (_, (env, e, v)) ->
-      Printf.sprintf "{%s} |- %s => %d" (Environment.string_of_env env)
-        (Syntax.Exp.string_of_t e) v
-
-let string_of_etrees etrees =
+let print_etrees etrees =
   etrees |> Component_set.ETreeSet.elements
-  |> List.map string_of_etree
-  |> String.concat "; "
+  |> List.iter (fun et ->
+         Visualizer.print_tree (BigStep.ETree et);
+         print_endline "")
+
+let assert_valid_etrees name etrees =
+  Component_set.ETreeSet.iter
+    (fun et ->
+      match BigStepChecker.check_etree et with
+      | Ok -> ()
+      | Error msg -> failwith (name ^ ": " ^ msg))
+    etrees
 
 let assert_equal_sizes name expected actual =
   if expected <> actual then
@@ -234,8 +235,9 @@ let test_bottom_up_eint_growth () =
   let env_x0 = env_of_bindings [ ("x", 0) ] in
   let env_x1 = env_of_bindings [ ("x", 1) ] in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, bound=(1,1)\n  EInt etrees at (1,1)=[%s]\n\n"
-    (string_of_etrees etrees);
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, bound=(1,1)\n  EInt etrees at (1,1):\n";
+  print_etrees etrees;
+  assert_valid_etrees "eint valid etrees" etrees;
   assert_true "generated EInt 0 under x=0"
     (Component_set.ETreeSet.mem
        (BigStep.EInt ((), (env_x0, Syntax.Exp.Int 0, 0)))
@@ -254,8 +256,9 @@ let test_bottom_up_evar_growth () =
   let env_x0 = env_of_bindings [ ("x", 0) ] in
   let env_x1 = env_of_bindings [ ("x", 1) ] in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, bound=(1,1)\n  EVar etrees at (1,1)=[%s]\n\n"
-    (string_of_etrees etrees);
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, bound=(1,1)\n  EVar etrees at (1,1):\n";
+  print_etrees etrees;
+  assert_valid_etrees "evar valid etrees" etrees;
   assert_true "generated EVar x under x=0"
     (Component_set.ETreeSet.mem
        (BigStep.EVar ((), (env_x0, Syntax.Exp.Var "x", 0)))
@@ -263,6 +266,54 @@ let test_bottom_up_evar_growth () =
   assert_true "generated EVar x under x=1"
     (Component_set.ETreeSet.mem
        (BigStep.EVar ((), (env_x1, Syntax.Exp.Var "x", 1)))
+       etrees)
+
+let test_bottom_up_euop_growth () =
+  let cfg =
+    Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) ()
+  in
+  let tbl = Bottom_up.build_up_to cfg (size 2 2) in
+  let etrees = Component_set.etrees_of_size (size 2 2) tbl in
+  let env_x1 = env_of_bindings [ ("x", 1) ] in
+  let x = Syntax.Exp.Var "x" in
+  Printf.printf
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, bound=(2,2)\n  EUop etrees at (2,2):\n";
+  print_etrees etrees;
+  assert_valid_etrees "euop valid etrees" etrees;
+  assert_true "generated EUop -x under x=1"
+    (Component_set.ETreeSet.mem
+       (BigStep.EUop
+          ( BigStep.EVar ((), (env_x1, x, 1)),
+            (env_x1, Syntax.Exp.Uop (Syntax.Exp.Uminus, x), -1) ))
+       etrees)
+
+let test_bottom_up_ebop_growth () =
+  let cfg =
+    Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) ()
+  in
+  let tbl = Bottom_up.build_up_to cfg (size 3 3) in
+  let etrees = Component_set.etrees_of_size (size 3 3) tbl in
+  let env_x0 = env_of_bindings [ ("x", 0) ] in
+  let env_x1 = env_of_bindings [ ("x", 1) ] in
+  let x = Syntax.Exp.Var "x" in
+  let one = Syntax.Exp.Int 1 in
+  Printf.printf
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, bound=(3,3)\n  EBop etrees at (3,3):\n";
+  print_etrees etrees;
+  assert_valid_etrees "ebop valid etrees" etrees;
+  assert_true "generated EBop x < 1 under x=0"
+    (Component_set.ETreeSet.mem
+       (BigStep.EBop
+          ( ( BigStep.EVar ((), (env_x0, x, 0)),
+              BigStep.EInt ((), (env_x0, one, 1)) ),
+            (env_x0, Syntax.Exp.Bop (Syntax.Exp.Lt, x, one), 1) ))
+       etrees);
+  assert_true "generated EBop x < x under x=1"
+    (Component_set.ETreeSet.mem
+       (BigStep.EBop
+          ( ( BigStep.EVar ((), (env_x1, x, 1)),
+              BigStep.EVar ((), (env_x1, x, 1)) ),
+            (env_x1, Syntax.Exp.Bop (Syntax.Exp.Lt, x, x), 0) ))
        etrees)
 
 let test_bottom_up_assign_growth () =
@@ -394,25 +445,54 @@ let test_bottom_up_while_growth () =
        (Syntax.Cmd.While (x, lbl seq_assign_x_assign_x))
        cmds_9)
 
-let run_all () =
-  test_rectangular_up_to ();
-  test_diagonal_up_to ();
-  test_partition_with_constraints ();
-  test_impossible_partition ();
-  test_bounded_envs ();
-  test_bottom_up_initial_components ();
-  test_bottom_up_exp_growth ();
-  test_bottom_up_eint_growth ();
-  test_bottom_up_evar_growth ();
-  test_bottom_up_assign_growth ();
-  test_bottom_up_seq_growth ();
-  test_bottom_up_if_growth ();
-  test_bottom_up_while_growth ()
+let all_tests =
+  [
+    ("rect", test_rectangular_up_to);
+    ("diag", test_diagonal_up_to);
+    ("part", test_partition_with_constraints);
+    ("imp", test_impossible_partition);
+    ("env", test_bounded_envs);
+    ("init", test_bottom_up_initial_components);
+    ("exp", test_bottom_up_exp_growth);
+    ("eint", test_bottom_up_eint_growth);
+    ("evar", test_bottom_up_evar_growth);
+    ("euop", test_bottom_up_euop_growth);
+    ("ebop", test_bottom_up_ebop_growth);
+    ("asgn", test_bottom_up_assign_growth);
+    ("seq", test_bottom_up_seq_growth);
+    ("if", test_bottom_up_if_growth);
+    ("while", test_bottom_up_while_growth);
+  ]
 
 let selected_tests = ref []
 
 let add_test name test =
   selected_tests := !selected_tests @ [ (name, test) ]
+
+let add_all_tests () =
+  selected_tests := !selected_tests @ all_tests
+
+type test_result =
+  | Pass of string
+  | Fail of string * string
+
+let run_test (name, test) =
+  Printf.printf "== %s ==\n" name;
+  try
+    test ();
+    Pass name
+  with exn -> Fail (name, Printexc.to_string exn)
+
+let print_test_result = function
+  | Pass name -> Printf.printf "[PASS] %s\n" name
+  | Fail (name, msg) -> Printf.printf "[FAIL] %s: %s\n" name msg
+
+let has_failure results =
+  List.exists
+    (function
+      | Pass _ -> false
+      | Fail _ -> true)
+    results
 
 let usage = "Usage: synthesis_test.exe [options]"
 
@@ -426,7 +506,7 @@ let () =
   specs :=
     [
       ("-h", Arg.Unit show_help, "show help");
-      ("-all", Arg.Unit (fun () -> add_test "all" run_all), "run all tests");
+      ("-all", Arg.Unit add_all_tests, "run all tests");
       ( "-rect",
         Arg.Unit (fun () -> add_test "rect" test_rectangular_up_to),
         "test Partition.rectangular_up_to" );
@@ -454,6 +534,12 @@ let () =
       ( "-evar",
         Arg.Unit (fun () -> add_test "evar" test_bottom_up_evar_growth),
         "test bottom-up EVar proof tree growth" );
+      ( "-euop",
+        Arg.Unit (fun () -> add_test "euop" test_bottom_up_euop_growth),
+        "test bottom-up EUop proof tree growth" );
+      ( "-ebop",
+        Arg.Unit (fun () -> add_test "ebop" test_bottom_up_ebop_growth),
+        "test bottom-up EBop proof tree growth" );
       ( "-asgn",
         Arg.Unit (fun () -> add_test "asgn" test_bottom_up_assign_growth),
         "test bottom-up assign growth" );
@@ -472,10 +558,8 @@ let () =
   Arg.parse !specs
     (fun arg -> raise (Arg.Bad ("unexpected argument: " ^ arg)))
     usage;
-  let tests = if !selected_tests = [] then [ ("all", run_all) ] else !selected_tests in
-  List.iter
-    (fun (name, test) ->
-      Printf.printf "== %s ==\n" name;
-      test ())
-    tests;
-  print_endline "tests passed"
+  let tests = if !selected_tests = [] then all_tests else !selected_tests in
+  let results = List.map run_test tests in
+  print_endline "== summary ==";
+  List.iter print_test_result results;
+  if has_failure results then exit 1 else print_endline "tests passed"
