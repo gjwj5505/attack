@@ -9,8 +9,8 @@ module Exp = struct
   type bop = Eq | Lt | Gt | Ne | Le | Ge | Plus | Minus | Times
 
   type t =
-    | Var of id
     | Int of int
+    | Var of id
     | Bop of bop * t * t
     | Uop of uop * t
 
@@ -112,6 +112,21 @@ module Cmd = struct
 
   and string_of_lbl_t ?(lvl : int = 0) { lbl; cmd } =
     Printf.sprintf "%3d: %s" lbl (string_of_t ~lvl cmd)
+
+  let rec string_of_nolabel_t ?(lvl : int = 0) : t -> string =
+    indent lvl @@ function
+    | Assign (id, e) -> Printf.sprintf "%s := %s" id (Exp.string_of_t e)
+    | Seq (c1, c2) ->
+        Printf.sprintf "\n%s;\n%s" (string_of_nolabel_t ~lvl c1.cmd)
+          (string_of_nolabel_t ~lvl c2.cmd)
+    | If (pred, con, alt) ->
+        let lvl = lvl + 1 in
+        Printf.sprintf "if %s then\n%s else\n%s" (Exp.string_of_t pred)
+          (string_of_nolabel_t ~lvl con.cmd)
+          (string_of_nolabel_t ~lvl alt.cmd)
+    | While (pred, c) ->
+        Printf.sprintf "while %s\n%s" (Exp.string_of_t pred)
+          (string_of_nolabel_t ~lvl:(lvl + 1) c.cmd)
 end
 
 module Cfg = struct

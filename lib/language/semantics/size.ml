@@ -78,13 +78,13 @@ and sizeof_etree = function
   | EUop (et, _) -> 1 + sizeof_etree et
 
 and sizeof_ctree = function
-  | Assign (et, _) -> 1 + sizeof_etree et
-  | Seq ((ct1, ct2), _) -> 1 + sizeof_ctree ct1 + sizeof_ctree ct2
-  | IfTrue ((et, ct), _) -> 1 + sizeof_etree et + sizeof_ctree ct
-  | IfFalse ((et, ct), _) -> 1 + sizeof_etree et + sizeof_ctree ct
-  | WhileTrue ((et, body, rest), _) ->
+  | CAssign (et, _) -> 1 + sizeof_etree et
+  | CSeq ((ct1, ct2), _) -> 1 + sizeof_ctree ct1 + sizeof_ctree ct2
+  | CIfTrue ((et, ct), _) -> 1 + sizeof_etree et + sizeof_ctree ct
+  | CIfFalse ((et, ct), _) -> 1 + sizeof_etree et + sizeof_ctree ct
+  | CWhileTrue ((et, body, rest), _) ->
       1 + sizeof_etree et + sizeof_ctree body + sizeof_ctree rest
-  | WhileFalse (et, _) -> 1 + sizeof_etree et
+  | CWhileFalse (et, _) -> 1 + sizeof_etree et
 
 let sizeof_conclusion_prog = function
   | ETree et ->
@@ -96,12 +96,12 @@ let sizeof_conclusion_prog = function
            sizeof_Exp e)
   | CTree ct ->
       (match ct with
-       | Assign (_, (_, c, _))
-       | Seq (_, (_, c, _))
-       | IfTrue (_, (_, c, _))
-       | IfFalse (_, (_, c, _))
-       | WhileTrue (_, (_, c, _))
-       | WhileFalse (_, (_, c, _)) ->
+       | CAssign (_, (_, c, _))
+       | CSeq (_, (_, c, _))
+       | CIfTrue (_, (_, c, _))
+       | CIfFalse (_, (_, c, _))
+       | CWhileTrue (_, (_, c, _))
+       | CWhileFalse (_, (_, c, _)) ->
            sizeof_Cmd c)
 
 let sizeof_tree t =

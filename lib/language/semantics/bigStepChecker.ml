@@ -46,7 +46,7 @@ let rec check_etree = function
 
 (* 문장(Command) 검증 *)
 let rec check_ctree = function
-  | Assign (et, (env, c, env')) ->
+  | CAssign (et, (env, c, env')) ->
       check_etree et >>= fun () ->
       (match c with
           | Cmd.Assign (x, _) ->
@@ -55,17 +55,18 @@ let rec check_ctree = function
               else Error "S-Assign: Environment update mismatch"
           | _ -> Error "S-Assign: Syntax mismatch")
 
-  | Seq ((t1, t2), (_env, _c, env_final)) ->
+  | CSeq ((t1, t2), (_env, _c, env_final)) ->
       check_ctree t1 >>= fun () ->
       check_ctree t2 >>= fun () ->
       let env_mid = get_last_env t1 in
       let env_start2 = (match t2 with 
-          | Assign (_, (e, _, _)) | Seq (_, (e, _, _)) | IfTrue (_, (e, _, _)) | IfFalse (_, (e, _, _))
-          | WhileTrue (_, (e, _, _)) | WhileFalse (_, (e, _, _)) -> e) in
+          | CAssign (_, (e, _, _)) | CSeq (_, (e, _, _))
+          | CIfTrue (_, (e, _, _)) | CIfFalse (_, (e, _, _))
+          | CWhileTrue (_, (e, _, _)) | CWhileFalse (_, (e, _, _)) -> e) in
       if env_mid = env_start2 && get_last_env t2 = env_final then Ok
       else Error "S-Seq: Environment flow broken"
 
-  | IfTrue ((et, ct), (_env, _c, env_final)) ->
+  | CIfTrue ((et, ct), (_env, _c, env_final)) ->
       check_etree et >>= fun () ->
       check_ctree ct >>= fun () ->
       let v_If = get_eval_val et in
@@ -75,7 +76,7 @@ let rec check_ctree = function
           if env_after_branch = env_final then Ok
           else Error "S-IfTrue: Final environment mismatch"
 
-  | IfFalse ((et, ct), (_env, _c, env_final)) ->
+  | CIfFalse ((et, ct), (_env, _c, env_final)) ->
       check_etree et >>= fun () ->
       check_ctree ct >>= fun () ->
       let v_If = get_eval_val et in
@@ -85,14 +86,14 @@ let rec check_ctree = function
           if env_after_branch = env_final then Ok
           else Error "S-IfFalse: Final environment mismatch"
 
-  | WhileTrue ((et, t_body, t_rest), (_env, _c, env_final)) ->
+  | CWhileTrue ((et, t_body, t_rest), (_env, _c, env_final)) ->
       check_etree et >>= fun () ->
       check_ctree t_body >>= fun () ->
       check_ctree t_rest >>= fun () ->
       if get_eval_val et <> 0 && get_last_env t_rest = env_final then Ok
       else Error "S-WhileTrue: Logic or environment mismatch"
 
-  | WhileFalse (et, (env, _c, env_final)) ->
+  | CWhileFalse (et, (env, _c, env_final)) ->
       check_etree et >>= fun () ->
       if get_eval_val et = 0 && env = env_final then Ok
       else Error "S-WhileFalse: Should not change state or If Condition not zero"

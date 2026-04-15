@@ -3,3 +3,11 @@
 - bottom_up.ml: 명령문/proof tree 합성 규칙을 단계적으로 추가하기 (Assign부터)
 - partition_test.ml: (1,0)보다 큰 식 component가 생성되는지 테스트 추가하기
 - component/util.ml: Component_set 정리 이후 남겨야 할 bucket 유틸 함수 재검토하기
+
+size 정의 딱딱 맞는지 검수하기
+big-step visualizer 정렬 맞추기 (빈칸 크기, 결론 위치, if로 시작하면 첫줄 짤림)
+C-style로 바꾸기 (assign 문법, if-else while 문법, 코드블럭, bool 조건문 적용)
+component set에서 필요한걸 조금이라도 빨리 찾는 방법?
+
+env도 합성해야하나?
+component_pool만들어서 같은 set을 여러개 복사해서 env 기준 정렬, prog 기준 정렬 등등 여러개 만들고, id라는 거 추가해서 유일하게 관리?

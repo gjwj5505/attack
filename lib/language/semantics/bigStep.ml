@@ -18,20 +18,20 @@ and etree =
   | EUop   of etree * e_concl
 
 and ctree =
-  | Assign of etree * c_concl
-  | Seq    of (ctree * ctree) * c_concl
-  | IfTrue of (etree * ctree) * c_concl
-  | IfFalse of (etree * ctree) * c_concl
-  | WhileTrue of (etree * ctree * ctree) * c_concl
-  | WhileFalse of etree * c_concl
+  | CAssign of etree * c_concl
+  | CSeq of (ctree * ctree) * c_concl
+  | CIfTrue of (etree * ctree) * c_concl
+  | CIfFalse of (etree * ctree) * c_concl
+  | CWhileTrue of (etree * ctree * ctree) * c_concl
+  | CWhileFalse of etree * c_concl
 
   
 let get_e_concl = function
   | EInt (_, c) | EVar (_, c) | EBop (_, c) | EUop (_, c) -> c
 
 let get_c_concl = function
-  | Assign (_, c) | Seq (_, c) | IfTrue (_, c) | IfFalse (_, c) 
-  | WhileTrue (_, c) | WhileFalse (_, c) -> c
+  | CAssign (_, c) | CSeq (_, c) | CIfTrue (_, c) | CIfFalse (_, c)
+  | CWhileTrue (_, c) | CWhileFalse (_, c) -> c
 
 let get_start_env = function
   | ETree et -> let (env, _, _) = get_e_concl et in env

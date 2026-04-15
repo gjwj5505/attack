@@ -123,17 +123,17 @@ let rec box_of_etree t =
 
 let rec box_of_ctree t =
   match t with
-  | Assign (et, (env, c, env')) -> 
+  | CAssign (et, (env, c, env')) -> 
       build_proof "S-Assign" (sizeof_ctree t) [box_of_etree et] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
-  | Seq ((t1, t2), (env, c, env')) -> 
+  | CSeq ((t1, t2), (env, c, env')) -> 
       build_proof "S-Seq" (sizeof_ctree t) [box_of_ctree t1; box_of_ctree t2] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
-  | IfTrue ((et, ct), (env, c, env')) -> 
+  | CIfTrue ((et, ct), (env, c, env')) -> 
       build_proof "S-IfTrue" (sizeof_ctree t) [box_of_etree et; box_of_ctree ct] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
-  | IfFalse ((et, ct), (env, c, env')) -> 
+  | CIfFalse ((et, ct), (env, c, env')) -> 
       build_proof "S-IfFalse" (sizeof_ctree t) [box_of_etree et; box_of_ctree ct] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
-  | WhileTrue ((et, t_body, t_rest), (env, c, env')) -> 
+  | CWhileTrue ((et, t_body, t_rest), (env, c, env')) -> 
       build_proof "S-WhileTrue" (sizeof_ctree t) [box_of_etree et; box_of_ctree t_body; box_of_ctree t_rest] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
-  | WhileFalse (et, (env, c, env')) -> 
+  | CWhileFalse (et, (env, c, env')) -> 
       build_proof "S-WhileFalse" (sizeof_ctree t) [box_of_etree et] (make_conclusion env (Cmd.string_of_t c) (s_env env'))
 
 
