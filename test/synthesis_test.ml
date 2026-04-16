@@ -400,6 +400,114 @@ let test_bottom_up_cseq_growth () =
               env_x1 ) ))
        ctrees)
 
+let test_bottom_up_ciftrue_growth () =
+  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
+  let tbl = Bottom_up.build_up_to cfg (size 6 4) in
+  let ctrees = Component_set.ctrees_of_size (size 6 4) tbl in
+  let env_x1 = env_of_bindings [ ("x", 1) ] in
+  let x = Syntax.Exp.Var "x" in
+  let assign_x = Syntax.Cmd.Assign ("x", x) in
+  let ct_assign_x =
+    BigStep.CAssign
+      (BigStep.EVar ((), (env_x1, x, 1)), (env_x1, assign_x, env_x1))
+  in
+  Printf.printf
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, \
+     bound=(6,4)\n\
+    \  CIfTrue ctrees at (6,4):\n";
+  print_ctrees ctrees;
+  assert_valid_ctrees "ciftrue valid ctrees" ctrees;
+  assert_true "generated CIfTrue if x then x := x else x := x under x=1"
+    (Component_set.CTreeSet.mem
+       (BigStep.CIfTrue
+          ( (BigStep.EVar ((), (env_x1, x, 1)), ct_assign_x),
+            ( env_x1,
+              Syntax.Cmd.If
+                (x, Syntax.Cmd.dummy_lbl assign_x, Syntax.Cmd.dummy_lbl assign_x),
+              env_x1 ) ))
+       ctrees)
+
+let test_bottom_up_ciffalse_growth () =
+  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
+  let tbl = Bottom_up.build_up_to cfg (size 6 4) in
+  let ctrees = Component_set.ctrees_of_size (size 6 4) tbl in
+  let env_x0 = env_of_bindings [ ("x", 0) ] in
+  let x = Syntax.Exp.Var "x" in
+  let assign_x = Syntax.Cmd.Assign ("x", x) in
+  let ct_assign_x =
+    BigStep.CAssign
+      (BigStep.EVar ((), (env_x0, x, 0)), (env_x0, assign_x, env_x0))
+  in
+  Printf.printf
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, \
+     bound=(6,4)\n\
+    \  CIfFalse ctrees at (6,4):\n";
+  print_ctrees ctrees;
+  assert_valid_ctrees "ciffalse valid ctrees" ctrees;
+  assert_true "generated CIfFalse if x then x := x else x := x under x=0"
+    (Component_set.CTreeSet.mem
+       (BigStep.CIfFalse
+          ( (BigStep.EVar ((), (env_x0, x, 0)), ct_assign_x),
+            ( env_x0,
+              Syntax.Cmd.If
+                (x, Syntax.Cmd.dummy_lbl assign_x, Syntax.Cmd.dummy_lbl assign_x),
+              env_x0 ) ))
+       ctrees)
+
+let test_bottom_up_cwhilefalse_growth () =
+  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 1) () in
+  let tbl = Bottom_up.build_up_to cfg (size 4 2) in
+  let ctrees = Component_set.ctrees_of_size (size 4 2) tbl in
+  let env_x0 = env_of_bindings [ ("x", 0) ] in
+  let x = Syntax.Exp.Var "x" in
+  let assign_x = Syntax.Cmd.Assign ("x", x) in
+  let while_x_assign_x = Syntax.Cmd.While (x, Syntax.Cmd.dummy_lbl assign_x) in
+  Printf.printf
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0]; value_range=(0,1)}, \
+     bound=(4,2)\n\
+    \  CWhileFalse ctrees at (4,2):\n";
+  print_ctrees ctrees;
+  assert_valid_ctrees "cwhilefalse valid ctrees" ctrees;
+  assert_true "generated CWhileFalse while x do x := x under x=0"
+    (Component_set.CTreeSet.mem
+       (BigStep.CWhileFalse
+          (BigStep.EVar ((), (env_x0, x, 0)), (env_x0, while_x_assign_x, env_x0)))
+       ctrees)
+
+let test_bottom_up_cwhiletrue_growth () =
+  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 1) () in
+  let tbl = Bottom_up.build_up_to cfg (size 8 6) in
+  let ctrees = Component_set.ctrees_of_size (size 8 6) tbl in
+  let env_x0 = env_of_bindings [ ("x", 0) ] in
+  let env_x1 = env_of_bindings [ ("x", 1) ] in
+  let x = Syntax.Exp.Var "x" in
+  let zero = Syntax.Exp.Int 0 in
+  let assign_zero = Syntax.Cmd.Assign ("x", zero) in
+  let while_x_assign_zero =
+    Syntax.Cmd.While (x, Syntax.Cmd.dummy_lbl assign_zero)
+  in
+  let et_cond_true = BigStep.EVar ((), (env_x1, x, 1)) in
+  let ct_body =
+    BigStep.CAssign
+      (BigStep.EInt ((), (env_x1, zero, 0)), (env_x1, assign_zero, env_x0))
+  in
+  let ct_rest =
+    BigStep.CWhileFalse
+      (BigStep.EVar ((), (env_x0, x, 0)), (env_x0, while_x_assign_zero, env_x0))
+  in
+  Printf.printf
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0]; value_range=(0,1)}, \
+     bound=(8,6)\n\
+    \  CWhileTrue ctrees at (8,6):\n";
+  print_ctrees ctrees;
+  assert_valid_ctrees "cwhiletrue valid ctrees" ctrees;
+  assert_true "generated CWhileTrue while x do x := 0 under x=1"
+    (Component_set.CTreeSet.mem
+       (BigStep.CWhileTrue
+          ( (et_cond_true, ct_body, ct_rest),
+            (env_x1, while_x_assign_zero, env_x0) ))
+       ctrees)
+
 let test_bottom_up_assign_growth () =
   let tbl =
     Bottom_up.build_up_to
@@ -558,16 +666,20 @@ let all_tests =
     ("env", test_bounded_envs);
     ("init", test_bottom_up_initial_components);
     ("exp", test_bottom_up_exp_growth);
+    ("asgn", test_bottom_up_assign_growth);
+    ("seq", test_bottom_up_seq_growth);
+    ("if", test_bottom_up_if_growth);
+    ("while", test_bottom_up_while_growth);
     ("eint", test_bottom_up_eint_growth);
     ("evar", test_bottom_up_evar_growth);
     ("euop", test_bottom_up_euop_growth);
     ("ebop", test_bottom_up_ebop_growth);
     ("cassign", test_bottom_up_cassign_growth);
     ("cseq", test_bottom_up_cseq_growth);
-    ("asgn", test_bottom_up_assign_growth);
-    ("seq", test_bottom_up_seq_growth);
-    ("if", test_bottom_up_if_growth);
-    ("while", test_bottom_up_while_growth);
+    ("ciftrue", test_bottom_up_ciftrue_growth);
+    ("ciffalse", test_bottom_up_ciffalse_growth);
+    ("cwhilefalse", test_bottom_up_cwhilefalse_growth);
+    ("cwhiletrue", test_bottom_up_cwhiletrue_growth);
   ]
 
 let selected_tests = ref []
@@ -623,6 +735,18 @@ let () =
       ( "-exp",
         Arg.Unit (fun () -> add_test "exp" test_bottom_up_exp_growth),
         "test bottom-up expression growth" );
+      ( "-asgn",
+        Arg.Unit (fun () -> add_test "asgn" test_bottom_up_assign_growth),
+        "test bottom-up assign growth" );
+      ( "-seq",
+        Arg.Unit (fun () -> add_test "seq" test_bottom_up_seq_growth),
+        "test bottom-up seq growth" );
+      ( "-if",
+        Arg.Unit (fun () -> add_test "if" test_bottom_up_if_growth),
+        "test bottom-up if growth" );
+      ( "-while",
+        Arg.Unit (fun () -> add_test "while" test_bottom_up_while_growth),
+        "test bottom-up while growth" );
       ( "-eint",
         Arg.Unit (fun () -> add_test "eint" test_bottom_up_eint_growth),
         "test bottom-up EInt proof tree growth" );
@@ -641,18 +765,20 @@ let () =
       ( "-cseq",
         Arg.Unit (fun () -> add_test "cseq" test_bottom_up_cseq_growth),
         "test bottom-up CSeq proof tree growth" );
-      ( "-asgn",
-        Arg.Unit (fun () -> add_test "asgn" test_bottom_up_assign_growth),
-        "test bottom-up assign growth" );
-      ( "-seq",
-        Arg.Unit (fun () -> add_test "seq" test_bottom_up_seq_growth),
-        "test bottom-up seq growth" );
-      ( "-if",
-        Arg.Unit (fun () -> add_test "if" test_bottom_up_if_growth),
-        "test bottom-up if growth" );
-      ( "-while",
-        Arg.Unit (fun () -> add_test "while" test_bottom_up_while_growth),
-        "test bottom-up while growth" );
+      ( "-ciftrue",
+        Arg.Unit (fun () -> add_test "ciftrue" test_bottom_up_ciftrue_growth),
+        "test bottom-up CIfTrue proof tree growth" );
+      ( "-ciffalse",
+        Arg.Unit (fun () -> add_test "ciffalse" test_bottom_up_ciffalse_growth),
+        "test bottom-up CIfFalse proof tree growth" );
+      ( "-cwhilefalse",
+        Arg.Unit
+          (fun () -> add_test "cwhilefalse" test_bottom_up_cwhilefalse_growth),
+        "test bottom-up CWhileFalse proof tree growth" );
+      ( "-cwhiletrue",
+        Arg.Unit
+          (fun () -> add_test "cwhiletrue" test_bottom_up_cwhiletrue_growth),
+        "test bottom-up CWhileTrue proof tree growth" );
     ]
 
 let () =

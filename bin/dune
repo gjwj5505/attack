@@ -1,6 +1,7 @@
 (executable
  (public_name attack)
  (name main)
- (libraries 
+(libraries 
   language
-  analyzer))
+  analyzer
+  synthesis))

@@ -43,6 +43,19 @@ module Cmd = struct
 
   let dummy_lbl cmd = { lbl = 0; cmd }
 
+  let rec equal_nolbl c1 c2 =
+    match (c1, c2) with
+    | Assign (x1, e1), Assign (x2, e2) -> x1 = x2 && e1 = e2
+    | ( Seq ({ cmd = c11; _ }, { cmd = c12; _ }),
+        Seq ({ cmd = c21; _ }, { cmd = c22; _ }) ) ->
+        equal_nolbl c11 c21 && equal_nolbl c12 c22
+    | ( If (e1, { cmd = c11; _ }, { cmd = c12; _ }),
+        If (e2, { cmd = c21; _ }, { cmd = c22; _ }) ) ->
+        e1 = e2 && equal_nolbl c11 c21 && equal_nolbl c12 c22
+    | While (e1, { cmd = c1; _ }), While (e2, { cmd = c2; _ }) ->
+        e1 = e2 && equal_nolbl c1 c2
+    | _ -> false
+
   module Lbl_map = struct
     include Map.Make (struct
       type t = int

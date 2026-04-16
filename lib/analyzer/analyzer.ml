@@ -19,6 +19,9 @@ module Abs_val = struct
   type t = Itv.t
 
   let compare = Stdlib.compare
+  let equal = Itv.equal
+  let top = Itv.top
+  let is_top v = equal v top
   let string_of_t = Itv.string_of_t
 end
 
@@ -203,7 +206,7 @@ let analysis (prog : Cmd.lbl_t) : Abs_mem.t =
     else
       let cur = Queue.pop wl in
       (* print_endline (Abs_sem.string_of_t !sem); *)
-      print_endline ("Processing label: " ^ Cmd.Lbl_map.string_of_key cur);
+      (* print_endline ("Processing label: " ^ Cmd.Lbl_map.string_of_key cur); *)
       if cur = exit then run () (* skip processing the exit label *)
       else
         let cur_mem = Cmd.Lbl_map.find cur !sem in

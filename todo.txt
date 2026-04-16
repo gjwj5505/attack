@@ -1,3 +1,29 @@
+매우 중요: 분석기 soundness 제대로 수정하기
+
+분석기 soundness 수정 큰 틀
+- Itv.bop Lt/Le/Gt/Ge에서 Bound.t를 OCaml polymorphic compare로 비교하지 않기
+  - Bound.leq 기반 비교 helper를 만들기
+  - -∞, +∞ 순서가 실제 수학적 순서와 맞도록 보장하기
+- Itv interval 생성 시 normalize 하기
+  - l <= r이면 Itv(l,r)
+  - l > r이면 Bot
+  - filter_lt/filter_gt/filter_le/filter_ge/filter_ne가 invalid interval을 만들지 않게 하기
+- Abs_mem에서 없는 변수의 의미를 일관되게 다루기
+  - find는 없는 변수를 [0,0]으로 본다
+  - widen/join에서도 None을 [0,0]으로 취급해야 함
+  - 한 branch에서만 x가 생겼을 때 x=[1,1]로 좁히면 soundness 깨짐. x=[0,1]이어야 함
+- Abs_mem.add Bot 동작 재검토
+  - unreachable state에 update해도 Bot을 유지하는 쪽이 자연스러움
+  - assignment transfer에서도 cur_mem=Bot이면 Bot을 보존하는지 확인하기
+- filter_t/filter_f가 Bot memory/value를 만났을 때 예외 없이 Bot으로 흐르도록 정리하기
+  - Itv.filter_*에서 Bot 입력 시 failwith 하지 않게 할지 결정
+  - unreachable branch는 analyzer를 터뜨리지 말고 Bot으로 남기는 쪽 검토
+- 위 수정마다 작은 regression test 추가하기
+  - branch join에서 unassigned variable 기본값 [0,0] 반영
+  - x < 0 같은 불가능 조건이 Bot으로 정규화되는지
+  - interval bound에 ±∞가 섞인 비교가 sound한지
+  - Bot state가 assignment/filter로 되살아나지 않는지
+
 - bottom_up.ml: grow_at_size에서 식 component 합성 구현하기 (Uop, Bop)
 - bottom_up.ml: ETree 합성 규칙 추가하기 (EInt, EVar, EUop, EBop)
 - bottom_up.ml: 명령문/proof tree 합성 규칙을 단계적으로 추가하기 (Assign부터)
@@ -9,6 +35,7 @@ big-step visualizer 정렬 맞추기 (빈칸 크기, 결론 위치, if로 시작
 C-style로 바꾸기 (assign 문법, if-else while 문법, 코드블럭, bool 조건문 적용)
 component set에서 필요한걸 조금이라도 빨리 찾는 방법?
 side effect 신경쓰기 (e_concl에도 env가 필요함)
+테스트할 때 bigStepChecker은 돌림. size 딱딱 맞는지도 체크하자
 
 env도 합성해야하나?
 component_pool만들어서 같은 set을 여러개 복사해서 env 기준 정렬, prog 기준 정렬 등등 여러개 만들고, id라는 거 추가해서 유일하게 관리?
