@@ -6,8 +6,7 @@ let fold_exps size tbl f acc =
 let fold_cmds size tbl f acc =
   Component_set.CmdSet.fold f (Component_set.cmds_of_size size tbl) acc
 
-let is_eatom_target target =
-  Size.equal target (Size.make 1 0)
+let is_eatom_target target = Size.equal target (Size.make 1 0)
 
 let grow_int (cfg : Config.t) target tbl =
   if not (is_eatom_target target) then tbl
@@ -100,7 +99,11 @@ let grow_seq target tbl =
 let grow_if target tbl =
   let payload = Size.sub target (Size.make 1 0) in
   Partition.partition_with_constraints payload
-    [ Partition.prog_component; Partition.prog_component; Partition.prog_component ]
+    [
+      Partition.prog_component;
+      Partition.prog_component;
+      Partition.prog_component;
+    ]
   |> List.fold_left
        (fun tbl -> function
          | [ e_size; c1_size; c2_size ] ->
@@ -144,6 +147,6 @@ let grow_while target tbl =
 let grow_at_size cfg target tbl =
   if Size.proof_size target <> 0 then tbl
   else
-    tbl |> grow_int cfg target |> grow_var cfg target
-    |> grow_uop cfg target |> grow_bop cfg target |> grow_assign cfg target
-    |> grow_seq target |> grow_if target |> grow_while target
+    tbl |> grow_int cfg target |> grow_var cfg target |> grow_uop cfg target
+    |> grow_bop cfg target |> grow_assign cfg target |> grow_seq target
+    |> grow_if target |> grow_while target

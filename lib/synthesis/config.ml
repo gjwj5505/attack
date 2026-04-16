@@ -18,13 +18,12 @@ let default_bops =
       (* 일단 하나만 쓰자ㄱㄱ *)
     ]
 
-let make ?(uops = default_uops) ?(bops = default_bops) ~vars ~ints
-    ~value_range () =
+let make ?(uops = default_uops) ?(bops = default_bops) ~vars ~ints ~value_range
+    () =
   { vars; ints; value_range; uops; bops }
 
 let values_in_range (lo, hi) =
-  if lo > hi then []
-  else List.init (hi - lo + 1) (fun i -> lo + i)
+  if lo > hi then [] else List.init (hi - lo + 1) (fun i -> lo + i)
 
 let valid_env cfg env =
   let lo, hi = cfg.value_range in
@@ -48,7 +47,7 @@ let bounded_envs cfg =
     | x :: xs ->
         aux xs
         |> List.concat_map (fun env ->
-               List.map (fun v -> Environment.update x v env) values)
+            List.map (fun v -> Environment.update x v env) values)
   in
   aux cfg.vars
 

@@ -7,12 +7,7 @@ module Exp = struct
   type id = string
   type uop = Uminus
   type bop = Eq | Lt | Gt | Ne | Le | Ge | Plus | Minus | Times
-
-  type t =
-    | Int of int
-    | Var of id
-    | Bop of bop * t * t
-    | Uop of uop * t
+  type t = Int of int | Var of id | Bop of bop * t * t | Uop of uop * t
 
   let string_of_uop : uop -> string = function Uminus -> "-"
 
@@ -39,6 +34,7 @@ end
 module Cmd = struct
   type lbl_t = { lbl : int; cmd : t }
   and lbl = int
+
   and t =
     | Assign of string * Exp.t
     | Seq of lbl_t * lbl_t
@@ -64,8 +60,7 @@ module Cmd = struct
       match cmd with
       | Seq (c1, c2) -> tbl |> tabulate' c1 |> tabulate' c2
       | If (_, c1, c2) -> tbl |> tabulate' c1 |> tabulate' c2
-      | While (_, c) ->
-          tbl |> tabulate' c
+      | While (_, c) -> tbl |> tabulate' c
       | _ -> tbl
     in
     tabulate' l_cmd Lbl_map.empty
@@ -95,8 +90,7 @@ module Cmd = struct
   let indent (lvl : int) (f : 'a -> string) : 'a -> string =
    fun x -> String.init (2 * lvl) (fun _ -> ' ') ^ f x
 
-  let string_of_lb : lbl -> string = fun lbl ->
-    string_of_int lbl
+  let string_of_lb : lbl -> string = fun lbl -> string_of_int lbl
 
   let rec string_of_t ?(lvl : int = 0) : t -> string =
     indent lvl @@ function
@@ -110,7 +104,8 @@ module Cmd = struct
         Printf.sprintf "if %s then\n%s else\n%s" (Exp.string_of_t pred)
           (string_of_lbl_t ~lvl con) (string_of_lbl_t ~lvl alt)
     | While (pred, c) ->
-        Printf.sprintf "while %s\n%s" (Exp.string_of_t pred) (string_of_lbl_t ~lvl:(lvl + 1) c)
+        Printf.sprintf "while %s\n%s" (Exp.string_of_t pred)
+          (string_of_lbl_t ~lvl:(lvl + 1) c)
 
   and string_of_lbl_t ?(lvl : int = 0) { lbl; cmd } =
     Printf.sprintf "%3d: %s" lbl (string_of_t ~lvl cmd)
@@ -119,7 +114,8 @@ module Cmd = struct
     indent lvl @@ function
     | Assign (id, e) -> Printf.sprintf "%s := %s" id (Exp.string_of_t e)
     | Seq (c1, c2) ->
-        Printf.sprintf "\n%s;\n%s" (string_of_nolabel_t ~lvl c1.cmd)
+        Printf.sprintf "\n%s;\n%s"
+          (string_of_nolabel_t ~lvl c1.cmd)
           (string_of_nolabel_t ~lvl c2.cmd)
     | If (pred, con, alt) ->
         let lvl = lvl + 1 in
@@ -152,7 +148,7 @@ module Cfg = struct
       | Assign _ -> { cfg with next = next @+ (l, exit) }
       | Seq (c1, c2) ->
           { cfg with next = next @+ (l, c1.lbl) }
-          |> make' c1 (c2.lbl) |> make' c2 exit
+          |> make' c1 c2.lbl |> make' c2 exit
       | If (_, c1, c2) ->
           {
             cfg with

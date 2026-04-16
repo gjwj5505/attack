@@ -44,9 +44,7 @@ let empty_bucket =
 let empty = Size.Map.empty
 
 let get_bucket size tbl =
-  match Size.Map.find_opt size tbl with
-  | Some b -> b
-  | None -> empty_bucket
+  match Size.Map.find_opt size tbl with Some b -> b | None -> empty_bucket
 
 let update_bucket size f tbl =
   let bucket = get_bucket size tbl in
@@ -72,17 +70,12 @@ let add_cmd_exact c tbl =
   let size = Size.make (Size.sizeof_Cmd c) 0 in
   add_cmd size c tbl
 
-let add_etree_exact et tbl =
-  add_etree (Size.sizeof_etree et) et tbl
-
-let add_ctree_exact ct tbl =
-  add_ctree (Size.sizeof_ctree ct) ct tbl
-
+let add_etree_exact et tbl = add_etree (Size.sizeof_etree et) et tbl
+let add_ctree_exact ct tbl = add_ctree (Size.sizeof_ctree ct) ct tbl
 let exps_of_size size tbl = (get_bucket size tbl).exps
 let cmds_of_size size tbl = (get_bucket size tbl).cmds
 let etrees_of_size size tbl = (get_bucket size tbl).etrees
 let ctrees_of_size size tbl = (get_bucket size tbl).ctrees
-
 let fold_sizes f tbl init = Size.Map.fold f tbl init
 
 let bucket_cardinal b =
@@ -90,8 +83,9 @@ let bucket_cardinal b =
   + CTreeSet.cardinal b.ctrees
 
 let string_of_bucket b =
-  Printf.sprintf "{exp=%d; cmd=%d; etree=%d; ctree=%d}"
-    (ExpSet.cardinal b.exps) (CmdSet.cardinal b.cmds) (ETreeSet.cardinal b.etrees)
+  Printf.sprintf "{exp=%d; cmd=%d; etree=%d; ctree=%d}" (ExpSet.cardinal b.exps)
+    (CmdSet.cardinal b.cmds)
+    (ETreeSet.cardinal b.etrees)
     (CTreeSet.cardinal b.ctrees)
 
 let string_of_table tbl =

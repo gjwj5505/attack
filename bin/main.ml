@@ -19,10 +19,10 @@ let main () =
       ( "-dintp",
         Arg.Unit (fun _ -> opt_dintp := true),
         "D definitional interpreter" );
-      ( "-analyze",
-        Arg.Unit (fun _ -> opt_analyze := true),
-        "Attack analyzer" );
-        ("-big", Arg.Unit (fun _ -> opt_big := true), "Derive, verify and print Big-Step tree");
+      ("-analyze", Arg.Unit (fun _ -> opt_analyze := true), "Attack analyzer");
+      ( "-big",
+        Arg.Unit (fun _ -> opt_big := true),
+        "Derive, verify and print Big-Step tree" );
     ]
     (fun x -> src := x)
     ("Usage : " ^ Filename.basename Sys.argv.(0) ^ " [-option] [filename] ");
@@ -31,7 +31,6 @@ let main () =
     Lexing.from_channel (if !src = "" then stdin else open_in !src)
   in
   let pgm = Parser.prog Lexer.read lexbuf in
-
 
   let open Syntax.Cmd in
   if !opt_pp then string_of_lbl_t pgm |> print_endline;
@@ -46,17 +45,17 @@ let main () =
      Language.Interpreter.(def_intp pgm |> Mem.string_of_t |> print_endline));
   (if !opt_analyze then
      Analyzer.(analysis pgm |> Abs_mem.string_of_t |> print_endline));
-  (if !opt_big then begin
+  if !opt_big then begin
     let tree = Derivator.derive_cmd pgm Environment.empty in
     Visualizer.print_tree (CTree tree);
     match BigStepChecker.check_ctree tree with
-    | Ok -> 
+    | Ok ->
         print_endline "✅ Success: The Big-Step Proof Tree is valid.";
-        print_endline (String.make 40 '-');
-    | Error msg -> 
-        print_endline ("❌ Error: Invalid Derivation Tree found!");
+        print_endline (String.make 40 '-')
+    | Error msg ->
+        print_endline "❌ Error: Invalid Derivation Tree found!";
         print_endline ("Reason: " ^ msg)
-  end);
+  end;
 
   if not (!opt_pp || !opt_tab || !opt_tintp || !opt_dintp || !opt_analyze) then
     print_endline "Please provide an option! (-pp, -tab, -intp, -analyze)"

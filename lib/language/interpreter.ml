@@ -18,12 +18,8 @@ end
 module Value = struct
   type t = Int of int
 
-  let compare v1 v2 =
-    match (v1, v2) with
-    | Int n1, Int n2 -> Int.compare n1 n2
-
+  let compare v1 v2 = match (v1, v2) with Int n1, Int n2 -> Int.compare n1 n2
   let of_int n = Int n
-
   let string_of_t = function Int n -> string_of_int n
 end
 
@@ -33,9 +29,7 @@ module Mem = struct
   let empty : t = Loc.Map.empty
 
   let find loc mem =
-    match Loc.Map.find_opt loc mem with
-    | Some v -> v
-    | None -> Value.of_int 0
+    match Loc.Map.find_opt loc mem with Some v -> v | None -> Value.of_int 0
 
   let string_of_t mem =
     let f k v (acc, first) =
@@ -83,36 +77,35 @@ let rec intp_exp (m : Mem.t) : Exp.t -> Value.t = function
           | Times -> Int (i1 * i2)))
   | Uop (op, e) -> (
       let v = intp_exp m e in
-      match v with
-      | Int n -> ( match op with Uminus -> Int (-n)))
-
+      match v with Int n -> ( match op with Uminus -> Int (-n)))
 
 (** Transitional interpreter *)
 let trans_intp (prog : Cmd.lbl_t) : Mem.t =
   let prog = Cmd.relabel prog in
   let table = Cmd.tabulate prog in
   (* let exit = Either.Right 0 in *)
-  let exit = 0 in (* ?? *)
+  let exit = 0 in
+  (* ?? *)
   let Cfg.{ next; next_true; next_false } = Cfg.make prog exit in
   let rec run mem lbl =
     if lbl = exit then mem
     else
       match Cmd.Lbl_map.find lbl table with
       | Assign (x, e) ->
-        let v = intp_exp mem e in
-        let mem = Loc.Map.add x v mem in
-        run mem (next lbl)
+          let v = intp_exp mem e in
+          let mem = Loc.Map.add x v mem in
+          run mem (next lbl)
       | Seq _ -> run mem (next lbl)
       | If (pred, _, _) -> (
-        match intp_exp mem pred with
-        | Int i ->
-            if i <> 0 then run mem (next_true lbl)
-            else run mem (next_false lbl))
+          match intp_exp mem pred with
+          | Int i ->
+              if i <> 0 then run mem (next_true lbl)
+              else run mem (next_false lbl))
       | While (pred, _) -> (
-        match intp_exp mem pred with
-        | Int i ->
-            if i <> 0 then run mem (next_true lbl)
-            else run mem (next_false lbl))
+          match intp_exp mem pred with
+          | Int i ->
+              if i <> 0 then run mem (next_true lbl)
+              else run mem (next_false lbl))
   in
   run Mem.empty prog.lbl
 
@@ -128,8 +121,8 @@ let def_intp (prog : Cmd.lbl_t) : Mem.t =
     | If (pred, con, alt) -> (
         match intp_exp mem pred with
         | Int i -> if i <> 0 then run mem con.cmd else run mem alt.cmd)
-    | While (pred, c) as whl ->
+    | While (pred, c) as whl -> (
         match intp_exp mem pred with
-        | Int i -> if i <> 0 then run (run mem c.cmd) whl else mem
+        | Int i -> if i <> 0 then run (run mem c.cmd) whl else mem)
   in
   run Mem.empty prog.cmd

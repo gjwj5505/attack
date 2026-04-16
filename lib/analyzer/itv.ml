@@ -1,4 +1,3 @@
-
 module Bound = struct
   type t = Z of int | P_inf | N_inf
 
@@ -63,10 +62,9 @@ type t = Bot | Itv of Bound.t * Bound.t
 
 let top = Itv (N_inf, P_inf)
 let bot = Bot
-
 let singleton n = Itv (Bound.Z n, Bound.Z n)
 
-let equal i1 i2 = 
+let equal i1 i2 =
   match (i1, i2) with
   | Bot, Bot -> true
   | Itv (l1, r1), Itv (l2, r2) -> Bound.equal l1 l2 && Bound.equal r1 r2
@@ -131,7 +129,9 @@ module Bool = struct
   let false_ = Itv (Z 0, Z 0)
   let top = Itv (Z 0, Z 1)
   let bot = Bot
-  let make t f = if t && f then top else if t then true_ else if f then false_ else bot
+
+  let make t f =
+    if t && f then top else if t then true_ else if f then false_ else bot
 end
 
 (** Interval less than lifted *)
@@ -204,65 +204,65 @@ let or_ i1 i2 =
       | true, false -> true_
       | _ -> false_)
 
-let filter_lt cut i = 
+let filter_lt cut i =
   match (cut, i) with
   | Bot, _ | _, Bot -> failwith "filter_lt: unexpected Bot"
   | Itv (_l1, r1), Itv (l2, r2) ->
       let open Bound in
-      Itv(l2, min r2 (r1 + Z (-1)))
+      Itv (l2, min r2 (r1 + Z (-1)))
 
-let filter_gt cut i = 
+let filter_gt cut i =
   match (cut, i) with
   | Bot, _ | _, Bot -> failwith "filter_gt: unexpected Bot"
   | Itv (l1, r1), Itv (l2, _r2) ->
       let open Bound in
-      Itv(max l2 (l1 + Z 1), r1)
-      
-let filter_le cut i = 
+      Itv (max l2 (l1 + Z 1), r1)
+
+let filter_le cut i =
   match (cut, i) with
   | Bot, _ | _, Bot -> failwith "filter_le: unexpected Bot"
   | Itv (_l1, r1), Itv (l2, r2) ->
       let open Bound in
-      Itv(l2, min r2 r1)
+      Itv (l2, min r2 r1)
 
-let filter_ge cut i = 
+let filter_ge cut i =
   match (cut, i) with
   | Bot, _ | _, Bot -> failwith "filter_ge: unexpected Bot"
   | Itv (l1, _r1), Itv (l2, r2) ->
       let open Bound in
-      Itv(max l1 l2, r2)
+      Itv (max l1 l2, r2)
 
-let filter_ne cut i = 
+let filter_ne cut i =
   match (cut, i) with
   | Bot, _ | _, Bot -> failwith "filter_ne: unexpected Bot"
   | Itv (l1, r1), Itv (l2, r2) ->
       let open Bound in
       if l1 = r1 then
         let v = l1 in
-        if l2 = r2 then
-          if l2 = v then Bot else i
-        else
-          if l2 = v then Itv(l2 + Z 1, r2) 
-          else if r2 = v then Itv(l2, r2 + Z (-1)) 
-          else i
+        if l2 = r2 then if l2 = v then Bot else i
+        else if l2 = v then Itv (l2 + Z 1, r2)
+        else if r2 = v then Itv (l2, r2 + Z (-1))
         else i
-
+      else i
 
 open Language.Syntax.Exp
 
-let rec bop op i1 i2 = 
+let rec bop op i1 i2 =
   match op with
   | Plus -> i1 ++ i2
-  | Minus -> i1 ++ (~-- i2)
+  | Minus -> i1 ++ ~--i2
   | Times -> i1 ** i2
   | Eq -> (
       match (i1, i2) with
       | Bot, _ | _, Bot -> Bot
       | Itv (l1, r1), Itv (l2, r2) ->
-          let may_true = if Bound.(max l1 l2 <= min r1 r2) then true else false in
-          let may_false = if l1 = l2 && r1 = r2 && l1 = r1 then false else true in
-          Bool.make may_true may_false
-    )
+          let may_true =
+            if Bound.(max l1 l2 <= min r1 r2) then true else false
+          in
+          let may_false =
+            if l1 = l2 && r1 = r2 && l1 = r1 then false else true
+          in
+          Bool.make may_true may_false)
   | Ne -> not (bop Eq i1 i2)
   | Lt -> (
       match (i1, i2) with
@@ -270,17 +270,13 @@ let rec bop op i1 i2 =
       | Itv (l1, r1), Itv (l2, r2) ->
           let may_true = if l1 < r2 then true else false in
           let may_false = if r1 >= l2 then true else false in
-          Bool.make may_true may_false
-    )
+          Bool.make may_true may_false)
   | Gt -> bop Lt i2 i1
   | Le -> not (bop Gt i1 i2)
   | Ge -> not (bop Lt i1 i2)
 
-let uop _op i = 
-  match _op with
-  | Uminus -> ~-- i
+let uop _op i = match _op with Uminus -> ~--i
 
-  
 let string_of_t = function
   | Bot -> "⟂"
   | Itv (l, r) -> Bound.("[" ^ string_of_t l ^ "," ^ string_of_t r ^ "]")

@@ -8,9 +8,7 @@ let empty_bucket = Component_set.empty_bucket
 let empty_table = Component_set.empty
 
 let is_empty_bucket (b : component_bucket) : bool =
-  ExpSet.is_empty b.exps
-  && CmdSet.is_empty b.cmds
-  && ETreeSet.is_empty b.etrees
+  ExpSet.is_empty b.exps && CmdSet.is_empty b.cmds && ETreeSet.is_empty b.etrees
   && CTreeSet.is_empty b.ctrees
 
 let union_bucket (b1 : component_bucket) (b2 : component_bucket) :
@@ -70,12 +68,12 @@ let remove_exp (e : Syntax.Exp.t) (b : component_bucket) : component_bucket =
 let remove_cmd (c : Syntax.Cmd.t) (b : component_bucket) : component_bucket =
   { b with cmds = CmdSet.remove c b.cmds }
 
-let remove_etree (et : BigStep.etree) (b : component_bucket) :
-    component_bucket =
+let remove_etree (et : BigStep.etree) (b : component_bucket) : component_bucket
+    =
   { b with etrees = ETreeSet.remove et b.etrees }
 
-let remove_ctree (ct : BigStep.ctree) (b : component_bucket) :
-    component_bucket =
+let remove_ctree (ct : BigStep.ctree) (b : component_bucket) : component_bucket
+    =
   { b with ctrees = CTreeSet.remove ct b.ctrees }
 
 let mem_exp (e : Syntax.Exp.t) (b : component_bucket) : bool =
@@ -90,33 +88,25 @@ let mem_etree (et : BigStep.etree) (b : component_bucket) : bool =
 let mem_ctree (ct : BigStep.ctree) (b : component_bucket) : bool =
   CTreeSet.mem ct b.ctrees
 
-let iter_bucket
-    ~(fexp : Syntax.Exp.t -> unit)
-    ~(fcmd : Syntax.Cmd.t -> unit)
-    ~(fetree : BigStep.etree -> unit)
-    ~(fctree : BigStep.ctree -> unit)
+let iter_bucket ~(fexp : Syntax.Exp.t -> unit) ~(fcmd : Syntax.Cmd.t -> unit)
+    ~(fetree : BigStep.etree -> unit) ~(fctree : BigStep.ctree -> unit)
     (b : component_bucket) : unit =
   ExpSet.iter fexp b.exps;
   CmdSet.iter fcmd b.cmds;
   ETreeSet.iter fetree b.etrees;
   CTreeSet.iter fctree b.ctrees
 
-let fold_bucket
-    ~(fexp : Syntax.Exp.t -> 'a -> 'a)
-    ~(fcmd : Syntax.Cmd.t -> 'a -> 'a)
-    ~(fetree : BigStep.etree -> 'a -> 'a)
-    ~(fctree : BigStep.ctree -> 'a -> 'a)
-    (b : component_bucket) (init : 'a) : 'a =
+let fold_bucket ~(fexp : Syntax.Exp.t -> 'a -> 'a)
+    ~(fcmd : Syntax.Cmd.t -> 'a -> 'a) ~(fetree : BigStep.etree -> 'a -> 'a)
+    ~(fctree : BigStep.ctree -> 'a -> 'a) (b : component_bucket) (init : 'a) :
+    'a =
   let acc = ExpSet.fold fexp b.exps init in
   let acc = CmdSet.fold fcmd b.cmds acc in
   let acc = ETreeSet.fold fetree b.etrees acc in
   CTreeSet.fold fctree b.ctrees acc
 
-let filter_bucket
-    ~(pexp : Syntax.Exp.t -> bool)
-    ~(pcmd : Syntax.Cmd.t -> bool)
-    ~(petree : BigStep.etree -> bool)
-    ~(pctree : BigStep.ctree -> bool)
+let filter_bucket ~(pexp : Syntax.Exp.t -> bool) ~(pcmd : Syntax.Cmd.t -> bool)
+    ~(petree : BigStep.etree -> bool) ~(pctree : BigStep.ctree -> bool)
     (b : component_bucket) : component_bucket =
   {
     exps = ExpSet.filter pexp b.exps;
@@ -155,8 +145,12 @@ let bucket_is_exact_for_size (size : Size.size) (b : component_bucket) : bool =
   && CmdSet.for_all
        (fun c -> Size.equal (Size.make (Size.sizeof_Cmd c) 0) size)
        b.cmds
-  && ETreeSet.for_all (fun et -> Size.equal (Size.sizeof_etree et) size) b.etrees
-  && CTreeSet.for_all (fun ct -> Size.equal (Size.sizeof_ctree ct) size) b.ctrees
+  && ETreeSet.for_all
+       (fun et -> Size.equal (Size.sizeof_etree et) size)
+       b.etrees
+  && CTreeSet.for_all
+       (fun ct -> Size.equal (Size.sizeof_ctree ct) size)
+       b.ctrees
 
 let table_is_exact (tbl : component_table) : bool =
   Size.Map.for_all bucket_is_exact_for_size tbl

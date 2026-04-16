@@ -42,14 +42,14 @@ let string_of_cmds cmds =
 let print_etrees etrees =
   etrees |> Component_set.ETreeSet.elements
   |> List.iter (fun et ->
-         Visualizer.print_tree (BigStep.ETree et);
-         print_endline "")
+      Visualizer.print_tree (BigStep.ETree et);
+      print_endline "")
 
 let print_ctrees ctrees =
   ctrees |> Component_set.CTreeSet.elements
   |> List.iter (fun ct ->
-         Visualizer.print_tree (BigStep.CTree ct);
-         print_endline "")
+      Visualizer.print_tree (BigStep.CTree ct);
+      print_endline "")
 
 let assert_valid_etrees name etrees =
   Component_set.ETreeSet.iter
@@ -124,7 +124,9 @@ let test_partition_with_constraints () =
       [ Partition.proof_component; Partition.prog_component ]
   in
   Printf.printf
-    "Partition.partition_with_constraints input=(3,2), constraints=[proof; prog]\n  output=\n  %s\n\n"
+    "Partition.partition_with_constraints input=(3,2), constraints=[proof; prog]\n\
+    \  output=\n\
+    \  %s\n\n"
     (string_of_partitions parts);
   assert_true "partition_with_constraints nonempty" (parts <> []);
   List.iter
@@ -132,8 +134,7 @@ let test_partition_with_constraints () =
       | [ proof; prog ] ->
           assert_true "proof component" (Partition.proof_component proof);
           assert_true "prog component" (Partition.prog_component prog);
-          assert_true "sum prog"
-            (Size.prog_size proof + Size.prog_size prog = 3);
+          assert_true "sum prog" (Size.prog_size proof + Size.prog_size prog = 3);
           assert_true "sum proof"
             (Size.proof_size proof + Size.proof_size prog = 2)
       | _ -> failwith "partition_with_constraints: expected two pieces")
@@ -145,14 +146,13 @@ let test_impossible_partition () =
       [ Partition.proof_component ]
   in
   Printf.printf
-    "Partition.partition_with_constraints input=(2,0), constraints=[proof]\n  output=[%s]\n\n"
+    "Partition.partition_with_constraints input=(2,0), constraints=[proof]\n\
+    \  output=[%s]\n\n"
     (string_of_partitions parts);
   assert_true "impossible partition" (parts = [])
 
 let test_bounded_envs () =
-  let cfg =
-    Config.make ~vars:[ "x"; "y" ] ~ints:[ 0 ] ~value_range:(0, 1) ()
-  in
+  let cfg = Config.make ~vars:[ "x"; "y" ] ~ints:[ 0 ] ~value_range:(0, 1) () in
   let envs = Config.bounded_envs cfg in
   let expected =
     [
@@ -165,7 +165,8 @@ let test_bounded_envs () =
   let env_with_unknown = env_of_bindings [ ("x", 0); ("z", 0) ] in
   let env_out_of_range = env_of_bindings [ ("x", 2); ("y", 0) ] in
   Printf.printf
-    "Bottom_up.bounded_envs input={vars=[x;y]; value_range=(0,1)}\n  output=[%s]\n\n"
+    "Bottom_up.bounded_envs input={vars=[x;y]; value_range=(0,1)}\n\
+    \  output=[%s]\n\n"
     (string_of_envs envs);
   assert_true "bounded_envs expected envs" (equal_envs envs expected);
   assert_true "valid_env accepts bounded env"
@@ -178,17 +179,18 @@ let test_bounded_envs () =
 let test_bottom_up_initial_components () =
   let tbl =
     Bottom_up.build_up_to
-      (Config.make ~vars:[ "x"; "y" ] ~ints:[ 0; 1; 2 ]
-         ~value_range:(0, 0) ())
+      (Config.make ~vars:[ "x"; "y" ] ~ints:[ 0; 1; 2 ] ~value_range:(0, 0) ())
       (size 1 0)
   in
   let exps = Component_set.exps_of_size (size 1 0) tbl in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x;y]; ints=[0;1;2]}, bound=(1,0)\n  exps at (1,0)=[%s]\n\n"
+    "Bottom_up.build_up_to input={vars=[x;y]; ints=[0;1;2]}, bound=(1,0)\n\
+    \  exps at (1,0)=[%s]\n\n"
     (string_of_exps exps);
   assert_true "initial Int 0" (Component_set.ExpSet.mem (Syntax.Exp.Int 0) exps);
   assert_true "initial Int 1" (Component_set.ExpSet.mem (Syntax.Exp.Int 1) exps);
-  assert_true "initial Var x" (Component_set.ExpSet.mem (Syntax.Exp.Var "x") exps)
+  assert_true "initial Var x"
+    (Component_set.ExpSet.mem (Syntax.Exp.Var "x") exps)
 
 let test_bottom_up_exp_growth () =
   let tbl =
@@ -205,13 +207,19 @@ let test_bottom_up_exp_growth () =
   let neg_x = Syntax.Exp.Uop (Syntax.Exp.Uminus, x) in
   let neg_zero = Syntax.Exp.Uop (Syntax.Exp.Uminus, zero) in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(5,0)\n  exps at (2,0)=[%s]\n  exps at (3,0)=[%s]\n  exps at (4,0)=[%s]\n  exps at (5,0)=[%s]\n\n"
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(5,0)\n\
+    \  exps at (2,0)=[%s]\n\
+    \  exps at (3,0)=[%s]\n\
+    \  exps at (4,0)=[%s]\n\
+    \  exps at (5,0)=[%s]\n\n"
     (string_of_exps exps_2) (string_of_exps exps_3) (string_of_exps exps_4)
     (string_of_exps exps_5);
   assert_true "generated -x" (Component_set.ExpSet.mem neg_x exps_2);
   assert_true "generated -0" (Component_set.ExpSet.mem neg_zero exps_2);
   assert_true "generated --x"
-    (Component_set.ExpSet.mem (Syntax.Exp.Uop (Syntax.Exp.Uminus, neg_x)) exps_3);
+    (Component_set.ExpSet.mem
+       (Syntax.Exp.Uop (Syntax.Exp.Uminus, neg_x))
+       exps_3);
   assert_true "generated x < x"
     (Component_set.ExpSet.mem (Syntax.Exp.Bop (Syntax.Exp.Lt, x, x)) exps_3);
   assert_true "generated x < 0"
@@ -219,7 +227,9 @@ let test_bottom_up_exp_growth () =
   assert_true "generated 0 < x"
     (Component_set.ExpSet.mem (Syntax.Exp.Bop (Syntax.Exp.Lt, zero, x)) exps_3);
   assert_true "generated 0 < 0"
-    (Component_set.ExpSet.mem (Syntax.Exp.Bop (Syntax.Exp.Lt, zero, zero)) exps_3);
+    (Component_set.ExpSet.mem
+       (Syntax.Exp.Bop (Syntax.Exp.Lt, zero, zero))
+       exps_3);
   assert_true "generated ---x"
     (Component_set.ExpSet.mem
        (Syntax.Exp.Uop
@@ -231,8 +241,7 @@ let test_bottom_up_exp_growth () =
     (Component_set.ExpSet.mem (Syntax.Exp.Bop (Syntax.Exp.Lt, neg_x, x)) exps_4);
   assert_true "generated x < (x < x)"
     (Component_set.ExpSet.mem
-       (Syntax.Exp.Bop
-          (Syntax.Exp.Lt, x, Syntax.Exp.Bop (Syntax.Exp.Lt, x, x)))
+       (Syntax.Exp.Bop (Syntax.Exp.Lt, x, Syntax.Exp.Bop (Syntax.Exp.Lt, x, x)))
        exps_5);
   assert_true "generated -(x < -x)"
     (Component_set.ExpSet.mem
@@ -241,15 +250,15 @@ let test_bottom_up_exp_growth () =
        exps_5)
 
 let test_bottom_up_eint_growth () =
-  let cfg =
-    Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) ()
-  in
+  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 1 1) in
   let etrees = Component_set.etrees_of_size (size 1 1) tbl in
   let env_x0 = env_of_bindings [ ("x", 0) ] in
   let env_x1 = env_of_bindings [ ("x", 1) ] in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, bound=(1,1)\n  EInt etrees at (1,1):\n";
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, \
+     bound=(1,1)\n\
+    \  EInt etrees at (1,1):\n";
   print_etrees etrees;
   assert_valid_etrees "eint valid etrees" etrees;
   assert_true "generated EInt 0 under x=0"
@@ -262,15 +271,15 @@ let test_bottom_up_eint_growth () =
        etrees)
 
 let test_bottom_up_evar_growth () =
-  let cfg =
-    Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) ()
-  in
+  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 1 1) in
   let etrees = Component_set.etrees_of_size (size 1 1) tbl in
   let env_x0 = env_of_bindings [ ("x", 0) ] in
   let env_x1 = env_of_bindings [ ("x", 1) ] in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, bound=(1,1)\n  EVar etrees at (1,1):\n";
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, \
+     bound=(1,1)\n\
+    \  EVar etrees at (1,1):\n";
   print_etrees etrees;
   assert_valid_etrees "evar valid etrees" etrees;
   assert_true "generated EVar x under x=0"
@@ -283,15 +292,15 @@ let test_bottom_up_evar_growth () =
        etrees)
 
 let test_bottom_up_euop_growth () =
-  let cfg =
-    Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) ()
-  in
+  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 2 2) in
   let etrees = Component_set.etrees_of_size (size 2 2) tbl in
   let env_x1 = env_of_bindings [ ("x", 1) ] in
   let x = Syntax.Exp.Var "x" in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, bound=(2,2)\n  EUop etrees at (2,2):\n";
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, \
+     bound=(2,2)\n\
+    \  EUop etrees at (2,2):\n";
   print_etrees etrees;
   assert_valid_etrees "euop valid etrees" etrees;
   assert_true "generated EUop -x under x=1"
@@ -302,9 +311,7 @@ let test_bottom_up_euop_growth () =
        etrees)
 
 let test_bottom_up_ebop_growth () =
-  let cfg =
-    Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) ()
-  in
+  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 3 3) in
   let etrees = Component_set.etrees_of_size (size 3 3) tbl in
   let env_x0 = env_of_bindings [ ("x", 0) ] in
@@ -312,7 +319,9 @@ let test_bottom_up_ebop_growth () =
   let x = Syntax.Exp.Var "x" in
   let one = Syntax.Exp.Int 1 in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, bound=(3,3)\n  EBop etrees at (3,3):\n";
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, \
+     bound=(3,3)\n\
+    \  EBop etrees at (3,3):\n";
   print_etrees etrees;
   assert_valid_etrees "ebop valid etrees" etrees;
   assert_true "generated EBop x < 1 under x=0"
@@ -331,9 +340,7 @@ let test_bottom_up_ebop_growth () =
        etrees)
 
 let test_bottom_up_cassign_growth () =
-  let cfg =
-    Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) ()
-  in
+  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 2 2) in
   let ctrees = Component_set.ctrees_of_size (size 2 2) tbl in
   let env_x0 = env_of_bindings [ ("x", 0) ] in
@@ -341,7 +348,9 @@ let test_bottom_up_cassign_growth () =
   let x = Syntax.Exp.Var "x" in
   let one = Syntax.Exp.Int 1 in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, bound=(2,2)\n  CAssign ctrees at (2,2):\n";
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, \
+     bound=(2,2)\n\
+    \  CAssign ctrees at (2,2):\n";
   print_ctrees ctrees;
   assert_valid_ctrees "cassign valid ctrees" ctrees;
   assert_true "generated CAssign x := x under x=1"
@@ -358,9 +367,7 @@ let test_bottom_up_cassign_growth () =
        ctrees)
 
 let test_bottom_up_cseq_growth () =
-  let cfg =
-    Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) ()
-  in
+  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 5 5) in
   let ctrees = Component_set.ctrees_of_size (size 5 5) tbl in
   let env_x0 = env_of_bindings [ ("x", 0) ] in
@@ -378,13 +385,15 @@ let test_bottom_up_cseq_growth () =
       (BigStep.EVar ((), (env_x1, x, 1)), (env_x1, assign_x, env_x1))
   in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, bound=(5,5)\n  CSeq ctrees at (5,5):\n";
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, \
+     bound=(5,5)\n\
+    \  CSeq ctrees at (5,5):\n";
   print_ctrees ctrees;
   assert_valid_ctrees "cseq valid ctrees" ctrees;
   assert_true "generated CSeq (x := 1); (x := x)"
     (Component_set.CTreeSet.mem
        (BigStep.CSeq
-            ( (ct_assign_one, ct_assign_x),
+          ( (ct_assign_one, ct_assign_x),
             ( env_x0,
               Syntax.Cmd.Seq
                 (Syntax.Cmd.dummy_lbl assign_one, Syntax.Cmd.dummy_lbl assign_x),
@@ -404,7 +413,10 @@ let test_bottom_up_assign_growth () =
   let zero = Syntax.Exp.Int 0 in
   let neg_x = Syntax.Exp.Uop (Syntax.Exp.Uminus, x) in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(4,0)\n  cmds at (2,0)=[%s]\n  cmds at (3,0)=[%s]\n  cmds at (4,0)=[%s]\n\n"
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(4,0)\n\
+    \  cmds at (2,0)=[%s]\n\
+    \  cmds at (3,0)=[%s]\n\
+    \  cmds at (4,0)=[%s]\n\n"
     (string_of_cmds cmds_2) (string_of_cmds cmds_3) (string_of_cmds cmds_4);
   assert_true "generated x := x"
     (Component_set.CmdSet.mem (Syntax.Cmd.Assign ("x", x)) cmds_2);
@@ -437,8 +449,8 @@ let test_bottom_up_seq_growth () =
   let assign_neg_neg_x =
     Syntax.Cmd.Assign
       ( "x",
-        Syntax.Exp.Uop
-          (Syntax.Exp.Uminus, Syntax.Exp.Uop (Syntax.Exp.Uminus, x)) )
+        Syntax.Exp.Uop (Syntax.Exp.Uminus, Syntax.Exp.Uop (Syntax.Exp.Uminus, x))
+      )
   in
   let assign_neg_neg_neg_x =
     Syntax.Cmd.Assign
@@ -449,11 +461,14 @@ let test_bottom_up_seq_growth () =
               (Syntax.Exp.Uminus, Syntax.Exp.Uop (Syntax.Exp.Uminus, x)) ) )
   in
   let seq_assign_x_assign_x =
-    Syntax.Cmd.Seq
-      (Syntax.Cmd.dummy_lbl assign_x, Syntax.Cmd.dummy_lbl assign_x)
+    Syntax.Cmd.Seq (Syntax.Cmd.dummy_lbl assign_x, Syntax.Cmd.dummy_lbl assign_x)
   in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(8,0)\n  cmds at (5,0)=[%s]\n  cmds at (6,0)=[%s]\n  cmds at (7,0)=[%s]\n  cmds at (8,0)=[%s]\n\n"
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(8,0)\n\
+    \  cmds at (5,0)=[%s]\n\
+    \  cmds at (6,0)=[%s]\n\
+    \  cmds at (7,0)=[%s]\n\
+    \  cmds at (8,0)=[%s]\n\n"
     (string_of_cmds cmds_5) (string_of_cmds cmds_6) (string_of_cmds cmds_7)
     (string_of_cmds cmds_8);
   assert_true "generated (x := x); (x := x)"
@@ -484,12 +499,14 @@ let test_bottom_up_seq_growth () =
   assert_true "generated (x := x); (x := ---x)"
     (Component_set.CmdSet.mem
        (Syntax.Cmd.Seq
-          (Syntax.Cmd.dummy_lbl assign_x, Syntax.Cmd.dummy_lbl assign_neg_neg_neg_x))
+          ( Syntax.Cmd.dummy_lbl assign_x,
+            Syntax.Cmd.dummy_lbl assign_neg_neg_neg_x ))
        cmds_8);
   assert_true "generated ((x := x); (x := x)); (x := x)"
     (Component_set.CmdSet.mem
        (Syntax.Cmd.Seq
-          (Syntax.Cmd.dummy_lbl seq_assign_x_assign_x, Syntax.Cmd.dummy_lbl assign_x))
+          ( Syntax.Cmd.dummy_lbl seq_assign_x_assign_x,
+            Syntax.Cmd.dummy_lbl assign_x ))
        cmds_8)
 
 let test_bottom_up_if_growth () =
@@ -502,7 +519,8 @@ let test_bottom_up_if_growth () =
   let x = Syntax.Exp.Var "x" in
   let assign_x = Syntax.Cmd.Assign ("x", x) in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(6,0)\n  cmds at (6,0)=[%s]\n\n"
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(6,0)\n\
+    \  cmds at (6,0)=[%s]\n\n"
     (string_of_cmds cmds_6);
   assert_true "generated if x then (x := x) else (x := x)"
     (Component_set.CmdSet.mem
@@ -520,11 +538,11 @@ let test_bottom_up_while_growth () =
   let x = Syntax.Exp.Var "x" in
   let assign_x = Syntax.Cmd.Assign ("x", x) in
   let seq_assign_x_assign_x =
-    Syntax.Cmd.Seq
-      (Syntax.Cmd.dummy_lbl assign_x, Syntax.Cmd.dummy_lbl assign_x)
+    Syntax.Cmd.Seq (Syntax.Cmd.dummy_lbl assign_x, Syntax.Cmd.dummy_lbl assign_x)
   in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(7,0)\n  cmds at (7,0)=[%s]\n\n"
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(7,0)\n\
+    \  cmds at (7,0)=[%s]\n\n"
     (string_of_cmds cmds_7);
   assert_true "generated while x do ((x := x); (x := x))"
     (Component_set.CmdSet.mem
@@ -553,16 +571,10 @@ let all_tests =
   ]
 
 let selected_tests = ref []
+let add_test name test = selected_tests := !selected_tests @ [ (name, test) ]
+let add_all_tests () = selected_tests := !selected_tests @ all_tests
 
-let add_test name test =
-  selected_tests := !selected_tests @ [ (name, test) ]
-
-let add_all_tests () =
-  selected_tests := !selected_tests @ all_tests
-
-type test_result =
-  | Pass of string
-  | Fail of string * string
+type test_result = Pass of string | Fail of string * string
 
 let run_test (name, test) =
   Printf.printf "== %s ==\n" name;
@@ -576,14 +588,9 @@ let print_test_result = function
   | Fail (name, msg) -> Printf.printf "[FAIL] %s: %s\n" name msg
 
 let has_failure results =
-  List.exists
-    (function
-      | Pass _ -> false
-      | Fail _ -> true)
-    results
+  List.exists (function Pass _ -> false | Fail _ -> true) results
 
 let usage = "Usage: synthesis_test.exe [options]"
-
 let specs = ref []
 
 let show_help () =

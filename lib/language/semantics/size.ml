@@ -1,15 +1,10 @@
 open BigStep
 
-type size = {
-  prog_size : int;
-  proof_size : int;
-}
+type size = { prog_size : int; proof_size : int }
 
 let make prog_size proof_size = { prog_size; proof_size }
-
 let prog_size s = s.prog_size
 let proof_size s = s.proof_size
-
 let total s = s.prog_size + s.proof_size
 
 let compare a b =
@@ -31,8 +26,7 @@ let sub a b =
     proof_size = a.proof_size - b.proof_size;
   }
 
-let is_valid { prog_size; proof_size } =
-  prog_size >= 0 && proof_size >= 0
+let is_valid { prog_size; proof_size } = prog_size >= 0 && proof_size >= 0
 
 let is_prog_component { prog_size; proof_size } =
   prog_size >= 1 && proof_size = 0
@@ -40,8 +34,7 @@ let is_prog_component { prog_size; proof_size } =
 let is_proof_component { prog_size; proof_size } =
   prog_size >= 1 && proof_size >= 1
 
-let to_string s =
-  Printf.sprintf "(%d,%d)" s.prog_size s.proof_size
+let to_string s = Printf.sprintf "(%d,%d)" s.prog_size s.proof_size
 
 module Map = Map.Make (struct
   type nonrec t = size
@@ -55,8 +48,7 @@ let rec sizeof_Exp e =
     | Int _ -> 1
     | Var _ -> 1
     | Bop (_, e1, e2) -> 1 + sizeof_Exp e1 + sizeof_Exp e2
-    | Uop (_, e) -> 1 + sizeof_Exp e
-  )
+    | Uop (_, e) -> 1 + sizeof_Exp e)
 
 let rec sizeof_Cmd c =
   Syntax.Cmd.(
@@ -64,8 +56,7 @@ let rec sizeof_Cmd c =
     | Assign (_, e) -> 1 + sizeof_Exp e
     | Seq (c1, c2) -> 1 + sizeof_Cmd c1.cmd + sizeof_Cmd c2.cmd
     | If (e, c1, c2) -> 1 + sizeof_Exp e + sizeof_Cmd c1.cmd + sizeof_Cmd c2.cmd
-    | While (e, c) -> 1 + sizeof_Exp e + sizeof_Cmd c.cmd
-  )
+    | While (e, c) -> 1 + sizeof_Exp e + sizeof_Cmd c.cmd)
 
 let rec sizeof_proof = function
   | ETree et -> sizeof_etree et
@@ -87,31 +78,25 @@ and sizeof_ctree = function
   | CWhileFalse (et, _) -> 1 + sizeof_etree et
 
 let sizeof_conclusion_prog = function
-  | ETree et ->
-      (match et with
-       | EInt (_, (_, e, _))
-       | EVar (_, (_, e, _))
-       | EBop (_, (_, e, _))
-       | EUop (_, (_, e, _)) ->
-           sizeof_Exp e)
-  | CTree ct ->
-      (match ct with
-       | CAssign (_, (_, c, _))
-       | CSeq (_, (_, c, _))
-       | CIfTrue (_, (_, c, _))
-       | CIfFalse (_, (_, c, _))
-       | CWhileTrue (_, (_, c, _))
-       | CWhileFalse (_, (_, c, _)) ->
-           sizeof_Cmd c)
+  | ETree et -> (
+      match et with
+      | EInt (_, (_, e, _))
+      | EVar (_, (_, e, _))
+      | EBop (_, (_, e, _))
+      | EUop (_, (_, e, _)) ->
+          sizeof_Exp e)
+  | CTree ct -> (
+      match ct with
+      | CAssign (_, (_, c, _))
+      | CSeq (_, (_, c, _))
+      | CIfTrue (_, (_, c, _))
+      | CIfFalse (_, (_, c, _))
+      | CWhileTrue (_, (_, c, _))
+      | CWhileFalse (_, (_, c, _)) ->
+          sizeof_Cmd c)
 
 let sizeof_tree t =
-  {
-    prog_size = sizeof_conclusion_prog t;
-    proof_size = sizeof_proof t;
-  }
+  { prog_size = sizeof_conclusion_prog t; proof_size = sizeof_proof t }
 
-let sizeof_etree et =
-  sizeof_tree (ETree et)
-
-let sizeof_ctree ct =
-  sizeof_tree (CTree ct)
+let sizeof_etree et = sizeof_tree (ETree et)
+let sizeof_ctree ct = sizeof_tree (CTree ct)
