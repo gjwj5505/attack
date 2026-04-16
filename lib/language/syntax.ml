@@ -45,6 +45,8 @@ module Cmd = struct
     | If of Exp.t * lbl_t * lbl_t
     | While of Exp.t * lbl_t
 
+  let dummy_lbl cmd = { lbl = 0; cmd }
+
   module Lbl_map = struct
     include Map.Make (struct
       type t = int

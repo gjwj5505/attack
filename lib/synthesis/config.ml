@@ -15,7 +15,7 @@ let default_bops =
     [
       Lt;
       (* Eq; Gt; Ne; Le; Ge; Plus; Minus; Times *)
-      (* 일단 하나만 쓰자 *)
+      (* 일단 하나만 쓰자ㄱㄱ *)
     ]
 
 let make ?(uops = default_uops) ?(bops = default_bops) ~vars ~ints
@@ -51,3 +51,7 @@ let bounded_envs cfg =
                List.map (fun v -> Environment.update x v env) values)
   in
   aux cfg.vars
+
+let is_in_bound cfg x =
+  let lo, hi = cfg.value_range in
+  lo <= x && x <= hi

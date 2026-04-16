@@ -45,6 +45,12 @@ let print_etrees etrees =
          Visualizer.print_tree (BigStep.ETree et);
          print_endline "")
 
+let print_ctrees ctrees =
+  ctrees |> Component_set.CTreeSet.elements
+  |> List.iter (fun ct ->
+         Visualizer.print_tree (BigStep.CTree ct);
+         print_endline "")
+
 let assert_valid_etrees name etrees =
   Component_set.ETreeSet.iter
     (fun et ->
@@ -52,6 +58,14 @@ let assert_valid_etrees name etrees =
       | Ok -> ()
       | Error msg -> failwith (name ^ ": " ^ msg))
     etrees
+
+let assert_valid_ctrees name ctrees =
+  Component_set.CTreeSet.iter
+    (fun ct ->
+      match BigStepChecker.check_ctree ct with
+      | Ok -> ()
+      | Error msg -> failwith (name ^ ": " ^ msg))
+    ctrees
 
 let assert_equal_sizes name expected actual =
   if expected <> actual then
@@ -316,45 +330,103 @@ let test_bottom_up_ebop_growth () =
             (env_x1, Syntax.Exp.Bop (Syntax.Exp.Lt, x, x), 0) ))
        etrees)
 
+let test_bottom_up_cassign_growth () =
+  let cfg =
+    Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) ()
+  in
+  let tbl = Bottom_up.build_up_to cfg (size 2 2) in
+  let ctrees = Component_set.ctrees_of_size (size 2 2) tbl in
+  let env_x0 = env_of_bindings [ ("x", 0) ] in
+  let env_x1 = env_of_bindings [ ("x", 1) ] in
+  let x = Syntax.Exp.Var "x" in
+  let one = Syntax.Exp.Int 1 in
+  Printf.printf
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, bound=(2,2)\n  CAssign ctrees at (2,2):\n";
+  print_ctrees ctrees;
+  assert_valid_ctrees "cassign valid ctrees" ctrees;
+  assert_true "generated CAssign x := x under x=1"
+    (Component_set.CTreeSet.mem
+       (BigStep.CAssign
+          ( BigStep.EVar ((), (env_x1, x, 1)),
+            (env_x1, Syntax.Cmd.Assign ("x", x), env_x1) ))
+       ctrees);
+  assert_true "generated CAssign x := 1 under x=0"
+    (Component_set.CTreeSet.mem
+       (BigStep.CAssign
+          ( BigStep.EInt ((), (env_x0, one, 1)),
+            (env_x0, Syntax.Cmd.Assign ("x", one), env_x1) ))
+       ctrees)
+
+let test_bottom_up_cseq_growth () =
+  let cfg =
+    Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) ()
+  in
+  let tbl = Bottom_up.build_up_to cfg (size 5 5) in
+  let ctrees = Component_set.ctrees_of_size (size 5 5) tbl in
+  let env_x0 = env_of_bindings [ ("x", 0) ] in
+  let env_x1 = env_of_bindings [ ("x", 1) ] in
+  let x = Syntax.Exp.Var "x" in
+  let one = Syntax.Exp.Int 1 in
+  let assign_one = Syntax.Cmd.Assign ("x", one) in
+  let assign_x = Syntax.Cmd.Assign ("x", x) in
+  let ct_assign_one =
+    BigStep.CAssign
+      (BigStep.EInt ((), (env_x0, one, 1)), (env_x0, assign_one, env_x1))
+  in
+  let ct_assign_x =
+    BigStep.CAssign
+      (BigStep.EVar ((), (env_x1, x, 1)), (env_x1, assign_x, env_x1))
+  in
+  Printf.printf
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0;1]; value_range=(0,1)}, bound=(5,5)\n  CSeq ctrees at (5,5):\n";
+  print_ctrees ctrees;
+  assert_valid_ctrees "cseq valid ctrees" ctrees;
+  assert_true "generated CSeq (x := 1); (x := x)"
+    (Component_set.CTreeSet.mem
+       (BigStep.CSeq
+            ( (ct_assign_one, ct_assign_x),
+            ( env_x0,
+              Syntax.Cmd.Seq
+                (Syntax.Cmd.dummy_lbl assign_one, Syntax.Cmd.dummy_lbl assign_x),
+              env_x1 ) ))
+       ctrees)
+
 let test_bottom_up_assign_growth () =
   let tbl =
     Bottom_up.build_up_to
       (Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
-      (size 5 0)
+      (size 4 0)
   in
+  let cmds_2 = Component_set.cmds_of_size (size 2 0) tbl in
   let cmds_3 = Component_set.cmds_of_size (size 3 0) tbl in
   let cmds_4 = Component_set.cmds_of_size (size 4 0) tbl in
-  let cmds_5 = Component_set.cmds_of_size (size 5 0) tbl in
   let x = Syntax.Exp.Var "x" in
   let zero = Syntax.Exp.Int 0 in
   let neg_x = Syntax.Exp.Uop (Syntax.Exp.Uminus, x) in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(5,0)\n  cmds at (3,0)=[%s]\n  cmds at (4,0)=[%s]\n  cmds at (5,0)=[%s]\n\n"
-    (string_of_cmds cmds_3) (string_of_cmds cmds_4) (string_of_cmds cmds_5);
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(4,0)\n  cmds at (2,0)=[%s]\n  cmds at (3,0)=[%s]\n  cmds at (4,0)=[%s]\n\n"
+    (string_of_cmds cmds_2) (string_of_cmds cmds_3) (string_of_cmds cmds_4);
   assert_true "generated x := x"
-    (Component_set.CmdSet.mem (Syntax.Cmd.Assign ("x", x)) cmds_3);
+    (Component_set.CmdSet.mem (Syntax.Cmd.Assign ("x", x)) cmds_2);
   assert_true "generated x := 0"
-    (Component_set.CmdSet.mem (Syntax.Cmd.Assign ("x", zero)) cmds_3);
+    (Component_set.CmdSet.mem (Syntax.Cmd.Assign ("x", zero)) cmds_2);
   assert_true "generated x := -x"
-    (Component_set.CmdSet.mem (Syntax.Cmd.Assign ("x", neg_x)) cmds_4);
+    (Component_set.CmdSet.mem (Syntax.Cmd.Assign ("x", neg_x)) cmds_3);
   assert_true "generated x := x < x"
     (Component_set.CmdSet.mem
        (Syntax.Cmd.Assign ("x", Syntax.Exp.Bop (Syntax.Exp.Lt, x, x)))
-       cmds_5)
-
-let lbl cmd = Syntax.Cmd.{ lbl = 0; cmd }
+       cmds_4)
 
 let test_bottom_up_seq_growth () =
   let tbl =
     Bottom_up.build_up_to
       (Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
-      (size 11 0)
+      (size 8 0)
   in
+  let cmds_5 = Component_set.cmds_of_size (size 5 0) tbl in
+  let cmds_6 = Component_set.cmds_of_size (size 6 0) tbl in
   let cmds_7 = Component_set.cmds_of_size (size 7 0) tbl in
   let cmds_8 = Component_set.cmds_of_size (size 8 0) tbl in
-  let cmds_9 = Component_set.cmds_of_size (size 9 0) tbl in
-  let cmds_10 = Component_set.cmds_of_size (size 10 0) tbl in
-  let cmds_11 = Component_set.cmds_of_size (size 11 0) tbl in
   let x = Syntax.Exp.Var "x" in
   let zero = Syntax.Exp.Int 0 in
   let assign_x = Syntax.Cmd.Assign ("x", x) in
@@ -376,74 +448,88 @@ let test_bottom_up_seq_growth () =
             Syntax.Exp.Uop
               (Syntax.Exp.Uminus, Syntax.Exp.Uop (Syntax.Exp.Uminus, x)) ) )
   in
-  let seq_assign_x_assign_x = Syntax.Cmd.Seq (lbl assign_x, lbl assign_x) in
+  let seq_assign_x_assign_x =
+    Syntax.Cmd.Seq
+      (Syntax.Cmd.dummy_lbl assign_x, Syntax.Cmd.dummy_lbl assign_x)
+  in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(11,0)\n  cmds at (7,0)=[%s]\n  cmds at (8,0)=[%s]\n  cmds at (9,0)=[%s]\n  cmds at (10,0)=[%s]\n  cmds at (11,0)=[%s]\n\n"
-    (string_of_cmds cmds_7) (string_of_cmds cmds_8) (string_of_cmds cmds_9)
-    (string_of_cmds cmds_10) (string_of_cmds cmds_11);
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(8,0)\n  cmds at (5,0)=[%s]\n  cmds at (6,0)=[%s]\n  cmds at (7,0)=[%s]\n  cmds at (8,0)=[%s]\n\n"
+    (string_of_cmds cmds_5) (string_of_cmds cmds_6) (string_of_cmds cmds_7)
+    (string_of_cmds cmds_8);
   assert_true "generated (x := x); (x := x)"
     (Component_set.CmdSet.mem
-       (Syntax.Cmd.Seq (lbl assign_x, lbl assign_x))
-       cmds_7);
+       (Syntax.Cmd.Seq
+          (Syntax.Cmd.dummy_lbl assign_x, Syntax.Cmd.dummy_lbl assign_x))
+       cmds_5);
   assert_true "generated (x := x); (x := 0)"
     (Component_set.CmdSet.mem
-       (Syntax.Cmd.Seq (lbl assign_x, lbl assign_zero))
-       cmds_7);
+       (Syntax.Cmd.Seq
+          (Syntax.Cmd.dummy_lbl assign_x, Syntax.Cmd.dummy_lbl assign_zero))
+       cmds_5);
   assert_true "generated (x := 0); (x := x)"
     (Component_set.CmdSet.mem
-       (Syntax.Cmd.Seq (lbl assign_zero, lbl assign_x))
-       cmds_7);
+       (Syntax.Cmd.Seq
+          (Syntax.Cmd.dummy_lbl assign_zero, Syntax.Cmd.dummy_lbl assign_x))
+       cmds_5);
   assert_true "generated (x := x); (x := -x)"
     (Component_set.CmdSet.mem
-       (Syntax.Cmd.Seq (lbl assign_x, lbl assign_neg_x))
-       cmds_8);
+       (Syntax.Cmd.Seq
+          (Syntax.Cmd.dummy_lbl assign_x, Syntax.Cmd.dummy_lbl assign_neg_x))
+       cmds_6);
   assert_true "generated (x := x); (x := --x)"
     (Component_set.CmdSet.mem
-       (Syntax.Cmd.Seq (lbl assign_x, lbl assign_neg_neg_x))
-       cmds_9);
+       (Syntax.Cmd.Seq
+          (Syntax.Cmd.dummy_lbl assign_x, Syntax.Cmd.dummy_lbl assign_neg_neg_x))
+       cmds_7);
   assert_true "generated (x := x); (x := ---x)"
     (Component_set.CmdSet.mem
-       (Syntax.Cmd.Seq (lbl assign_x, lbl assign_neg_neg_neg_x))
-       cmds_10);
+       (Syntax.Cmd.Seq
+          (Syntax.Cmd.dummy_lbl assign_x, Syntax.Cmd.dummy_lbl assign_neg_neg_neg_x))
+       cmds_8);
   assert_true "generated ((x := x); (x := x)); (x := x)"
     (Component_set.CmdSet.mem
-       (Syntax.Cmd.Seq (lbl seq_assign_x_assign_x, lbl assign_x))
-       cmds_11)
+       (Syntax.Cmd.Seq
+          (Syntax.Cmd.dummy_lbl seq_assign_x_assign_x, Syntax.Cmd.dummy_lbl assign_x))
+       cmds_8)
 
 let test_bottom_up_if_growth () =
   let tbl =
     Bottom_up.build_up_to
       (Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
-      (size 8 0)
+      (size 6 0)
   in
-  let cmds_8 = Component_set.cmds_of_size (size 8 0) tbl in
+  let cmds_6 = Component_set.cmds_of_size (size 6 0) tbl in
   let x = Syntax.Exp.Var "x" in
   let assign_x = Syntax.Cmd.Assign ("x", x) in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(8,0)\n  cmds at (8,0)=[%s]\n\n"
-    (string_of_cmds cmds_8);
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(6,0)\n  cmds at (6,0)=[%s]\n\n"
+    (string_of_cmds cmds_6);
   assert_true "generated if x then (x := x) else (x := x)"
     (Component_set.CmdSet.mem
-       (Syntax.Cmd.If (x, lbl assign_x, lbl assign_x))
-       cmds_8)
+       (Syntax.Cmd.If
+          (x, Syntax.Cmd.dummy_lbl assign_x, Syntax.Cmd.dummy_lbl assign_x))
+       cmds_6)
 
 let test_bottom_up_while_growth () =
   let tbl =
     Bottom_up.build_up_to
       (Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
-      (size 9 0)
+      (size 7 0)
   in
-  let cmds_9 = Component_set.cmds_of_size (size 9 0) tbl in
+  let cmds_7 = Component_set.cmds_of_size (size 7 0) tbl in
   let x = Syntax.Exp.Var "x" in
   let assign_x = Syntax.Cmd.Assign ("x", x) in
-  let seq_assign_x_assign_x = Syntax.Cmd.Seq (lbl assign_x, lbl assign_x) in
+  let seq_assign_x_assign_x =
+    Syntax.Cmd.Seq
+      (Syntax.Cmd.dummy_lbl assign_x, Syntax.Cmd.dummy_lbl assign_x)
+  in
   Printf.printf
-    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(9,0)\n  cmds at (9,0)=[%s]\n\n"
-    (string_of_cmds cmds_9);
+    "Bottom_up.build_up_to input={vars=[x]; ints=[0]}, bound=(7,0)\n  cmds at (7,0)=[%s]\n\n"
+    (string_of_cmds cmds_7);
   assert_true "generated while x do ((x := x); (x := x))"
     (Component_set.CmdSet.mem
-       (Syntax.Cmd.While (x, lbl seq_assign_x_assign_x))
-       cmds_9)
+       (Syntax.Cmd.While (x, Syntax.Cmd.dummy_lbl seq_assign_x_assign_x))
+       cmds_7)
 
 let all_tests =
   [
@@ -458,6 +544,8 @@ let all_tests =
     ("evar", test_bottom_up_evar_growth);
     ("euop", test_bottom_up_euop_growth);
     ("ebop", test_bottom_up_ebop_growth);
+    ("cassign", test_bottom_up_cassign_growth);
+    ("cseq", test_bottom_up_cseq_growth);
     ("asgn", test_bottom_up_assign_growth);
     ("seq", test_bottom_up_seq_growth);
     ("if", test_bottom_up_if_growth);
@@ -540,6 +628,12 @@ let () =
       ( "-ebop",
         Arg.Unit (fun () -> add_test "ebop" test_bottom_up_ebop_growth),
         "test bottom-up EBop proof tree growth" );
+      ( "-cassign",
+        Arg.Unit (fun () -> add_test "cassign" test_bottom_up_cassign_growth),
+        "test bottom-up CAssign proof tree growth" );
+      ( "-cseq",
+        Arg.Unit (fun () -> add_test "cseq" test_bottom_up_cseq_growth),
+        "test bottom-up CSeq proof tree growth" );
       ( "-asgn",
         Arg.Unit (fun () -> add_test "asgn" test_bottom_up_assign_growth),
         "test bottom-up assign growth" );
