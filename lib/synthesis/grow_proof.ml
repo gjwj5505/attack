@@ -231,13 +231,7 @@ let grow_ciffalse target tbl =
        tbl
 
 let grow_cwhiletrue target tbl =
-  let payload = Size.sub target (Size.make 1 1) in
-  Partition.partition_with_constraints payload
-    [
-      Partition.proof_component;
-      Partition.proof_component;
-      Partition.proof_component;
-    ]
+  Partition.partition_special_while target
   |> List.fold_left
        (fun tbl -> function
          | [ et_size; ct2_size; ct3_size ] ->

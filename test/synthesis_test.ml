@@ -76,20 +76,46 @@ let assert_equal_sizes name expected actual =
 let assert_true name cond =
   if not cond then failwith (name ^ ": assertion failed")
 
+let assert_component_sizes name tbl =
+  Component_set.fold_sizes
+    (fun expected_size bucket () ->
+      Component_set.ExpSet.iter
+        (fun e ->
+          let actual_size = Size.make (Size.sizeof_Exp e) 0 in
+          if not (Size.equal expected_size actual_size) then
+            failwith
+              (Printf.sprintf "%s: expected exp size %s, got %s" name
+                 (Size.to_string expected_size) (Size.to_string actual_size)))
+        bucket.Component_set.exps;
+      Component_set.CmdSet.iter
+        (fun c ->
+          let actual_size = Size.make (Size.sizeof_Cmd c) 0 in
+          if not (Size.equal expected_size actual_size) then
+            failwith
+              (Printf.sprintf "%s: expected cmd size %s, got %s" name
+                 (Size.to_string expected_size) (Size.to_string actual_size)))
+        bucket.cmds;
+      Component_set.ETreeSet.iter
+        (fun et ->
+          let actual_size = Size.sizeof_etree et in
+          if not (Size.equal expected_size actual_size) then
+            failwith
+              (Printf.sprintf "%s: expected etree size %s, got %s" name
+                 (Size.to_string expected_size) (Size.to_string actual_size)))
+        bucket.etrees;
+      Component_set.CTreeSet.iter
+        (fun ct ->
+          let actual_size = Size.sizeof_ctree ct in
+          if not (Size.equal expected_size actual_size) then
+            failwith
+              (Printf.sprintf "%s: expected ctree size %s, got %s" name
+                 (Size.to_string expected_size) (Size.to_string actual_size)))
+        bucket.ctrees)
+    tbl ()
+
 let test_rectangular_up_to () =
   let actual = Partition.rectangular_up_to (size 1 3) in
-  let expected =
-    [
-      size 0 0;
-      size 0 1;
-      size 0 2;
-      size 0 3;
-      size 1 0;
-      size 1 1;
-      size 1 2;
-      size 1 3;
-    ]
-  in
+  let expected = [ size 1 0; size 1 1; size 1 2; size 1 3 ] in
   Printf.printf "Partition.rectangular_up_to input=(1,3)\n  output=[%s]\n\n"
     (string_of_sizes actual);
   assert_equal_sizes "rectangular_up_to" expected actual
@@ -98,16 +124,12 @@ let test_diagonal_up_to () =
   let actual = Partition.diagonal_up_to (size 1 3) in
   let expected =
     [
-      size 0 0;
       size 1 0;
-      size 0 1;
       size 2 0;
       size 1 1;
-      size 0 2;
       size 3 0;
       size 2 1;
       size 1 2;
-      size 0 3;
       size 4 0;
       size 3 1;
       size 2 2;
@@ -182,6 +204,7 @@ let test_bottom_up_initial_components () =
       (Config.make ~vars:[ "x"; "y" ] ~ints:[ 0; 1; 2 ] ~value_range:(0, 0) ())
       (size 1 0)
   in
+  assert_component_sizes "initial component sizes" tbl;
   let exps = Component_set.exps_of_size (size 1 0) tbl in
   Printf.printf
     "Bottom_up.build_up_to input={vars=[x;y]; ints=[0;1;2]}, bound=(1,0)\n\
@@ -198,6 +221,7 @@ let test_bottom_up_exp_growth () =
       (Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
       (size 5 0)
   in
+  assert_component_sizes "exp component sizes" tbl;
   let exps_2 = Component_set.exps_of_size (size 2 0) tbl in
   let exps_3 = Component_set.exps_of_size (size 3 0) tbl in
   let exps_4 = Component_set.exps_of_size (size 4 0) tbl in
@@ -252,6 +276,7 @@ let test_bottom_up_exp_growth () =
 let test_bottom_up_eint_growth () =
   let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 1 1) in
+  assert_component_sizes "eint component sizes" tbl;
   let etrees = Component_set.etrees_of_size (size 1 1) tbl in
   let env_x0 = env_of_bindings [ ("x", 0) ] in
   let env_x1 = env_of_bindings [ ("x", 1) ] in
@@ -273,6 +298,7 @@ let test_bottom_up_eint_growth () =
 let test_bottom_up_evar_growth () =
   let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 1 1) in
+  assert_component_sizes "evar component sizes" tbl;
   let etrees = Component_set.etrees_of_size (size 1 1) tbl in
   let env_x0 = env_of_bindings [ ("x", 0) ] in
   let env_x1 = env_of_bindings [ ("x", 1) ] in
@@ -294,6 +320,7 @@ let test_bottom_up_evar_growth () =
 let test_bottom_up_euop_growth () =
   let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 2 2) in
+  assert_component_sizes "euop component sizes" tbl;
   let etrees = Component_set.etrees_of_size (size 2 2) tbl in
   let env_x1 = env_of_bindings [ ("x", 1) ] in
   let x = Syntax.Exp.Var "x" in
@@ -313,6 +340,7 @@ let test_bottom_up_euop_growth () =
 let test_bottom_up_ebop_growth () =
   let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 3 3) in
+  assert_component_sizes "ebop component sizes" tbl;
   let etrees = Component_set.etrees_of_size (size 3 3) tbl in
   let env_x0 = env_of_bindings [ ("x", 0) ] in
   let env_x1 = env_of_bindings [ ("x", 1) ] in
@@ -342,6 +370,7 @@ let test_bottom_up_ebop_growth () =
 let test_bottom_up_cassign_growth () =
   let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 2 2) in
+  assert_component_sizes "cassign component sizes" tbl;
   let ctrees = Component_set.ctrees_of_size (size 2 2) tbl in
   let env_x0 = env_of_bindings [ ("x", 0) ] in
   let env_x1 = env_of_bindings [ ("x", 1) ] in
@@ -369,6 +398,7 @@ let test_bottom_up_cassign_growth () =
 let test_bottom_up_cseq_growth () =
   let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 5 5) in
+  assert_component_sizes "cseq component sizes" tbl;
   let ctrees = Component_set.ctrees_of_size (size 5 5) tbl in
   let env_x0 = env_of_bindings [ ("x", 0) ] in
   let env_x1 = env_of_bindings [ ("x", 1) ] in
@@ -403,6 +433,7 @@ let test_bottom_up_cseq_growth () =
 let test_bottom_up_ciftrue_growth () =
   let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 6 4) in
+  assert_component_sizes "ciftrue component sizes" tbl;
   let ctrees = Component_set.ctrees_of_size (size 6 4) tbl in
   let env_x1 = env_of_bindings [ ("x", 1) ] in
   let x = Syntax.Exp.Var "x" in
@@ -430,6 +461,7 @@ let test_bottom_up_ciftrue_growth () =
 let test_bottom_up_ciffalse_growth () =
   let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 6 4) in
+  assert_component_sizes "ciffalse component sizes" tbl;
   let ctrees = Component_set.ctrees_of_size (size 6 4) tbl in
   let env_x0 = env_of_bindings [ ("x", 0) ] in
   let x = Syntax.Exp.Var "x" in
@@ -457,6 +489,7 @@ let test_bottom_up_ciffalse_growth () =
 let test_bottom_up_cwhilefalse_growth () =
   let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 4 2) in
+  assert_component_sizes "cwhilefalse component sizes" tbl;
   let ctrees = Component_set.ctrees_of_size (size 4 2) tbl in
   let env_x0 = env_of_bindings [ ("x", 0) ] in
   let x = Syntax.Exp.Var "x" in
@@ -476,8 +509,9 @@ let test_bottom_up_cwhilefalse_growth () =
 
 let test_bottom_up_cwhiletrue_growth () =
   let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 1) () in
-  let tbl = Bottom_up.build_up_to cfg (size 8 6) in
-  let ctrees = Component_set.ctrees_of_size (size 8 6) tbl in
+  let tbl = Bottom_up.build_up_to cfg (size 4 6) in
+  assert_component_sizes "cwhiletrue component sizes" tbl;
+  let ctrees = Component_set.ctrees_of_size (size 4 6) tbl in
   let env_x0 = env_of_bindings [ ("x", 0) ] in
   let env_x1 = env_of_bindings [ ("x", 1) ] in
   let x = Syntax.Exp.Var "x" in
@@ -497,8 +531,8 @@ let test_bottom_up_cwhiletrue_growth () =
   in
   Printf.printf
     "Bottom_up.build_up_to input={vars=[x]; ints=[0]; value_range=(0,1)}, \
-     bound=(8,6)\n\
-    \  CWhileTrue ctrees at (8,6):\n";
+     bound=(4,6)\n\
+    \  CWhileTrue ctrees at (4,6):\n";
   print_ctrees ctrees;
   assert_valid_ctrees "cwhiletrue valid ctrees" ctrees;
   assert_true "generated CWhileTrue while x do x := 0 under x=1"
@@ -514,6 +548,7 @@ let test_bottom_up_assign_growth () =
       (Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
       (size 4 0)
   in
+  assert_component_sizes "assign component sizes" tbl;
   let cmds_2 = Component_set.cmds_of_size (size 2 0) tbl in
   let cmds_3 = Component_set.cmds_of_size (size 3 0) tbl in
   let cmds_4 = Component_set.cmds_of_size (size 4 0) tbl in
@@ -543,6 +578,7 @@ let test_bottom_up_seq_growth () =
       (Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
       (size 8 0)
   in
+  assert_component_sizes "seq component sizes" tbl;
   let cmds_5 = Component_set.cmds_of_size (size 5 0) tbl in
   let cmds_6 = Component_set.cmds_of_size (size 6 0) tbl in
   let cmds_7 = Component_set.cmds_of_size (size 7 0) tbl in
@@ -623,6 +659,7 @@ let test_bottom_up_if_growth () =
       (Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
       (size 6 0)
   in
+  assert_component_sizes "if component sizes" tbl;
   let cmds_6 = Component_set.cmds_of_size (size 6 0) tbl in
   let x = Syntax.Exp.Var "x" in
   let assign_x = Syntax.Cmd.Assign ("x", x) in
@@ -642,6 +679,7 @@ let test_bottom_up_while_growth () =
       (Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
       (size 7 0)
   in
+  assert_component_sizes "while component sizes" tbl;
   let cmds_7 = Component_set.cmds_of_size (size 7 0) tbl in
   let x = Syntax.Exp.Var "x" in
   let assign_x = Syntax.Cmd.Assign ("x", x) in

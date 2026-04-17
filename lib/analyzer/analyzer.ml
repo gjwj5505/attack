@@ -240,5 +240,5 @@ let analysis (prog : Cmd.lbl_t) : Abs_mem.t =
         run ()
   in
   run ();
-  print_endline (Abs_sem.string_of_t !sem);
+  (* print_endline (Abs_sem.string_of_t !sem); *)
   !sem |> Cmd.Lbl_map.find exit

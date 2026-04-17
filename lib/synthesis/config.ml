@@ -22,6 +22,9 @@ let make ?(uops = default_uops) ?(bops = default_bops) ~vars ~ints ~value_range
     () =
   { vars; ints; value_range; uops; bops }
 
+let attack () =
+  make ~vars:[ "x" ] ~ints:[ 0; 1; 2; 3; 4 ] ~value_range:(0, 4) ()
+
 let values_in_range (lo, hi) =
   if lo > hi then [] else List.init (hi - lo + 1) (fun i -> lo + i)
 
