@@ -8,7 +8,7 @@ Always follow these rules:
 - Do NOT run any shell commands (bash, dune, git, etc.) unless I explicitly ask for it
 - Before applying any code changes, show the diff and wait for my approval
 
-Start by reading `.codex/CONTEXT.md`, then inspect only the files relevant to
+Start by reading `.codex/CONTEXT.md`, `.codex/todo.txt`, then inspect only the files relevant to
 the current request. Prefer concise status updates in Korean.
 
 Current priority: analyzer soundness/crash fixes. Do not start broad refactors
