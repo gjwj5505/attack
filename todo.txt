@@ -25,6 +25,8 @@
   - Bot state가 assignment/filter로 되살아나지 않는지
 
 
+-big 옵션 줬는데도 "Please provide an option! (-pp, -tab, -intp, -analyze)" 라고 뜨는 것 등 main.ml 문제 수정
+
 big-step visualizer 정렬 맞추기 (빈칸 크기, 결론 위치, if로 시작하면 첫줄 짤림)
 C-style로 바꾸기 (assign 문법, if-else while 문법, 코드블럭, bool 조건문 적용)
 component set에서 필요한걸 조금이라도 빨리 찾는 방법?

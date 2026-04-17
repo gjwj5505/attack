@@ -11,10 +11,25 @@ let opt_attack = ref false
 let bound_prog = ref 0
 let bound_proof = ref 0
 
-let has_attack_bound () =
-  !bound_prog <> 0 || !bound_proof <> 0
+let usage =
+  "Usage : " ^ Filename.basename Sys.argv.(0) ^ " [-option] [filename] "
 
-let print_attack_progress Synthesis.Attack.{ size; exps; cmds; etrees; ctrees } =
+let program_options () =
+  !opt_pp || !opt_tab || !opt_tintp || !opt_dintp || !opt_analyze || !opt_big
+
+let fail_usage msg =
+  prerr_endline ("Error: " ^ msg);
+  prerr_endline usage;
+  exit 2
+
+let set_src x =
+  if !src <> "" then fail_usage ("unexpected extra input file: " ^ x)
+  else src := x
+
+let has_attack_bound () = !bound_prog <> 0 || !bound_proof <> 0
+
+let print_attack_progress Synthesis.Attack.{ size; exps; cmds; etrees; ctrees }
+    =
   Printf.printf "Trying size=%s: exp=%d cmd=%d etree=%d ctree=%d\n%!"
     (Size.to_string size) exps cmds etrees ctrees
 
@@ -31,8 +46,8 @@ let print_attack_result (result : Synthesis.Attack.result) =
 let run_synth_attack () =
   let cfg = Synthesis.Config.attack () in
   match
-    Synthesis.Attack.find_top_attack ~on_progress:print_attack_progress
-      ~var:"x" cfg
+    Synthesis.Attack.find_top_attack ~on_progress:print_attack_progress ~var:"x"
+      cfg
   with
   | None -> print_endline "No attack found for var=x"
   | Some result -> print_attack_result result
@@ -41,8 +56,8 @@ let run_synth_attack_all () =
   let cfg = Synthesis.Config.attack () in
   let bound = Size.make !bound_prog !bound_proof in
   let results =
-    Synthesis.Attack.find_all_top_attacks
-      ~on_progress:print_attack_progress ~var:"x" cfg bound
+    Synthesis.Attack.find_all_top_attacks ~on_progress:print_attack_progress
+      ~var:"x" cfg bound
   in
   Printf.printf "Found %d attacks up to bound=%s for var=x\n"
     (List.length results) (Size.to_string bound);
@@ -77,17 +92,26 @@ let main () =
         Arg.Tuple [ Arg.Set_int bound_prog; Arg.Set_int bound_proof ],
         "set bounded attack search as <prog_size> <proof_size>" );
     ]
-    (fun x -> src := x)
-    ("Usage : " ^ Filename.basename Sys.argv.(0) ^ " [-option] [filename] ");
+    set_src usage;
+
+  if has_attack_bound () && not !opt_attack then
+    fail_usage "-bound requires -attack";
+  if !opt_attack && !src <> "" then
+    fail_usage "-attack does not take an input file";
+  if (not !opt_attack) && not (program_options ()) then (
+    print_endline
+      "Please provide an option! (-pp, -tab, -tintp, -dintp, -analyze, -big, \
+       -attack)";
+    exit 0);
 
   if !opt_attack then (
     run_attack ();
     exit 0);
 
-  let lexbuf =
-    Lexing.from_channel (if !src = "" then stdin else open_in !src)
-  in
+  let channel = if !src = "" then stdin else open_in !src in
+  let lexbuf = Lexing.from_channel channel in
   let pgm = Parser.prog Lexer.read lexbuf in
+  if !src <> "" then close_in_noerr channel;
 
   let open Syntax.Cmd in
   if !opt_pp then string_of_lbl_t pgm |> print_endline;
@@ -114,7 +138,6 @@ let main () =
         print_endline ("Reason: " ^ msg)
   end;
 
-  if not (!opt_pp || !opt_tab || !opt_tintp || !opt_dintp || !opt_analyze) then
-    print_endline "Please provide an option! (-pp, -tab, -intp, -analyze)"
+  ()
 
 let () = main ()

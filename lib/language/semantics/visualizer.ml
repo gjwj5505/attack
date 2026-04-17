@@ -23,6 +23,27 @@ let make_box s =
 
 let empty_box = { lines = []; width = 0; height = 0 }
 let s_env e = "{" ^ Environment.string_of_env e ^ "}"
+let spaces lvl = String.make (2 * lvl) ' '
+
+let rec string_of_cmd ?(lvl = 0) =
+  let prefix = spaces lvl in
+  Cmd.(
+    function
+    | Assign (id, e) ->
+        Printf.sprintf "%s%s := %s" prefix id (Exp.string_of_t e)
+    | Seq (c1, c2) ->
+        Printf.sprintf "%s;\n%s"
+          (string_of_cmd ~lvl c1.cmd)
+          (string_of_cmd ~lvl c2.cmd)
+    | If (pred, con, alt) ->
+        Printf.sprintf "%sif %s then\n%s\n%selse\n%s" prefix
+          (Exp.string_of_t pred)
+          (string_of_cmd ~lvl:(lvl + 1) con.cmd)
+          prefix
+          (string_of_cmd ~lvl:(lvl + 1) alt.cmd)
+    | While (pred, c) ->
+        Printf.sprintf "%swhile %s\n%s" prefix (Exp.string_of_t pred)
+          (string_of_cmd ~lvl:(lvl + 1) c.cmd))
 
 let pad side b target_h =
   let diff = target_h - b.height in
@@ -108,8 +129,7 @@ let build_proof rule_name size premises conclusion_box =
   in
 
   let rule_label =
-    Printf.sprintf "[%s | prog=%d | proof=%d] " rule_name size.prog_size
-      size.proof_size
+    Printf.sprintf "[%s | (%d,%d)] " rule_name size.prog_size size.proof_size
   in
   let b_label = make_box rule_label in
   let full_h = max b_label.height conclusion_box.height in
@@ -151,46 +171,46 @@ let build_proof rule_name size premises conclusion_box =
 let rec box_of_etree t =
   match t with
   | EInt (_, (env, e, v)) ->
-      build_proof "E-Int" (sizeof_etree t) []
+      build_proof "Int" (sizeof_etree t) []
         (make_conclusion env (Exp.string_of_t e) (string_of_int v))
   | EVar (_, (env, e, v)) ->
-      build_proof "E-Var" (sizeof_etree t) []
+      build_proof "Var" (sizeof_etree t) []
         (make_conclusion env (Exp.string_of_t e) (string_of_int v))
   | EBop ((t1, t2), (env, e, v)) ->
-      build_proof "E-Bop" (sizeof_etree t)
+      build_proof "Bop" (sizeof_etree t)
         [ box_of_etree t1; box_of_etree t2 ]
         (make_conclusion env (Exp.string_of_t e) (string_of_int v))
   | EUop (t1, (env, e, v)) ->
-      build_proof "E-Uop" (sizeof_etree t)
+      build_proof "Uop" (sizeof_etree t)
         [ box_of_etree t1 ]
         (make_conclusion env (Exp.string_of_t e) (string_of_int v))
 
 let rec box_of_ctree t =
   match t with
   | CAssign (et, (env, c, env')) ->
-      build_proof "S-Assign" (sizeof_ctree t)
+      build_proof "Asgn" (sizeof_ctree t)
         [ box_of_etree et ]
-        (make_conclusion env (Cmd.string_of_t c) (s_env env'))
+        (make_conclusion env (string_of_cmd c) (s_env env'))
   | CSeq ((t1, t2), (env, c, env')) ->
-      build_proof "S-Seq" (sizeof_ctree t)
+      build_proof "Seq" (sizeof_ctree t)
         [ box_of_ctree t1; box_of_ctree t2 ]
-        (make_conclusion env (Cmd.string_of_t c) (s_env env'))
+        (make_conclusion env (string_of_cmd c) (s_env env'))
   | CIfTrue ((et, ct), (env, c, env')) ->
-      build_proof "S-IfTrue" (sizeof_ctree t)
+      build_proof "IfT" (sizeof_ctree t)
         [ box_of_etree et; box_of_ctree ct ]
-        (make_conclusion env (Cmd.string_of_t c) (s_env env'))
+        (make_conclusion env (string_of_cmd c) (s_env env'))
   | CIfFalse ((et, ct), (env, c, env')) ->
-      build_proof "S-IfFalse" (sizeof_ctree t)
+      build_proof "IfF" (sizeof_ctree t)
         [ box_of_etree et; box_of_ctree ct ]
-        (make_conclusion env (Cmd.string_of_t c) (s_env env'))
+        (make_conclusion env (string_of_cmd c) (s_env env'))
   | CWhileTrue ((et, t_body, t_rest), (env, c, env')) ->
-      build_proof "S-WhileTrue" (sizeof_ctree t)
+      build_proof "WhlT" (sizeof_ctree t)
         [ box_of_etree et; box_of_ctree t_body; box_of_ctree t_rest ]
-        (make_conclusion env (Cmd.string_of_t c) (s_env env'))
+        (make_conclusion env (string_of_cmd c) (s_env env'))
   | CWhileFalse (et, (env, c, env')) ->
-      build_proof "S-WhileFalse" (sizeof_ctree t)
+      build_proof "WhlF" (sizeof_ctree t)
         [ box_of_etree et ]
-        (make_conclusion env (Cmd.string_of_t c) (s_env env'))
+        (make_conclusion env (string_of_cmd c) (s_env env'))
 
 let print_tree tree =
   let final_box =
