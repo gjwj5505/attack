@@ -29,6 +29,12 @@ module Abs_mem = struct
   type t = Mem of Abs_val.t Loc.Map.t | Bot
 
   let empty : t = Mem Loc.Map.empty
+  let default_val = Itv.singleton 0
+
+  let value_or_default = function Some v -> v | None -> default_val
+
+  let keep_non_default v =
+    if Itv.equal v default_val then None else Some v
 
   let find loc mem =
     match mem with
@@ -36,8 +42,7 @@ module Abs_mem = struct
     | Mem m -> (
         match Loc.Map.find_opt loc m with
         | Some v -> v
-        | None ->
-            Itv.singleton 0 (* default value for uninitialized variables *))
+        | None -> default_val (* default value for uninitialized variables *))
 
   let string_of_t mem =
     match mem with
@@ -51,14 +56,41 @@ module Abs_mem = struct
 
   let add loc v mem =
     match mem with
-    | Bot -> Mem (Loc.Map.singleton loc v)
-    | Mem m -> Mem (Loc.Map.add loc v m)
+    | Bot -> Bot
+    | Mem m ->
+        if Itv.equal v Itv.Bot then Bot
+        else
+          (* Canonicalize the implicit [0,0] default so fixpoint checks do not
+             oscillate between absent keys and explicit default bindings. *)
+          Mem
+            (if Itv.equal v default_val then Loc.Map.remove loc m
+             else Loc.Map.add loc v m)
 
-  let equal m1 m2 =
+  let leq m1 m2 =
     match (m1, m2) with
-    | Bot, Bot -> true
-    | Mem m1, Mem m2 -> Loc.Map.equal Itv.equal m1 m2
-    | _ -> false
+    | Bot, _ -> true
+    | _, Bot -> false
+    | Mem m1, Mem m2 ->
+        Loc.Map.is_empty
+          (Loc.Map.merge
+             (fun _ v1 v2 ->
+               let v1 = value_or_default v1 in
+               let v2 = value_or_default v2 in
+               if Itv.(v1 <= v2) then None else Some ())
+             m1 m2)
+
+  let equal m1 m2 = leq m1 m2 && leq m2 m1
+
+  let join m1 m2 =
+    match (m1, m2) with
+    | Bot, m | m, Bot -> m
+    | Mem m1, Mem m2 ->
+        Mem
+          (Loc.Map.merge
+             (fun _ v1 v2 ->
+               keep_non_default
+                 (Itv.join (value_or_default v1) (value_or_default v2)))
+             m1 m2)
 
   let widen m_old m_new =
     match (m_old, m_new) with
@@ -68,11 +100,10 @@ module Abs_mem = struct
         Mem
           (Loc.Map.merge
              (fun _ v_old_opt v_new_opt ->
-               match (v_old_opt, v_new_opt) with
-               | None, None -> None
-               | Some v_old, None -> Some v_old
-               | None, Some v_new -> Some v_new
-               | Some v_old, Some v_new -> Some (widen_val v_old v_new))
+               keep_non_default
+                 (widen_val
+                    (value_or_default v_old_opt)
+                    (value_or_default v_new_opt)))
              old new_)
 
   (* module Set = struct include Set.Make (struct type nonrec t = t
@@ -214,14 +245,7 @@ let analysis (prog : Cmd.lbl_t) : Abs_mem.t =
           match Cmd.Lbl_map.find cur table with
           | Cmd.Assign (x, e) ->
               let v = antp_exp cur_mem e in
-              [
-                ( next cur,
-                  Abs_mem.Mem
-                    (Loc.Map.add x v
-                       (match cur_mem with
-                       | Abs_mem.Mem m -> m
-                       | Abs_mem.Bot -> Loc.Map.empty)) );
-              ]
+              [ (next cur, Abs_mem.add x v cur_mem) ]
           | Cmd.If (e, _, _) | Cmd.While (e, _) ->
               [
                 (next_true cur, filter_t e cur_mem);
@@ -233,7 +257,7 @@ let analysis (prog : Cmd.lbl_t) : Abs_mem.t =
           (fun (nex, mem) ->
             let old_mem = Cmd.Lbl_map.find nex !sem in
             let new_mem = Abs_mem.widen old_mem mem in
-            if not (Abs_mem.equal new_mem old_mem) then (
+            if not (Abs_mem.leq new_mem old_mem) then (
               sem := Cmd.Lbl_map.add nex new_mem !sem;
               Queue.push nex wl))
           update_list;

@@ -7,6 +7,15 @@ module Bound = struct
     | Z n1, Z n2 -> n1 = n2
     | _ -> false
 
+  let compare b1 b2 =
+    match (b1, b2) with
+    | N_inf, N_inf | P_inf, P_inf -> 0
+    | N_inf, _ -> -1
+    | _, N_inf -> 1
+    | P_inf, _ -> 1
+    | _, P_inf -> -1
+    | Z n1, Z n2 -> Stdlib.compare n1 n2
+
   let max b1 b2 =
     match (b1, b2) with
     | N_inf, b | b, N_inf -> b
@@ -20,8 +29,10 @@ module Bound = struct
     | Z n1, Z n2 -> Z (min n1 n2)
 
   (* b1 <= b2 *)
-  let leq b1 b2 = min b1 b2 = b1
+  let leq b1 b2 = compare b1 b2 <= 0
+  let lt b1 b2 = compare b1 b2 < 0
   let ( <= ) = leq
+  let ( < ) = lt
 
   let add b1 b2 =
     match (b1, b2) with
@@ -63,6 +74,11 @@ type t = Bot | Itv of Bound.t * Bound.t
 let top = Itv (N_inf, P_inf)
 let bot = Bot
 let singleton n = Itv (Bound.Z n, Bound.Z n)
+
+let make l r =
+  match (l, r) with
+  | Bound.P_inf, _ | _, Bound.N_inf -> Bot
+  | _ -> if Bound.leq l r then Itv (l, r) else Bot
 
 let equal i1 i2 =
   match (i1, i2) with
@@ -206,42 +222,42 @@ let or_ i1 i2 =
 
 let filter_lt cut i =
   match (cut, i) with
-  | Bot, _ | _, Bot -> failwith "filter_lt: unexpected Bot"
+  | Bot, _ | _, Bot -> Bot
   | Itv (_l1, r1), Itv (l2, r2) ->
       let open Bound in
-      Itv (l2, min r2 (r1 + Z (-1)))
+      make l2 (min r2 (r1 + Z (-1)))
 
 let filter_gt cut i =
   match (cut, i) with
-  | Bot, _ | _, Bot -> failwith "filter_gt: unexpected Bot"
-  | Itv (l1, r1), Itv (l2, _r2) ->
+  | Bot, _ | _, Bot -> Bot
+  | Itv (l1, _r1), Itv (l2, r2) ->
       let open Bound in
-      Itv (max l2 (l1 + Z 1), r1)
+      make (max l2 (l1 + Z 1)) r2
 
 let filter_le cut i =
   match (cut, i) with
-  | Bot, _ | _, Bot -> failwith "filter_le: unexpected Bot"
+  | Bot, _ | _, Bot -> Bot
   | Itv (_l1, r1), Itv (l2, r2) ->
       let open Bound in
-      Itv (l2, min r2 r1)
+      make l2 (min r2 r1)
 
 let filter_ge cut i =
   match (cut, i) with
-  | Bot, _ | _, Bot -> failwith "filter_ge: unexpected Bot"
+  | Bot, _ | _, Bot -> Bot
   | Itv (l1, _r1), Itv (l2, r2) ->
       let open Bound in
-      Itv (max l1 l2, r2)
+      make (max l1 l2) r2
 
 let filter_ne cut i =
   match (cut, i) with
-  | Bot, _ | _, Bot -> failwith "filter_ne: unexpected Bot"
+  | Bot, _ | _, Bot -> Bot
   | Itv (l1, r1), Itv (l2, r2) ->
       let open Bound in
       if l1 = r1 then
         let v = l1 in
         if l2 = r2 then if l2 = v then Bot else i
-        else if l2 = v then Itv (l2 + Z 1, r2)
-        else if r2 = v then Itv (l2, r2 + Z (-1))
+        else if l2 = v then make (l2 + Z 1) r2
+        else if r2 = v then make l2 (r2 + Z (-1))
         else i
       else i
 
@@ -268,8 +284,8 @@ let rec bop op i1 i2 =
       match (i1, i2) with
       | Bot, _ | _, Bot -> Bot
       | Itv (l1, r1), Itv (l2, r2) ->
-          let may_true = if l1 < r2 then true else false in
-          let may_false = if r1 >= l2 then true else false in
+          let may_true = if Bound.(l1 < r2) then true else false in
+          let may_false = if Bound.(l2 <= r1) then true else false in
           Bool.make may_true may_false)
   | Gt -> bop Lt i2 i1
   | Le -> not (bop Gt i1 i2)
