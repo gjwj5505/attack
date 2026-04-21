@@ -13,3 +13,12 @@ the current request. Prefer concise status updates in Korean.
 
 Current priority: analyzer soundness/crash fixes. Do not start broad refactors
 unless the user explicitly asks.
+
+Attack workflow:
+- When synthesis finds a successful analyzer attack, inspect why the analyzer
+  produced the bad result.
+- Strengthen the analyzer against that weakness in small approved steps.
+- Re-run the relevant attack/example/tests after the fix.
+- Record each successful attack and fix in `.codex/analyzer-attack-log.txt`
+  using the format: date - name - attack program - analyzer weakness -
+  strengthening method.

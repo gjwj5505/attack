@@ -1,4 +1,4 @@
 (library
  (name analyzer)
- (modules analyzer itv dom dom_ex)
+ (modules analyzer filter eval abs_domain itv dom dom_ex)
  (libraries language))

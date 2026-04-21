@@ -1,0 +1,23 @@
+# Analyzer Attack Log
+
+## 2026-04-21 - while 0 truthiness attack
+
+공격 프로그램
+```
+while 0
+  x := 1;
+  while 0
+    x := 0
+```
+
+분석기 약점
+- 기존 `filter_t` / `filter_f`는 condition이 `Bop`인 경우만 refine했다.
+- `Int 0` 같은 non-relational condition은 true/false branch 모두 그대로 통과했다.
+- 그 결과 `while 0`의 body가 reachable하다고 분석됐다.
+- unreachable loop body가 widening을 타면서 `x`가 `[-∞,∞]`까지 커졌다.
+
+강화 방법
+- `filter_t` / `filter_f` 시작에서 `Eval.antp_exp`로 condition 값을 먼저 평가한다.
+- true branch에서 `Itv.maybe_true`가 false면 즉시 `Abs_mem.Bot`으로 보낸다.
+- false branch에서 `Itv.maybe_false`가 false면 즉시 `Abs_mem.Bot`으로 보낸다.
+- 이후 가능한 branch에 대해서만 기존 relational refinement를 수행한다.

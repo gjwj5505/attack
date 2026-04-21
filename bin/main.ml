@@ -34,10 +34,11 @@ let print_attack_progress Synthesis.Attack.{ size; exps; cmds; etrees; ctrees }
     (Size.to_string size) exps cmds etrees ctrees
 
 let print_attack_result (result : Synthesis.Attack.result) =
-  Printf.printf "Attack found at size=%s for var=x\n"
+  let labeled_cmd = Syntax.Cmd.(relabel (dummy_lbl result.cmd)) in
+  Printf.printf "Attack found at size=%s\n"
     (Size.to_string result.Synthesis.Attack.size);
   print_endline "== program ==";
-  print_endline (Syntax.Cmd.string_of_t result.cmd);
+  print_endline (Syntax.Cmd.string_of_lbl_t labeled_cmd);
   print_endline "== analysis result ==";
   print_endline (Analyzer.Abs_mem.string_of_t result.analysis_result);
   print_endline "== proof tree ==";
@@ -49,7 +50,7 @@ let run_synth_attack () =
     Synthesis.Attack.find_top_attack ~on_progress:print_attack_progress ~var:"x"
       cfg
   with
-  | None -> print_endline "No attack found for var=x"
+  | None -> print_endline "No attack found"
   | Some result -> print_attack_result result
 
 let run_synth_attack_all () =
@@ -59,7 +60,7 @@ let run_synth_attack_all () =
     Synthesis.Attack.find_all_top_attacks ~on_progress:print_attack_progress
       ~var:"x" cfg bound
   in
-  Printf.printf "Found %d attacks up to bound=%s for var=x\n"
+  Printf.printf "Found %d attacks up to bound=%s\n"
     (List.length results) (Size.to_string bound);
   List.iteri
     (fun i result ->

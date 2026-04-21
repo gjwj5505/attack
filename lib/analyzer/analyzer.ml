@@ -5,222 +5,42 @@
 
 open Language.Syntax
 
-module Loc = struct
-  type t = Exp.id
+module Loc = Abs_domain.Loc
+module Abs_val = Abs_domain.Abs_val
+module Abs_mem = Abs_domain.Abs_mem
+module Abs_sem = Abs_domain.Abs_sem
 
-  module Map = Map.Make (struct
-    type nonrec t = t
-
-    let compare = String.compare
-  end)
-end
-
-module Abs_val = struct
-  type t = Itv.t
+module EdgeSet = Set.Make (struct
+  type t = Cmd.lbl * Cmd.lbl
 
   let compare = Stdlib.compare
-  let equal = Itv.equal
-  let top = Itv.top
-  let is_top v = equal v top
-  let string_of_t = Itv.string_of_t
-end
+end)
 
-module Abs_mem = struct
-  type t = Mem of Abs_val.t Loc.Map.t | Bot
+let rec terminal_edges (stmt : Cmd.lbl_t) (exit : Cmd.lbl) : EdgeSet.t =
+  match stmt.cmd with
+  | Cmd.Assign _ -> EdgeSet.singleton (stmt.lbl, exit)
+  | Cmd.Seq (_, c2) -> terminal_edges c2 exit
+  | Cmd.If (_, c1, c2) ->
+      EdgeSet.union (terminal_edges c1 exit) (terminal_edges c2 exit)
+  | Cmd.While (_, _) ->
+      (* Exiting a while statement to its successor happens only on the false
+         edge of the loop header. *)
+      EdgeSet.singleton (stmt.lbl, exit)
 
-  let empty : t = Mem Loc.Map.empty
-  let default_val = Itv.singleton 0
-
-  let value_or_default = function Some v -> v | None -> default_val
-
-  let keep_non_default v =
-    if Itv.equal v default_val then None else Some v
-
-  let find loc mem =
-    match mem with
-    | Bot -> Itv.Bot
-    | Mem m -> (
-        match Loc.Map.find_opt loc m with
-        | Some v -> v
-        | None -> default_val (* default value for uninitialized variables *))
-
-  let string_of_t mem =
-    match mem with
-    | Bot -> "⟂"
-    | Mem m ->
-        let f k v (acc, first) =
-          let semicolon = if first then "" else "; " in
-          (acc ^ semicolon ^ k ^ " |-> " ^ Itv.string_of_t v, false)
-        in
-        fst (Loc.Map.fold f m ("[", true)) ^ "]"
-
-  let add loc v mem =
-    match mem with
-    | Bot -> Bot
-    | Mem m ->
-        if Itv.equal v Itv.Bot then Bot
-        else
-          (* Canonicalize the implicit [0,0] default so fixpoint checks do not
-             oscillate between absent keys and explicit default bindings. *)
-          Mem
-            (if Itv.equal v default_val then Loc.Map.remove loc m
-             else Loc.Map.add loc v m)
-
-  let leq m1 m2 =
-    match (m1, m2) with
-    | Bot, _ -> true
-    | _, Bot -> false
-    | Mem m1, Mem m2 ->
-        Loc.Map.is_empty
-          (Loc.Map.merge
-             (fun _ v1 v2 ->
-               let v1 = value_or_default v1 in
-               let v2 = value_or_default v2 in
-               if Itv.(v1 <= v2) then None else Some ())
-             m1 m2)
-
-  let equal m1 m2 = leq m1 m2 && leq m2 m1
-
-  let join m1 m2 =
-    match (m1, m2) with
-    | Bot, m | m, Bot -> m
-    | Mem m1, Mem m2 ->
-        Mem
-          (Loc.Map.merge
-             (fun _ v1 v2 ->
-               keep_non_default
-                 (Itv.join (value_or_default v1) (value_or_default v2)))
-             m1 m2)
-
-  let widen m_old m_new =
-    match (m_old, m_new) with
-    | Bot, m | m, Bot -> m
-    | Mem old, Mem new_ ->
-        let widen_val v_old v_new = Itv.widen v_old v_new in
-        Mem
-          (Loc.Map.merge
-             (fun _ v_old_opt v_new_opt ->
-               keep_non_default
-                 (widen_val
-                    (value_or_default v_old_opt)
-                    (value_or_default v_new_opt)))
-             old new_)
-
-  (* module Set = struct include Set.Make (struct type nonrec t = t
-
-     let compare = Loc.Map.compare Abs_val.compare end)
-
-     let string_of_t ms = let f v (acc, first) = let comma = if first then "\n "
-     else ",\n " in (acc ^ comma ^ string_of_t v, false) in let ret, first =
-     fold f ms ("{", true) in if first then ret ^ "}" else ret ^ "\n}" end *)
-end
-
-module Abs_sem = struct
-  type t = Abs_mem.t Cmd.Lbl_map.t
-
-  let string_of_t sem =
-    Cmd.Lbl_map.fold
-      (fun lbl mem acc ->
-        let semicolon = if acc = "" then "" else "\n" in
-        acc ^ semicolon
-        ^ Cmd.Lbl_map.string_of_key lbl
-        ^ " |-> " ^ Abs_mem.string_of_t mem)
-      sem ""
-end
-
-let rec antp_exp (m : Abs_mem.t) : Exp.t -> Abs_val.t = function
-  | Int n -> Itv.singleton n
-  | Var x -> Abs_mem.find x m
-  | Bop (op, e1, e2) ->
-      let v1 = antp_exp m e1 in
-      let v2 = antp_exp m e2 in
-      Itv.bop op v1 v2
-  | Uop (op, e) ->
-      let v = antp_exp m e in
-      Itv.uop op v
-
-let rec filter_t e mem =
-  Exp.(
-    match e with
-    | Bop (op, e1, e2) -> (
-        match op with
-        | Eq -> (
-            let v1 = antp_exp mem e1 in
-            let v2 = antp_exp mem e2 in
-            let new_v = Itv.meet v1 v2 in
-            match (e1, e2) with
-            | Var x, Var y -> Abs_mem.add x new_v (Abs_mem.add y new_v mem)
-            | Var x, _ | _, Var x -> Abs_mem.add x new_v mem
-            | _, _ -> mem (* 포기 *))
-        | Lt -> (
-            let v1 = antp_exp mem e1 in
-            let v2 = antp_exp mem e2 in
-            match (e1, e2) with
-            | Var x, Var y ->
-                (* x < y 이므로, x는 v2보다 작아야 하고 y는 v1보다 커야 함 *)
-                let new_vx = Itv.filter_lt v2 (Abs_mem.find x mem) in
-                let new_vy = Itv.filter_gt v1 (Abs_mem.find y mem) in
-                mem |> Abs_mem.add x new_vx |> Abs_mem.add y new_vy
-            | Var x, _ ->
-                let new_vx = Itv.filter_lt v2 (Abs_mem.find x mem) in
-                Abs_mem.add x new_vx mem
-            | _, Var x ->
-                let new_vx = Itv.filter_gt v1 (Abs_mem.find x mem) in
-                Abs_mem.add x new_vx mem
-            | _ -> mem)
-        | Gt -> filter_t (Bop (Lt, e2, e1)) mem
-        | Ne -> (
-            let v1 = antp_exp mem e1 in
-            let v2 = antp_exp mem e2 in
-            match (e1, e2) with
-            | Var x, Var y ->
-                let new_vx = Itv.filter_ne v2 (Abs_mem.find x mem) in
-                let new_vy = Itv.filter_ne v1 (Abs_mem.find y mem) in
-                mem |> Abs_mem.add x new_vx |> Abs_mem.add y new_vy
-            | Var x, _ ->
-                let new_vx = Itv.filter_ne v2 (Abs_mem.find x mem) in
-                Abs_mem.add x new_vx mem
-            | _, Var x ->
-                let new_vx = Itv.filter_ne v1 (Abs_mem.find x mem) in
-                Abs_mem.add x new_vx mem
-            | _ -> mem)
-        | Le -> (
-            let v1 = antp_exp mem e1 in
-            let v2 = antp_exp mem e2 in
-            match (e1, e2) with
-            | Var x, Var y ->
-                (* x <= y 이므로, x는 v2보다 작아야 하고 y는 v1보다 커야 함 *)
-                let new_vx = Itv.filter_le v2 (Abs_mem.find x mem) in
-                let new_vy = Itv.filter_ge v1 (Abs_mem.find y mem) in
-                mem |> Abs_mem.add x new_vx |> Abs_mem.add y new_vy
-            | Var x, _ ->
-                let new_vx = Itv.filter_le v2 (Abs_mem.find x mem) in
-                Abs_mem.add x new_vx mem
-            | _, Var x ->
-                let new_vx = Itv.filter_ge v1 (Abs_mem.find x mem) in
-                Abs_mem.add x new_vx mem
-            | _ -> mem)
-        | Ge -> filter_t (Bop (Le, e2, e1)) mem
-        | _ -> mem (* 잘 정의되지 않음 *))
-    | _ -> mem (* 포기 *))
-
-let filter_f e mem =
-  Exp.(
-    match e with
-    | Bop (op, e1, e2) -> (
-        match op with
-        | Eq -> filter_t (Bop (Ne, e1, e2)) mem
-        | Lt -> filter_t (Bop (Ge, e1, e2)) mem
-        | Gt -> filter_t (Bop (Le, e1, e2)) mem
-        | Ne -> filter_t (Bop (Eq, e1, e2)) mem
-        | Le -> filter_t (Bop (Gt, e1, e2)) mem
-        | Ge -> filter_t (Bop (Lt, e1, e2)) mem
-        | _ -> mem (* non-relational operators do not affect the memory *))
-    | _ -> mem (* non-relational expressions do not affect the memory *))
+let rec collect_widen_edges (stmt : Cmd.lbl_t) : EdgeSet.t =
+  match stmt.cmd with
+  | Cmd.Assign _ -> EdgeSet.empty
+  | Cmd.Seq (c1, c2) ->
+      EdgeSet.union (collect_widen_edges c1) (collect_widen_edges c2)
+  | Cmd.If (_, c1, c2) ->
+      EdgeSet.union (collect_widen_edges c1) (collect_widen_edges c2)
+  | Cmd.While (_, body) ->
+      EdgeSet.union (terminal_edges body stmt.lbl) (collect_widen_edges body)
 
 let analysis (prog : Cmd.lbl_t) : Abs_mem.t =
   let prog = Cmd.relabel prog in
   let table = Cmd.tabulate prog in
+  let widen_edges = collect_widen_edges prog in
   let start = 1 in
   let exit = 99 in
   let Cfg.{ next; next_true; next_false } = Cfg.make prog exit in
@@ -244,19 +64,23 @@ let analysis (prog : Cmd.lbl_t) : Abs_mem.t =
         let update_list =
           match Cmd.Lbl_map.find cur table with
           | Cmd.Assign (x, e) ->
-              let v = antp_exp cur_mem e in
+              let v = Eval.antp_exp cur_mem e in
               [ (next cur, Abs_mem.add x v cur_mem) ]
           | Cmd.If (e, _, _) | Cmd.While (e, _) ->
               [
-                (next_true cur, filter_t e cur_mem);
-                (next_false cur, filter_f e cur_mem);
+                (next_true cur, Filter.filter_t e cur_mem);
+                (next_false cur, Filter.filter_f e cur_mem);
               ]
           | _ -> [ (next cur, cur_mem) ]
         in
         List.iter
           (fun (nex, mem) ->
             let old_mem = Cmd.Lbl_map.find nex !sem in
-            let new_mem = Abs_mem.widen old_mem mem in
+            let new_mem =
+              if EdgeSet.mem (cur, nex) widen_edges then
+                Abs_mem.widen old_mem mem
+              else Abs_mem.join old_mem mem
+            in
             if not (Abs_mem.leq new_mem old_mem) then (
               sem := Cmd.Lbl_map.add nex new_mem !sem;
               Queue.push nex wl))
