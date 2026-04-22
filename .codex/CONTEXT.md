@@ -30,6 +30,19 @@
   - `-attack`: find first program whose analyzer result for `x` is top
   - `-attack -bound p q`: find all attacks up to bound
   - config lives in `Synthesis.Config.attack`
+  - unbounded `Attack.diagonal_forever` uses delayed syntax scheduling:
+    proof sizes are generated first; raw syntax size `(k,0)` is emitted
+    immediately before proof target `(k+2,2)`, the first point where a
+    raw command of prog size `k` can be needed by `CWhileFalse`.
+  - bounded attack still uses `Partition.diagonal_up_to`.
+- Pruning exists in `lib/synthesis/prune.ml`:
+  - `Grow_prog` adds exp/cmd candidates through `add_pruned_exp` /
+    `add_pruned_cmd`.
+  - `Grow_proof` adds etree/ctree candidates through `add_pruned_etree` /
+    `add_pruned_ctree`.
+  - active rules: reject right-nested seq commands, reject `Uminus(Int _)`,
+    and reject double unary minus `Uminus(Uminus _)`.
+  - pruning decisions are recorded in `.codex/prune.txt`.
 - `Visualizer` has a proof-tree-only command printer and short labels:
   - `Int`, `Var`, `Bop`, `Uop`, `Asgn`, `Seq`, `IfT`, `IfF`, `WhlT`, `WhlF`
   - size prints as `(prog,proof)`.
@@ -41,7 +54,8 @@
 - `lib/synthesis/bottom_up.ml`: size-by-size table growth
 - `lib/synthesis/grow_prog.ml`: syntax component growth
 - `lib/synthesis/grow_proof.ml`: proof tree growth
-- `lib/synthesis/attack.ml`: analyzer attack search
+- `lib/synthesis/attack.ml`: analyzer attack search and unbounded size schedule
+- `lib/synthesis/prune.ml`: syntactic pruning predicates
 - `lib/synthesis/component/component_set.ml`: size bucket table
 - `lib/language/semantics/size.ml`: size definitions
 - `lib/language/semantics/bigStep.ml`: proof tree constructors
@@ -50,6 +64,23 @@
 - `lib/analyzer/analyzer.ml`: next major target
 - `test/synthesis_test.ml`: synthesis regression tests
 
-# Next Priority
+# Build / Run
 
-Fix analyzer crashes and soundness bugs before trusting synthesized attacks.
+- Build main executable:
+  - `dune build @all`
+  - or `dune build bin/main.exe`
+- Run main executable:
+  - `dune exec attack -- <options>`
+  - attack search: `dune exec attack -- -attack`
+  - bounded attack search: `dune exec attack -- -attack -bound <prog_size> <proof_size>`
+  - examples:
+    - `dune exec attack -- -attack -bound 3 3`
+    - `dune exec attack -- -pp path/to/file`
+    - `dune exec attack -- -analyze path/to/file`
+    - `dune exec attack -- -big path/to/file`
+- Run tests:
+  - pass/fail only, stdout hidden on success: `dune runtest`
+  - synthesis tests with printed output: `dune exec ./test/synthesis_test.exe`
+  - specific synthesis test, e.g. seq: `dune exec ./test/synthesis_test.exe -- -seq`
+  - unbounded attack schedule test: `dune exec ./test/synthesis_test.exe -- -forever`
+  - all synthesis tests explicitly: `dune exec ./test/synthesis_test.exe -- -all`

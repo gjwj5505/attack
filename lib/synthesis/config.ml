@@ -13,9 +13,8 @@ let default_uops = Syntax.Exp.[ Uminus ]
 let default_bops =
   Syntax.Exp.
     [
-      Lt;
-      (* Eq; Gt; Ne; Le; Ge; Plus; Minus; Times *)
-      (* 일단 하나만 쓰자ㄱㄱ *)
+      Lt; Plus; Eq;
+      (* Gt; Ne; Le; Ge; Minus; Times *)
     ]
 
 let make ?(uops = default_uops) ?(bops = default_bops) ~vars ~ints ~value_range
@@ -23,7 +22,7 @@ let make ?(uops = default_uops) ?(bops = default_bops) ~vars ~ints ~value_range
   { vars; ints; value_range; uops; bops }
 
 let attack () =
-  make ~vars:[ "x"; "y" ] ~ints:[ 0; 1 ] ~value_range:(0, 4) ()
+  make ~vars:[ "x"; "y" ] ~ints:[ -1; 0; 1 ] ~value_range:(0, 4) ()
 
 let values_in_range (lo, hi) =
   if lo > hi then [] else List.init (hi - lo + 1) (fun i -> lo + i)

@@ -6,20 +6,26 @@ let fold_exps size tbl f acc =
 let fold_cmds size tbl f acc =
   Component_set.CmdSet.fold f (Component_set.cmds_of_size size tbl) acc
 
+let add_pruned_exp size exp tbl =
+  if Prune.keep_exp exp then Component_set.add_exp size exp tbl else tbl
+
+let add_pruned_cmd size cmd tbl =
+  if Prune.keep_cmd cmd then Component_set.add_cmd size cmd tbl else tbl
+
 let is_eatom_target target = Size.equal target (Size.make 1 0)
 
 let grow_int (cfg : Config.t) target tbl =
   if not (is_eatom_target target) then tbl
   else
     List.fold_left
-      (fun tbl n -> Component_set.add_exp target (Syntax.Exp.Int n) tbl)
+      (fun tbl n -> add_pruned_exp target (Syntax.Exp.Int n) tbl)
       tbl cfg.ints
 
 let grow_var (cfg : Config.t) target tbl =
   if not (is_eatom_target target) then tbl
   else
     List.fold_left
-      (fun tbl x -> Component_set.add_exp target (Syntax.Exp.Var x) tbl)
+      (fun tbl x -> add_pruned_exp target (Syntax.Exp.Var x) tbl)
       tbl cfg.vars
 
 let grow_uop (cfg : Config.t) target tbl =
@@ -32,7 +38,7 @@ let grow_uop (cfg : Config.t) target tbl =
                (fun e tbl ->
                  List.fold_left
                    (fun tbl op ->
-                     Component_set.add_exp target (Syntax.Exp.Uop (op, e)) tbl)
+                     add_pruned_exp target (Syntax.Exp.Uop (op, e)) tbl)
                    tbl cfg.uops)
                tbl
          | _ -> tbl)
@@ -51,7 +57,7 @@ let grow_bop (cfg : Config.t) target tbl =
                    (fun e2 tbl ->
                      List.fold_left
                        (fun tbl op ->
-                         Component_set.add_exp target
+                         add_pruned_exp target
                            (Syntax.Exp.Bop (op, e1, e2))
                            tbl)
                        tbl cfg.bops)
@@ -70,7 +76,7 @@ let grow_assign (cfg : Config.t) target tbl =
                (fun e tbl ->
                  List.fold_left
                    (fun tbl x ->
-                     Component_set.add_cmd target (Syntax.Cmd.Assign (x, e)) tbl)
+                     add_pruned_cmd target (Syntax.Cmd.Assign (x, e)) tbl)
                    tbl cfg.vars)
                tbl
          | _ -> tbl)
@@ -87,7 +93,7 @@ let grow_seq target tbl =
                (fun c1 tbl ->
                  fold_cmds c2_size tbl
                    (fun c2 tbl ->
-                     Component_set.add_cmd target
+                     add_pruned_cmd target
                        (Syntax.Cmd.Seq
                           (Syntax.Cmd.dummy_lbl c1, Syntax.Cmd.dummy_lbl c2))
                        tbl)
@@ -113,7 +119,7 @@ let grow_if target tbl =
                    (fun c1 tbl ->
                      fold_cmds c2_size tbl
                        (fun c2 tbl ->
-                         Component_set.add_cmd target
+                         add_pruned_cmd target
                            (Syntax.Cmd.If
                               ( e,
                                 Syntax.Cmd.dummy_lbl c1,
@@ -136,7 +142,7 @@ let grow_while target tbl =
                (fun e tbl ->
                  fold_cmds c_size tbl
                    (fun c tbl ->
-                     Component_set.add_cmd target
+                     add_pruned_cmd target
                        (Syntax.Cmd.While (e, Syntax.Cmd.dummy_lbl c))
                        tbl)
                    tbl)

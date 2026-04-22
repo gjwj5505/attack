@@ -77,14 +77,25 @@ let diagonal_forever =
   let sizes_at_total total =
     let rec loop prog () =
       if prog < 1 then Seq.Nil
-      else Seq.Cons (Size.make prog (total - prog), loop (prog - 1))
+      else
+        let proof = total - prog in
+        let cur = Size.make prog proof in
+        (* Raw syntax components are only needed for unexecuted command
+           positions in proof trees. The first such demand for a command of
+           prog size k is CWhileFalse at proof target (k + 2, 2), so emit
+           (k, 0) immediately before that target instead of eagerly walking
+           all syntax-only sizes. *)
+        if proof = 2 && prog >= 3 then
+          Seq.Cons (Size.make (prog - 2) 0, fun () ->
+              Seq.Cons (cur, loop (prog - 1)))
+        else Seq.Cons (cur, loop (prog - 1))
     in
-    loop total
+    loop (total - 1)
   in
   let rec totals total () =
     Seq.append (sizes_at_total total) (totals (total + 1)) ()
   in
-  totals 0
+  totals 2
 
 let find_top_attack ?on_progress ~var cfg =
   let cache = create_analysis_cache () in

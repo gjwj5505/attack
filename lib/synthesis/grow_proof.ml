@@ -1,5 +1,11 @@
 open Language
 
+let add_pruned_etree size etree tbl =
+  if Prune.keep_etree etree then Component_set.add_etree size etree tbl else tbl
+
+let add_pruned_ctree size ctree tbl =
+  if Prune.keep_ctree ctree then Component_set.add_ctree size ctree tbl else tbl
+
 let equal_env e1 e2 = Environment.VarMap.equal Int.equal e1 e2
 
 let equal_whileloop_nolbl e c_inner c =
@@ -30,7 +36,7 @@ let grow_eint (cfg : Config.t) target tbl =
          (fun tbl env ->
            List.fold_left
              (fun tbl n ->
-               Component_set.add_etree target
+               add_pruned_etree target
                  (BigStep.EInt ((), (env, Syntax.Exp.Int n, n)))
                  tbl)
              tbl cfg.ints)
@@ -44,7 +50,7 @@ let grow_evar (cfg : Config.t) target tbl =
          (fun tbl env ->
            List.fold_left
              (fun tbl x ->
-               Component_set.add_etree target
+               add_pruned_etree target
                  (BigStep.EVar
                     ((), (env, Syntax.Exp.Var x, Environment.lookup x env)))
                  tbl)
@@ -63,7 +69,7 @@ let grow_euop (cfg : Config.t) target tbl =
                  List.fold_left
                    (fun tbl op ->
                      let v = calculate_uop op v in
-                     Component_set.add_etree target
+                     add_pruned_etree target
                        (BigStep.EUop (et, (env, Syntax.Exp.Uop (op, e), v)))
                        tbl)
                    tbl cfg.uops)
@@ -89,7 +95,7 @@ let grow_ebop (cfg : Config.t) target tbl =
                        List.fold_left
                          (fun tbl op ->
                            let v = calculate_bop op v1 v2 in
-                           Component_set.add_etree target
+                           add_pruned_etree target
                              (BigStep.EBop
                                 ( (et1, et2),
                                   (env1, Syntax.Exp.Bop (op, e1, e2), v) ))
@@ -114,7 +120,7 @@ let grow_cassign (cfg : Config.t) target tbl =
                    List.fold_left
                      (fun tbl x ->
                        let new_env = Environment.update x v env in
-                       Component_set.add_ctree target
+                       add_pruned_ctree target
                          (BigStep.CAssign
                             (et, (env, Syntax.Cmd.Assign (x, e), new_env)))
                          tbl)
@@ -138,7 +144,7 @@ let grow_cseq target tbl =
                      let env2, c2, env2' = BigStep.get_c_concl ct2 in
                      if not (equal_env env1' env2) then tbl
                      else
-                       Component_set.add_ctree target
+                       add_pruned_ctree target
                          (BigStep.CSeq
                             ( (ct1, ct2),
                               ( env1,
@@ -175,7 +181,7 @@ let grow_ciftrue target tbl =
                        else
                          Grow_util.fold_cmds c_size tbl
                            (fun c3 tbl ->
-                             Component_set.add_ctree target
+                             add_pruned_ctree target
                                (BigStep.CIfTrue
                                   ( (et, ct),
                                     ( env1,
@@ -214,7 +220,7 @@ let grow_ciffalse target tbl =
                        else
                          Grow_util.fold_cmds c_size tbl
                            (fun c3 tbl ->
-                             Component_set.add_ctree target
+                             add_pruned_ctree target
                                (BigStep.CIfFalse
                                   ( (et, ct),
                                     ( env1,
@@ -251,7 +257,7 @@ let grow_cwhiletrue target tbl =
                              if not (equal_whileloop_nolbl e1 c2 c3) then tbl
                              else if not (equal_env env2' env3) then tbl
                              else
-                               Component_set.add_ctree target
+                               add_pruned_ctree target
                                  (BigStep.CWhileTrue
                                     ((et, ct2, ct3), (env1, c3, env3')))
                                  tbl)
@@ -275,7 +281,7 @@ let grow_cwhilefalse target tbl =
                  else
                    Grow_util.fold_cmds c_size tbl
                      (fun c tbl ->
-                       Component_set.add_ctree target
+                       add_pruned_ctree target
                          (BigStep.CWhileFalse
                             ( et,
                               ( env,

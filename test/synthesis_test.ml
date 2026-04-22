@@ -140,6 +140,42 @@ let test_diagonal_up_to () =
     (string_of_sizes actual);
   assert_equal_sizes "diagonal_up_to" expected actual
 
+let take_seq n seq =
+  let rec aux acc n seq =
+    if n = 0 then List.rev acc
+    else
+      match seq () with
+      | Seq.Nil -> List.rev acc
+      | Seq.Cons (x, rest) -> aux (x :: acc) (n - 1) rest
+  in
+  aux [] n seq
+
+let test_attack_diagonal_forever () =
+  let actual = take_seq 16 Attack.diagonal_forever in
+  let expected =
+    [
+      size 1 1;
+      size 2 1;
+      size 1 2;
+      size 3 1;
+      size 2 2;
+      size 1 3;
+      size 4 1;
+      size 1 0;
+      size 3 2;
+      size 2 3;
+      size 1 4;
+      size 5 1;
+      size 2 0;
+      size 4 2;
+      size 3 3;
+      size 2 4;
+    ]
+  in
+  Printf.printf "Attack.diagonal_forever first 16\n  output=[%s]\n\n"
+    (string_of_sizes actual);
+  assert_equal_sizes "attack_diagonal_forever" expected actual
+
 let test_partition_with_constraints () =
   let parts =
     Partition.partition_with_constraints (size 3 2)
@@ -699,6 +735,7 @@ let all_tests =
   [
     ("rect", test_rectangular_up_to);
     ("diag", test_diagonal_up_to);
+    ("forever", test_attack_diagonal_forever);
     ("part", test_partition_with_constraints);
     ("imp", test_impossible_partition);
     ("env", test_bounded_envs);
@@ -758,6 +795,9 @@ let () =
       ( "-diag",
         Arg.Unit (fun () -> add_test "diag" test_diagonal_up_to),
         "test Partition.diagonal_up_to" );
+      ( "-forever",
+        Arg.Unit (fun () -> add_test "forever" test_attack_diagonal_forever),
+        "test Attack.diagonal_forever" );
       ( "-part",
         Arg.Unit (fun () -> add_test "part" test_partition_with_constraints),
         "test constrained partition generation" );

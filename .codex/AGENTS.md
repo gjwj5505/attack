@@ -7,6 +7,8 @@ Always follow these rules:
 - Do NOT run any shell commands (bash, dune, git, etc.) unless I explicitly ask for it
 - You may freely read and explore files to understand the project
 - Before applying any code changes, show the diff and wait for my approval
+- Modify files only with `apply_patch`; do not use Python, shell redirection,
+  heredocs, `cat > file`, or similar write methods for edits.
 
 Start by reading `.codex/CONTEXT.md`, `.codex/todo.txt`, then inspect only the files relevant to
 the current request. Prefer concise status updates in Korean.

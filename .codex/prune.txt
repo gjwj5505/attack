@@ -1,0 +1,23 @@
+# Pruning Log
+
+Pruning rules are syntactic/canonicalization choices for reducing bottom-up
+component explosion. They may remove potential attacks, so keep this file
+updated whenever a rule is added or changed.
+
+Current active rules:
+
+- Seq right-nesting pruning
+  - Syntax: reject `Seq(_, Seq(_, _))`.
+  - Proof: reject proof trees whose conclusion command is right-nested seq
+    by applying `keep_cmd` to the ctree conclusion command.
+  - Intended canonical form: left-associated sequences only.
+  - Keeps `(a; b); c`, rejects `a; (b; c)`.
+
+- Expression unary-minus pruning
+  - Reject `Uminus(Int _)`, e.g. `-0`.
+  - Reject `Uminus(Uminus _)`, e.g. `--x`.
+  - Keep single negation of non-literals, e.g. `-x` and `-(x < 0)`.
+
+Do not prune unreachable-looking branches only because they are concretely
+impossible. Such branches can expose abstract-domain imprecision and are valid
+attack material.
