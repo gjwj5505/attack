@@ -9,6 +9,10 @@ Always follow these rules:
 - Before applying any code changes, show the diff and wait for my approval
 - Modify files only with `apply_patch`; do not use Python, shell redirection,
   heredocs, `cat > file`, or similar write methods for edits.
+- When adding prune rules, include a short code comment showing the form of
+  program/expression/command being removed.
+- When the user gives a durable workflow instruction, add it to this
+  `AGENTS.md` file after approval.
 
 Start by reading `.codex/CONTEXT.md`, `.codex/todo.txt`, then inspect only the files relevant to
 the current request. Prefer concise status updates in Korean.
