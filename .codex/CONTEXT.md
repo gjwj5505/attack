@@ -23,6 +23,10 @@
 - Proof tree component:
   - etree: EInt, EVar, EUop, EBop
   - ctree: CAssign, CSeq, CIfTrue, CIfFalse, CWhileTrue, CWhileFalse
+- Program execution assumption:
+  - All variables are initialized to `0` at program start.
+  - Analyzer attacks must be checked against proof trees whose initial concrete
+    memory matches that all-zero initial state.
 - Tests check:
   - generated tree validity with `BigStepChecker`
   - bucket size consistency for exp/cmd/etree/ctree
@@ -30,6 +34,8 @@
   - `-attack`: find first program whose analyzer result for `x` is top
   - `-attack -bound p q`: find all attacks up to bound
   - config lives in `Synthesis.Config.attack`
+  - attack candidates are checked only when the ctree initial concrete env
+    matches the all-zero program initial state for `cfg.vars`.
   - unbounded `Attack.diagonal_forever` uses delayed syntax scheduling:
     proof sizes are generated first; raw syntax size `(k,0)` is emitted
     immediately before proof target `(k+2,2)`, the first point where a
@@ -40,9 +46,19 @@
     `add_pruned_cmd`.
   - `Grow_proof` adds etree/ctree candidates through `add_pruned_etree` /
     `add_pruned_ctree`.
-  - active rules: reject right-nested seq commands, reject `Uminus(Int _)`,
-    and reject double unary minus `Uminus(Uminus _)`.
+  - active rules include right-nested seq rejection, unary-minus
+    canonicalization, commutative bop operand ordering, arithmetic
+    identity/absorbing pruning, and independent assignment order
+    canonicalization.
   - pruning decisions are recorded in `.codex/prune.txt`.
+- Recent unbounded attack behavior:
+  - With all-zero initial-env filtering enabled, the previous `(9,4)` attack
+    starting from `{x: 1}` is correctly ignored.
+  - Current pruning/schedule can reach around `(14,1)` without finding an
+    all-zero initial-state attack in the observed run.
+  - Remaining bottlenecks are large syntax buckets such as `(10,0)` and large
+    `ctree` buckets around `(n,2)`, especially from raw commands used by
+    `CWhileFalse`.
 - `Visualizer` has a proof-tree-only command printer and short labels:
   - `Int`, `Var`, `Bop`, `Uop`, `Asgn`, `Seq`, `IfT`, `IfF`, `WhlT`, `WhlF`
   - size prints as `(prog,proof)`.

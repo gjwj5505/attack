@@ -4,3 +4,10 @@
 - unbounded attack의 다음 병목 확인: delayed syntax schedule 이후
   `CWhileFalse`/ctree 생성이 크게 폭발하므로 raw cmd를 붙이는 proof rule 쪽
   pruning 또는 prioritization 검토
+- all-zero initial-state 필터 이후 유효한 analyzer attack 계속 탐색
+- raw cmd를 단순 shape로 금지하지 말 것: `CWhileFalse`는 terminating
+  `CWhileTrue` proof의 base case이므로 loop proof 생성에 필요함
+- 다음 pruning 후보: 공격 구조를 보존하는 대표화/dedup 중심
+  - ctree 같은 conclusion `(env, cmd, env')` 대표화 검토
+  - raw cmd analyzer/feature summary별 cap 검토
+  - 변수 alpha-canonicalization 검토

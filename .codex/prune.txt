@@ -18,6 +18,26 @@ Current active rules:
   - Reject `Uminus(Uminus _)`, e.g. `--x`.
   - Keep single negation of non-literals, e.g. `-x` and `-(x < 0)`.
 
+- Commutative binary-op canonicalization
+  - Applies to `Eq`, `Ne`, `Plus`, and `Times`.
+  - Reject operand orderings where `Stdlib.compare e1 e2 > 0`.
+  - Keeps exactly one of `x + y` and `y + x`, one of `x = y` and `y = x`,
+    etc. The surviving side is determined by OCaml structural comparison.
+
+- Arithmetic identity/absorbing pruning
+  - Reject `x + 0` and `0 + x`.
+  - Reject `x * 0` and `0 * x`.
+  - Reject `x * 1` and `1 * x`.
+  - This intentionally respects the analyzer by not using these transfer
+    corner cases as attacks.
+
+- Independent assignment order canonicalization
+  - For `x := e1; y := e2`, if `x <> y`, `x` is not used in `e2`, and `y` is
+    not used in `e1`, the assignments commute.
+  - Reject the structurally larger ordering according to
+    `Stdlib.compare (x, e1) (y, e2)`.
+  - Example: keep only one of `x := 0; y := 1` and `y := 1; x := 0`.
+
 Do not prune unreachable-looking branches only because they are concretely
 impossible. Such branches can expose abstract-domain imprecision and are valid
 attack material.

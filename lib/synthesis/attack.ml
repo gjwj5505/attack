@@ -34,23 +34,29 @@ let analyze_cmd_cached cache cmd =
       Hashtbl.add cache cmd analysis_result;
       analysis_result
 
-let check_ctree ~cache ~var size ct =
-  let _, cmd, _ = BigStep.get_c_concl ct in
-  let analysis_result = analyze_cmd_cached cache cmd in
-  if analysis_result_is_top var analysis_result then
-    Some { size; tree = ct; cmd; analysis_result }
-  else None
+let starts_from_zero_env cfg ct =
+  let env, _, _ = BigStep.get_c_concl ct in
+  List.for_all (fun x -> Environment.lookup x env = 0) cfg.Config.vars
 
-let find_first_in_ctrees ~cache ~var size tbl =
+let check_ctree ~cache ~cfg ~var size ct =
+  let _, cmd, _ = BigStep.get_c_concl ct in
+  if not (starts_from_zero_env cfg ct) then None
+  else
+    let analysis_result = analyze_cmd_cached cache cmd in
+    if analysis_result_is_top var analysis_result then
+      Some { size; tree = ct; cmd; analysis_result }
+    else None
+
+let find_first_in_ctrees ~cache ~cfg ~var size tbl =
   Component_set.CTreeSet.to_seq (Component_set.ctrees_of_size size tbl)
-  |> Seq.filter_map (check_ctree ~cache ~var size)
+  |> Seq.filter_map (check_ctree ~cache ~cfg ~var size)
   |> Seq.uncons
   |> Option.map fst
 
-let find_all_in_ctrees ~cache ~var size tbl =
+let find_all_in_ctrees ~cache ~cfg ~var size tbl =
   Component_set.CTreeSet.fold
     (fun ct results ->
-      match check_ctree ~cache ~var size ct with
+      match check_ctree ~cache ~cfg ~var size ct with
       | Some result -> result :: results
       | None -> results)
     (Component_set.ctrees_of_size size tbl)
@@ -105,7 +111,7 @@ let find_top_attack ?on_progress ~var cfg =
     | Seq.Cons (size, sizes) -> (
         let tbl = Bottom_up.grow_at_size cfg size tbl in
         report_progress on_progress size tbl;
-        match find_first_in_ctrees ~cache ~var size tbl with
+        match find_first_in_ctrees ~cache ~cfg ~var size tbl with
         | Some result -> Some result
         | None -> loop tbl sizes)
   in
@@ -119,7 +125,7 @@ let find_all_top_attacks ?on_progress ~var cfg bound =
     | size :: sizes ->
         let tbl = Bottom_up.grow_at_size cfg size tbl in
         report_progress on_progress size tbl;
-        let new_results = find_all_in_ctrees ~cache ~var size tbl in
+        let new_results = find_all_in_ctrees ~cache ~cfg ~var size tbl in
         loop tbl (List.rev_append new_results results) sizes
   in
   loop Component_set.empty [] sizes
