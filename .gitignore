@@ -13,6 +13,9 @@ _build/
 # bytecode / native executables
 *.byte
 *.native
+/attack
+/attack.exe
+/main.exe
 
 # toplevel / utop
 .utop-history

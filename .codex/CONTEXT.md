@@ -133,10 +133,14 @@
 
 - Build main executable:
   - `dune build @all`
-  - or `dune build bin/main.exe`
+  - or `dune build bin/attack`
+  - building `bin/attack` promotes a root-level `./attack` executable
 - Run main executable:
   - `dune exec attack -- <options>`
+  - after `dune build bin/attack`, run promoted executable directly:
+    `./attack <options>`
   - attack search: `dune exec attack -- -attack`
+  - direct attack search after build: `./attack -attack`
   - objective attack search:
     `dune exec attack -- -attack -objective <top|nonsingleton|unbounded|unsound>`
   - bounded attack search: `dune exec attack -- -attack -bound <prog_size> <proof_size>`

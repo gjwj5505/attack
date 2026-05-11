@@ -1,7 +1,17 @@
 (executable
  (public_name attack)
- (name main)
-(libraries 
+ (name attack)
+ (libraries
   language
   analyzer
   synthesis))
+
+(rule
+ (deps attack.exe)
+ (target attack)
+ (action
+  (copy %{deps} %{target}))
+ (mode
+  (promote
+   (until-clean)
+   (into ..))))
