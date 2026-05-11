@@ -27,6 +27,6 @@ Attack workflow:
   produced the bad result.
 - Strengthen the analyzer against that weakness in small approved steps.
 - Re-run the relevant attack/example/tests after the fix.
-- Record each successful attack and fix in `.codex/analyzer-attack-log.txt`
+- Record each successful attack and fix in `.codex/analyzer-attack-log.md`
   using the format: date - name - attack program - analyzer weakness -
   strengthening method.

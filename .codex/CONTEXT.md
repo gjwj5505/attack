@@ -44,7 +44,12 @@
     proof sizes are generated first; raw syntax size `(k,0)` is emitted
     immediately before proof target `(k+2,2)`, the first point where a
     raw command of prog size `k` can be needed by `CWhileFalse`.
-  - bounded attack still uses `Partition.diagonal_up_to`.
+  - bounded attack follows the same delayed schedule and filters out sizes not
+    needed within the rectangular bound.
+  - for raw syntax `(k,0)`, bounded attack keeps it only if the proof target
+    `(k+2,2)` is inside the requested bound.
+  - progress output distinguishes raw syntax buckets from proof-tree buckets;
+    raw lines are printed in blue and skipped sizes are not printed.
 - Pruning exists in `lib/synthesis/prune.ml`:
   - `Grow_prog` adds exp/cmd candidates through `add_pruned_exp` /
     `add_pruned_cmd`.
@@ -133,6 +138,7 @@
 
 - Build main executable:
   - `dune build @all`
+  - `dune build`
   - or `dune build bin/attack`
   - building `bin/attack` promotes a root-level `./attack` executable
 - Run main executable:
