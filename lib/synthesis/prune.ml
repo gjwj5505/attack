@@ -5,11 +5,13 @@ let do_prune = true
 let is_commutative_bop =
   Syntax.Exp.(function Eq | Ne | Plus | Times -> true | _ -> false)
 
-let rec exp_uses_var x = function
-  | Syntax.Exp.Int _ -> false
-  | Syntax.Exp.Var y -> x = y
-  | Syntax.Exp.Uop (_, e) -> exp_uses_var x e
-  | Syntax.Exp.Bop (_, e1, e2) -> exp_uses_var x e1 || exp_uses_var x e2
+let rec exp_uses_var x =
+  let open Syntax.Exp in
+  function
+  | Int _ -> false
+  | Var y -> x = y
+  | Uop (_, e) -> exp_uses_var x e
+  | Bop (_, e1, e2) -> exp_uses_var x e1 || exp_uses_var x e2
 
 let independent_assigns x e1 y e2 =
   x <> y && not (exp_uses_var x e2) && not (exp_uses_var y e1)

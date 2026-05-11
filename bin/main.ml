@@ -8,6 +8,7 @@ let opt_dintp = ref false
 let opt_analyze = ref false
 let opt_big = ref false
 let opt_attack = ref false
+let objective_name = ref "top"
 let bound_prog = ref 0
 let bound_proof = ref 0
 
@@ -28,6 +29,14 @@ let set_src x =
 
 let has_attack_bound () = !bound_prog <> 0 || !bound_proof <> 0
 
+let selected_objectives () =
+  match Synthesis.Objective.of_name !objective_name with
+  | Some objective -> [ Synthesis.Objective.unsound; objective ]
+  | None ->
+      fail_usage
+        ("unknown objective: " ^ !objective_name ^ " (expected "
+       ^ Synthesis.Objective.names () ^ ")")
+
 let print_attack_progress Synthesis.Attack.{ size; exps; cmds; etrees; ctrees }
     =
   Printf.printf "Trying size=%s: exp=%d cmd=%d etree=%d ctree=%d\n%!"
@@ -37,18 +46,22 @@ let print_attack_result (result : Synthesis.Attack.result) =
   let labeled_cmd = Syntax.Cmd.(relabel (dummy_lbl result.cmd)) in
   Printf.printf "Attack found at size=%s\n"
     (Size.to_string result.Synthesis.Attack.size);
+  print_endline "== objective ==";
+  Printf.printf "%s: %s\n" result.objective
+    (Synthesis.Objective.string_of_witness result.witness);
   print_endline "== program ==";
   print_endline (Syntax.Cmd.string_of_lbl_t labeled_cmd);
   print_endline "== analysis result ==";
-  print_endline (Analyzer.Abs_mem.string_of_t result.analysis_result);
+  print_endline
+    (Analyzer.Abs_domain.Abs_mem.string_of_t result.analysis_result);
   print_endline "== proof tree ==";
   Visualizer.print_tree (CTree result.tree)
 
 let run_synth_attack () =
   let cfg = Synthesis.Config.attack () in
   match
-    Synthesis.Attack.find_top_attack ~on_progress:print_attack_progress ~var:"x"
-      cfg
+    Synthesis.Attack.find_attack ~on_progress:print_attack_progress ~var:"x"
+      ~objectives:(selected_objectives ()) cfg
   with
   | None -> print_endline "No attack found"
   | Some result -> print_attack_result result
@@ -57,8 +70,8 @@ let run_synth_attack_all () =
   let cfg = Synthesis.Config.attack () in
   let bound = Size.make !bound_prog !bound_proof in
   let results =
-    Synthesis.Attack.find_all_top_attacks ~on_progress:print_attack_progress
-      ~var:"x" cfg bound
+    Synthesis.Attack.find_all_attacks ~on_progress:print_attack_progress ~var:"x"
+      ~objectives:(selected_objectives ()) cfg bound
   in
   Printf.printf "Found %d attacks up to bound=%s\n"
     (List.length results) (Size.to_string bound);
@@ -88,7 +101,11 @@ let main () =
         "Derive, verify and print Big-Step tree" );
       ( "-attack",
         Arg.Unit (fun _ -> opt_attack := true),
-        "synthesize attack programs for analyzer top result on x" );
+        "synthesize attack programs for analyzer objective on x" );
+      ( "-objective",
+        Arg.Set_string objective_name,
+        "set attack objective: " ^ Synthesis.Objective.names ()
+        ^ " (unsound is always checked first)" );
       ( "-bound",
         Arg.Tuple [ Arg.Set_int bound_prog; Arg.Set_int bound_proof ],
         "set bounded attack search as <prog_size> <proof_size>" );
@@ -126,7 +143,9 @@ let main () =
   (if !opt_dintp then
      Language.Interpreter.(def_intp pgm |> Mem.string_of_t |> print_endline));
   (if !opt_analyze then
-     Analyzer.(analysis pgm |> Abs_mem.string_of_t |> print_endline));
+     Analyzer.Analyzer_engine.analysis pgm
+     |> Analyzer.Abs_domain.Abs_mem.string_of_t
+     |> print_endline);
   if !opt_big then begin
     let tree = Derivator.derive_cmd pgm Environment.empty in
     Visualizer.print_tree (CTree tree);

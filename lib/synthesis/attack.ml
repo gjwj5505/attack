@@ -2,9 +2,11 @@ open Language
 
 type result = {
   size : Size.size;
+  objective : string;
+  witness : Objective.witness;
   tree : BigStep.ctree;
   cmd : Syntax.Cmd.t;
-  analysis_result : Analyzer.Abs_mem.t;
+  analysis_result : Analyzer.Abs_domain.Abs_mem.t;
 }
 
 type progress = {
@@ -15,16 +17,13 @@ type progress = {
   ctrees : int;
 }
 
-type analysis_cache = (Syntax.Cmd.t, Analyzer.Abs_mem.t) Hashtbl.t
+type analysis_cache = (Syntax.Cmd.t, Analyzer.Abs_domain.Abs_mem.t) Hashtbl.t
 
 let create_analysis_cache () =
   Hashtbl.create 1024
 
-let analysis_result_is_top var mem =
-  Analyzer.Abs_val.is_top (Analyzer.Abs_mem.find var mem)
-
 let analyze_cmd cmd =
-  Analyzer.analysis (Syntax.Cmd.dummy_lbl cmd)
+  Analyzer.Analyzer_engine.analysis (Syntax.Cmd.dummy_lbl cmd)
 
 let analyze_cmd_cached cache cmd =
   match Hashtbl.find_opt cache cmd with
@@ -38,25 +37,37 @@ let starts_from_zero_env cfg ct =
   let env, _, _ = BigStep.get_c_concl ct in
   List.for_all (fun x -> Environment.lookup x env = 0) cfg.Config.vars
 
-let check_ctree ~cache ~cfg ~var size ct =
+let check_objectives ~objectives ~cfg ~var ~tree ~cmd ~analysis_result =
+  objectives
+  |> List.find_map (fun objective ->
+         match
+           objective.Objective.check ~cfg ~var ~tree ~cmd ~analysis_result
+         with
+         | Some witness -> Some (objective.Objective.name, witness)
+         | None -> None)
+
+let check_ctree ~cache ~cfg ~var ~objectives size ct =
   let _, cmd, _ = BigStep.get_c_concl ct in
   if not (starts_from_zero_env cfg ct) then None
   else
     let analysis_result = analyze_cmd_cached cache cmd in
-    if analysis_result_is_top var analysis_result then
-      Some { size; tree = ct; cmd; analysis_result }
-    else None
+    match
+      check_objectives ~objectives ~cfg ~var ~tree:ct ~cmd ~analysis_result
+    with
+    | Some (objective, witness) ->
+        Some { size; objective; witness; tree = ct; cmd; analysis_result }
+    | None -> None
 
-let find_first_in_ctrees ~cache ~cfg ~var size tbl =
+let find_first_in_ctrees ~cache ~cfg ~var ~objectives size tbl =
   Component_set.CTreeSet.to_seq (Component_set.ctrees_of_size size tbl)
-  |> Seq.filter_map (check_ctree ~cache ~cfg ~var size)
+  |> Seq.filter_map (check_ctree ~cache ~cfg ~var ~objectives size)
   |> Seq.uncons
   |> Option.map fst
 
-let find_all_in_ctrees ~cache ~cfg ~var size tbl =
+let find_all_in_ctrees ~cache ~cfg ~var ~objectives size tbl =
   Component_set.CTreeSet.fold
     (fun ct results ->
-      match check_ctree ~cache ~cfg ~var size ct with
+      match check_ctree ~cache ~cfg ~var ~objectives size ct with
       | Some result -> result :: results
       | None -> results)
     (Component_set.ctrees_of_size size tbl)
@@ -103,7 +114,7 @@ let diagonal_forever =
   in
   totals 2
 
-let find_top_attack ?on_progress ~var cfg =
+let find_attack ?on_progress ~var ~objectives cfg =
   let cache = create_analysis_cache () in
   let rec loop tbl sizes =
     match sizes () with
@@ -111,13 +122,18 @@ let find_top_attack ?on_progress ~var cfg =
     | Seq.Cons (size, sizes) -> (
         let tbl = Bottom_up.grow_at_size cfg size tbl in
         report_progress on_progress size tbl;
-        match find_first_in_ctrees ~cache ~cfg ~var size tbl with
+        match find_first_in_ctrees ~cache ~cfg ~var ~objectives size tbl with
         | Some result -> Some result
         | None -> loop tbl sizes)
   in
   loop Component_set.empty diagonal_forever
 
-let find_all_top_attacks ?on_progress ~var cfg bound =
+let find_top_attack ?on_progress ~var cfg =
+  find_attack ?on_progress ~var
+    ~objectives:[ Objective.unsound; Objective.top ]
+    cfg
+
+let find_all_attacks ?on_progress ~var ~objectives cfg bound =
   let sizes = Partition.diagonal_up_to bound in
   let cache = create_analysis_cache () in
   let rec loop tbl results = function
@@ -125,7 +141,14 @@ let find_all_top_attacks ?on_progress ~var cfg bound =
     | size :: sizes ->
         let tbl = Bottom_up.grow_at_size cfg size tbl in
         report_progress on_progress size tbl;
-        let new_results = find_all_in_ctrees ~cache ~cfg ~var size tbl in
+        let new_results =
+          find_all_in_ctrees ~cache ~cfg ~var ~objectives size tbl
+        in
         loop tbl (List.rev_append new_results results) sizes
   in
   loop Component_set.empty [] sizes
+
+let find_all_top_attacks ?on_progress ~var cfg bound =
+  find_all_attacks ?on_progress ~var
+    ~objectives:[ Objective.unsound; Objective.top ]
+    cfg bound

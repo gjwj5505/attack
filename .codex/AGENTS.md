@@ -13,6 +13,8 @@ Always follow these rules:
   program/expression/command being removed.
 - When the user gives a durable workflow instruction, add it to this
   `AGENTS.md` file after approval.
+- During design discussions, keep durable conclusions, hypotheses, and next
+  actions updated in `.codex/CONTEXT.md` as the conversation progresses.
 
 Start by reading `.codex/CONTEXT.md`, `.codex/todo.txt`, then inspect only the files relevant to
 the current request. Prefer concise status updates in Korean.
