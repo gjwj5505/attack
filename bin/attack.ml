@@ -37,10 +37,32 @@ let selected_objectives () =
         ("unknown objective: " ^ !objective_name ^ " (expected "
        ^ Synthesis.Objective.names () ^ ")")
 
-let print_attack_progress Synthesis.Attack.{ size; exps; cmds; etrees; ctrees }
-    =
-  Printf.printf "Trying size=%s: exp=%d cmd=%d etree=%d ctree=%d\n%!"
-    (Size.to_string size) exps cmds etrees ctrees
+let blue s =
+  "\027[34m" ^ s ^ "\027[0m"
+
+let nonzero_field name n =
+  if n = 0 then None else Some (Printf.sprintf "%-5s = %d" name n)
+
+let string_of_fields fields =
+  match List.filter_map (fun x -> x) fields with
+  | [] -> "empty"
+  | fields -> String.concat "; " fields
+
+let print_attack_progress
+    Synthesis.Attack.{ size; exps; cmds; etrees; ctrees; skipped_reason } =
+  match skipped_reason with
+  | Some _ -> ()
+  | None when Size.proof_size size = 0 ->
+      Printf.printf "%s\n%!"
+        (blue
+           (Printf.sprintf "Trying raw   size = %-8s : %s"
+              (Size.to_string size)
+              (string_of_fields
+                 [ nonzero_field "exp" exps; nonzero_field "cmd" cmds ])))
+  | None ->
+      Printf.printf "Trying proof size = %-8s : %s\n%!" (Size.to_string size)
+        (string_of_fields
+           [ nonzero_field "etree" etrees; nonzero_field "ctree" ctrees ])
 
 let print_attack_result (result : Synthesis.Attack.result) =
   let labeled_cmd = Syntax.Cmd.(relabel (dummy_lbl result.cmd)) in

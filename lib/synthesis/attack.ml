@@ -15,6 +15,7 @@ type progress = {
   cmds : int;
   etrees : int;
   ctrees : int;
+  skipped_reason : string option;
 }
 
 type analysis_cache = (Syntax.Cmd.t, Analyzer.Abs_domain.Abs_mem.t) Hashtbl.t
@@ -81,6 +82,7 @@ let progress_of_bucket size bucket =
     cmds = Component_set.CmdSet.cardinal bucket.cmds;
     etrees = Component_set.ETreeSet.cardinal bucket.etrees;
     ctrees = Component_set.CTreeSet.cardinal bucket.ctrees;
+    skipped_reason = None;
   }
 
 let report_progress on_progress size tbl =
@@ -89,6 +91,29 @@ let report_progress on_progress size tbl =
   | Some f ->
       let bucket = Component_set.get_bucket size tbl in
       f (progress_of_bucket size bucket)
+
+let in_rect_bound bound size =
+  Size.prog_size size <= Size.prog_size bound
+  && Size.proof_size size <= Size.proof_size bound
+
+let needed_in_bound bound size =
+  if Size.proof_size size = 0 then
+    in_rect_bound bound (Size.make (Size.prog_size size + 2) 2)
+  else in_rect_bound bound size
+
+let report_skipped_progress on_progress size reason =
+  match on_progress with
+  | None -> ()
+  | Some f ->
+      f
+        {
+          size;
+          exps = 0;
+          cmds = 0;
+          etrees = 0;
+          ctrees = 0;
+          skipped_reason = Some reason;
+        }
 
 let diagonal_forever =
   let sizes_at_total total =
@@ -134,19 +159,25 @@ let find_top_attack ?on_progress ~var cfg =
     cfg
 
 let find_all_attacks ?on_progress ~var ~objectives cfg bound =
-  let sizes = Partition.diagonal_up_to bound in
   let cache = create_analysis_cache () in
-  let rec loop tbl results = function
-    | [] -> List.rev results
-    | size :: sizes ->
-        let tbl = Bottom_up.grow_at_size cfg size tbl in
-        report_progress on_progress size tbl;
-        let new_results =
-          find_all_in_ctrees ~cache ~cfg ~var ~objectives size tbl
-        in
-        loop tbl (List.rev_append new_results results) sizes
+  let rec loop tbl results sizes =
+    match sizes () with
+    | Seq.Nil -> List.rev results
+    | Seq.Cons (size, sizes) ->
+        if Size.total size > Size.total bound then List.rev results
+        else if not (needed_in_bound bound size) then (
+          report_skipped_progress on_progress size
+            ("outside rectangular bound=" ^ Size.to_string bound);
+          loop tbl results sizes)
+        else
+          let tbl = Bottom_up.grow_at_size cfg size tbl in
+          report_progress on_progress size tbl;
+          let new_results =
+            find_all_in_ctrees ~cache ~cfg ~var ~objectives size tbl
+          in
+          loop tbl (List.rev_append new_results results) sizes
   in
-  loop Component_set.empty [] sizes
+  loop Component_set.empty [] diagonal_forever
 
 let find_all_top_attacks ?on_progress ~var cfg bound =
   find_all_attacks ?on_progress ~var

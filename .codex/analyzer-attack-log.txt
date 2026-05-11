@@ -21,3 +21,31 @@ while 0
 - true branch에서 `Itv.maybe_true`가 false면 즉시 `Abs_mem.Bot`으로 보낸다.
 - false branch에서 `Itv.maybe_false`가 false면 즉시 `Abs_mem.Bot`으로 보낸다.
 - 이후 가능한 branch에 대해서만 기존 relational refinement를 수행한다.
+
+## 2026-05-11 - one-iteration while widening precision attack
+
+공격 프로그램
+```
+x := 1;
+while x
+  x := 0
+```
+
+공격 결과
+- Big-Step concrete result: `x = 0`
+- Analyzer result: `x |-> [-∞,1]`
+- Objective: `nonsingleton`
+- Found by: `./attack -attack -objective nonsingleton -bound 7 9`
+
+분석기 약점
+- Concrete execution enters the loop once, assigns `x := 0`, then exits.
+- The analyzer uses widening on the loop back-edge.
+- Joining/widening the loop body result back into the loop header loses the
+  lower bound and produces an imprecise interval for `x`.
+- The final false branch still contains the concrete value `0`, so this is a
+  sound-but-imprecise false alarm rather than an unsoundness bug.
+
+강화 방법
+- 미정.
+- 후보: loop handling/widening policy 개선, delayed widening 또는 narrowing
+  검토.
