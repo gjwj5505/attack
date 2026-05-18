@@ -1,13 +1,44 @@
-- C-style syntax로 바꾸기: assign, if-else, while, block, bool condition
-- side effect가 있는 expression을 고려할지 결정하기
-- component lookup 최적화 검토: env/prog/id 기준 index 또는 component_pool
-- unbounded attack의 다음 병목 확인: delayed syntax schedule 이후
-  `CWhileFalse`/ctree 생성이 크게 폭발하므로 raw cmd를 붙이는 proof rule 쪽
-  pruning 또는 prioritization 검토
-- all-zero initial-state 필터 이후 유효한 analyzer attack 계속 탐색
-- raw cmd를 단순 shape로 금지하지 말 것: `CWhileFalse`는 terminating
-  `CWhileTrue` proof의 base case이므로 loop proof 생성에 필요함
-- 다음 pruning 후보: 공격 구조를 보존하는 대표화/dedup 중심
-  - ctree 같은 conclusion `(env, cmd, env')` 대표화 검토
-  - raw cmd analyzer/feature summary별 cap 검토
-  - 변수 alpha-canonicalization 검토
+- Analyzer 초기 concrete env 지원
+  - 인자가 없으면 기존처럼 모든 변수 0에서 시작
+  - analyzer 내부에서 concrete env를 singleton abstract memory로 변환해 분석
+
+- Abstrac domain 모듈화 잘하기
+  - Abs_mem에서 Abs_val의 singleton을 사용해야 하는데, 지금 Itv의 singleton을 사용하고있음
+  - 등등 concrete, abstract 이름 명시해서 이쁘게 하기
+
+- Component에 analyzer-facing summary 포함
+  - proof tree와 함께 concrete env, abstract result, target value precision,
+    loop/widening/guard/update feature를 들고 다니기
+  - summary는 ranking/diversity/cap용 heuristic으로만 사용
+  - 최종 attack 판정은 완성된 command 전체를 다시 analyzer로 확인
+
+- Size bucket 생성 후 selection phase 추가
+  - boolean pruning이 아니라 bucket 전체를 본 뒤 줄이기
+  - priority + diversity + cap 방식 사용
+  - raw cmd / CWhileFalse 병목부터 적용
+
+- Priority 기준 설계
+  - target abstract value가 넓을수록 높게
+  - unbounded/top/unsound 징후, loop/widening 가능성, target update,
+    filter에 걸리는 guard를 높게
+  - size가 크고 feature가 중복되면 낮게
+
+- Diversity/cap 기준 설계
+  - has_while, has_if, assignment target, guard op, update kind,
+    target abstract kind 기준으로 feature bucket 나누기
+  - 전체 top-N이 아니라 feature bucket별 top-k 유지
+  - low-priority 후보와 size별 최소 대표도 일부 보존해서
+    "언젠가는 공격 성공" 가능성을 최대한 유지
+  - cap은 점진적으로 완화 가능한 파라미터로 두기
+
+- 효과 측정
+  - `(9,9)` 근처 etree/ctree 개수 비교
+  - raw cmd bucket 크기와 CWhileFalse 생성량 따로 기록
+  - attack 성공 여부는 whole-program analyzer 결과만 신뢰
+
+Later:
+- C-style syntax: assign, if-else, while, block, bool condition
+- side effect가 있는 expression 고려 여부 결정
+- component lookup 최적화: env/prog/id index 또는 component_pool
+- raw cmd를 단순 shape로 금지하지 말 것
+- 공격 구조를 보존하는 analyzer-respecting 대표화/dedup 검토

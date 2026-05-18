@@ -1,3 +1,4 @@
+open Language
 open Language.Syntax
 
 module Loc = struct
@@ -17,6 +18,7 @@ module Abs_val = struct
   let equal = Itv.equal
   let top = Itv.top
   let is_top v = equal v top
+  let singleton = Itv.singleton
   let string_of_t = Itv.string_of_t
 end
 
@@ -38,7 +40,7 @@ module Abs_mem = struct
         match Loc.Map.find_opt loc m with
         | Some v -> v
         | None -> default_val (* default value for uninitialized variables *))
-
+  
   let string_of_t mem =
     match mem with
     | Bot -> "⟂"
@@ -60,6 +62,11 @@ module Abs_mem = struct
           Mem
             (if Itv.equal v default_val then Loc.Map.remove loc m
              else Loc.Map.add loc v m)
+
+  let of_concrete_env (cenv : Environment.t) : t =
+    Environment.VarMap.fold
+      (fun x v mem -> add x (Abs_val.singleton v) mem)
+      cenv empty
 
   let leq m1 m2 =
     match (m1, m2) with

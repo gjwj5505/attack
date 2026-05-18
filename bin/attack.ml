@@ -8,6 +8,7 @@ let opt_dintp = ref false
 let opt_analyze = ref false
 let opt_big = ref false
 let opt_attack = ref false
+let opt_verbose = ref false
 let objective_name = ref "top"
 let bound_prog = ref 0
 let bound_proof = ref 0
@@ -77,7 +78,7 @@ let print_attack_result (result : Synthesis.Attack.result) =
   print_endline
     (Analyzer.Abs_domain.Abs_mem.string_of_t result.analysis_result);
   print_endline "== proof tree ==";
-  Visualizer.print_tree (CTree result.tree)
+  Visualizer.print_tree ~verbose:!opt_verbose (CTree result.tree)
 
 let run_synth_attack () =
   let cfg = Synthesis.Config.attack () in
@@ -121,6 +122,9 @@ let main () =
       ( "-big",
         Arg.Unit (fun _ -> opt_big := true),
         "Derive, verify and print Big-Step tree" );
+      ( "-v",
+        Arg.Unit (fun _ -> opt_verbose := true),
+        "show rule names and sizes in Big-Step tree output" );
       ( "-attack",
         Arg.Unit (fun _ -> opt_attack := true),
         "synthesize attack programs for analyzer objective on x" );
@@ -170,7 +174,7 @@ let main () =
      |> print_endline);
   if !opt_big then begin
     let tree = Derivator.derive_cmd pgm Environment.empty in
-    Visualizer.print_tree (CTree tree);
+    Visualizer.print_tree ~verbose:!opt_verbose (CTree tree);
     match BigStepChecker.check_ctree tree with
     | Ok ->
         print_endline "✅ Success: The Big-Step Proof Tree is valid.";

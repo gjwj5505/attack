@@ -6,7 +6,6 @@ Always follow these rules:
 - Wait for user confirmation before continuing
 - Do NOT run any shell commands (bash, dune, git, etc.) unless I explicitly ask for it
 - You may freely read and explore files to understand the project
-- Before applying any code changes, show the diff and wait for my approval
 - Modify files only with `apply_patch`; do not use Python, shell redirection,
   heredocs, `cat > file`, or similar write methods for edits.
 - When adding prune rules, include a short code comment showing the form of
@@ -18,9 +17,6 @@ Always follow these rules:
 
 Start by reading `.codex/CONTEXT.md`, `.codex/todo.txt`, then inspect only the files relevant to
 the current request. Prefer concise status updates in Korean.
-
-Current priority: analyzer soundness/crash fixes. Do not start broad refactors
-unless the user explicitly asks.
 
 Attack workflow:
 - When synthesis finds a successful analyzer attack, inspect why the analyzer

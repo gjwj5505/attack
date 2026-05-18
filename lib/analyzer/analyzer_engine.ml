@@ -2,7 +2,7 @@
  * SNU 4190.664A Static Program Analysis
  * 2025 Jay Lee <jhlee@ropas.snu.ac.kr>, <jaeho.lee@snu.ac.kr>
  *)
-
+open Language
 open Language.Syntax
 
 module Loc = Abs_domain.Loc
@@ -37,17 +37,21 @@ let rec collect_widen_edges (stmt : Cmd.lbl_t) : EdgeSet.t =
   | Cmd.While (_, body) ->
       EdgeSet.union (terminal_edges body stmt.lbl) (collect_widen_edges body)
 
-let analysis (prog : Cmd.lbl_t) : Abs_mem.t =
+
+
+
+let analysis ?(init_cenv = Environment.empty) (prog : Cmd.lbl_t) : Abs_mem.t =
   let prog = Cmd.relabel prog in
   let table = Cmd.tabulate prog in
   let widen_edges = collect_widen_edges prog in
   let start = 1 in
-  let exit = 99 in
+  let exit = 9999 in
   let Cfg.{ next; next_true; next_false } = Cfg.make prog exit in
 
   let wl = Queue.create () in
   let sem = ref (Cmd.Lbl_map.map (fun _ -> Abs_mem.Bot) table) in
-  sem := Cmd.Lbl_map.add start Abs_mem.empty !sem;
+  let init_aenv = Abs_mem.of_concrete_env init_cenv in
+  sem := Cmd.Lbl_map.add start init_aenv !sem;
   sem := Cmd.Lbl_map.add exit Abs_mem.Bot !sem;
 
   Queue.push start wl;

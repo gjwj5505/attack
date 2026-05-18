@@ -100,7 +100,7 @@ let make_conclusion env_obj cmd_str res_str =
   in
   { lines = combined_lines; width = total_w; height = max_h }
 
-let build_proof rule_name size premises conclusion_box =
+let build_proof ?(verbose = false) rule_name size premises conclusion_box =
   let gap = 3 in
   let premise_box =
     match premises with
@@ -129,7 +129,9 @@ let build_proof rule_name size premises conclusion_box =
   in
 
   let rule_label =
-    Printf.sprintf "[%s | (%d,%d)] " rule_name size.prog_size size.proof_size
+    if verbose then
+      Printf.sprintf "[%s | (%d,%d)] " rule_name size.prog_size size.proof_size
+    else ""
   in
   let b_label = make_box rule_label in
   let full_h = max b_label.height conclusion_box.height in
@@ -168,53 +170,59 @@ let build_proof rule_name size premises conclusion_box =
 
 (* --- 구문 트리 순회 (AST -> Box) --- *)
 
-let rec box_of_etree t =
+let rec box_of_etree ?(verbose = false) t =
   match t with
   | EInt (_, (env, e, v)) ->
-      build_proof "Int" (sizeof_etree t) []
+      build_proof ~verbose "Int" (sizeof_etree t) []
         (make_conclusion env (Exp.string_of_t e) (string_of_int v))
   | EVar (_, (env, e, v)) ->
-      build_proof "Var" (sizeof_etree t) []
+      build_proof ~verbose "Var" (sizeof_etree t) []
         (make_conclusion env (Exp.string_of_t e) (string_of_int v))
   | EBop ((t1, t2), (env, e, v)) ->
-      build_proof "Bop" (sizeof_etree t)
-        [ box_of_etree t1; box_of_etree t2 ]
+      build_proof ~verbose "Bop" (sizeof_etree t)
+        [ box_of_etree ~verbose t1; box_of_etree ~verbose t2 ]
         (make_conclusion env (Exp.string_of_t e) (string_of_int v))
   | EUop (t1, (env, e, v)) ->
-      build_proof "Uop" (sizeof_etree t)
-        [ box_of_etree t1 ]
+      build_proof ~verbose "Uop" (sizeof_etree t)
+        [ box_of_etree ~verbose t1 ]
         (make_conclusion env (Exp.string_of_t e) (string_of_int v))
 
-let rec box_of_ctree t =
+let rec box_of_ctree ?(verbose = false) t =
   match t with
   | CAssign (et, (env, c, env')) ->
-      build_proof "Asgn" (sizeof_ctree t)
-        [ box_of_etree et ]
+      build_proof ~verbose "Asgn" (sizeof_ctree t)
+        [ box_of_etree ~verbose et ]
         (make_conclusion env (string_of_cmd c) (s_env env'))
   | CSeq ((t1, t2), (env, c, env')) ->
-      build_proof "Seq" (sizeof_ctree t)
-        [ box_of_ctree t1; box_of_ctree t2 ]
+      build_proof ~verbose "Seq" (sizeof_ctree t)
+        [ box_of_ctree ~verbose t1; box_of_ctree ~verbose t2 ]
         (make_conclusion env (string_of_cmd c) (s_env env'))
   | CIfTrue ((et, ct), (env, c, env')) ->
-      build_proof "IfT" (sizeof_ctree t)
-        [ box_of_etree et; box_of_ctree ct ]
+      build_proof ~verbose "IfT" (sizeof_ctree t)
+        [ box_of_etree ~verbose et; box_of_ctree ~verbose ct ]
         (make_conclusion env (string_of_cmd c) (s_env env'))
   | CIfFalse ((et, ct), (env, c, env')) ->
-      build_proof "IfF" (sizeof_ctree t)
-        [ box_of_etree et; box_of_ctree ct ]
+      build_proof ~verbose "IfF" (sizeof_ctree t)
+        [ box_of_etree ~verbose et; box_of_ctree ~verbose ct ]
         (make_conclusion env (string_of_cmd c) (s_env env'))
   | CWhileTrue ((et, t_body, t_rest), (env, c, env')) ->
-      build_proof "WhlT" (sizeof_ctree t)
-        [ box_of_etree et; box_of_ctree t_body; box_of_ctree t_rest ]
+      build_proof ~verbose "WhlT" (sizeof_ctree t)
+        [
+          box_of_etree ~verbose et;
+          box_of_ctree ~verbose t_body;
+          box_of_ctree ~verbose t_rest;
+        ]
         (make_conclusion env (string_of_cmd c) (s_env env'))
   | CWhileFalse (et, (env, c, env')) ->
-      build_proof "WhlF" (sizeof_ctree t)
-        [ box_of_etree et ]
+      build_proof ~verbose "WhlF" (sizeof_ctree t)
+        [ box_of_etree ~verbose et ]
         (make_conclusion env (string_of_cmd c) (s_env env'))
 
-let print_tree tree =
+let print_tree ?(verbose = false) tree =
   let final_box =
-    match tree with ETree t -> box_of_etree t | CTree t -> box_of_ctree t
+    match tree with
+    | ETree t -> box_of_etree ~verbose t
+    | CTree t -> box_of_ctree ~verbose t
   in
   List.iter print_endline final_box.lines
 
