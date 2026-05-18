@@ -76,7 +76,7 @@ let print_attack_result (result : Synthesis.Attack.result) =
   print_endline (Syntax.Cmd.string_of_lbl_t labeled_cmd);
   print_endline "== analysis result ==";
   print_endline
-    (Analyzer.Abs_domain.Abs_mem.string_of_t result.analysis_result);
+    (Analyzer.Abs_domain.Abs_env.string_of_t result.analysis_aenv);
   print_endline "== proof tree ==";
   Visualizer.print_tree ~verbose:!opt_verbose (CTree result.tree)
 
@@ -170,7 +170,7 @@ let main () =
      Language.Interpreter.(def_intp pgm |> Mem.string_of_t |> print_endline));
   (if !opt_analyze then
      Analyzer.Analyzer_engine.analysis pgm
-     |> Analyzer.Abs_domain.Abs_mem.string_of_t
+     |> Analyzer.Abs_domain.Abs_env.string_of_t
      |> print_endline);
   if !opt_big then begin
     let tree = Derivator.derive_cmd pgm Environment.empty in

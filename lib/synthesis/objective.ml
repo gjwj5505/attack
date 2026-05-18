@@ -1,8 +1,8 @@
 open Language
 
 type witness = {
-  concrete : int;
-  abstract_value : Analyzer.Abs_domain.Abs_val.t;
+  cval : int;
+  aval : Analyzer.Abs_domain.Abs_val.t;
   reason : string;
 }
 
@@ -13,29 +13,27 @@ type t = {
     var:string ->
     tree:BigStep.ctree ->
     cmd:Syntax.Cmd.t ->
-    analysis_result:Analyzer.Abs_domain.Abs_mem.t ->
+    analysis_aenv:Analyzer.Abs_domain.Abs_env.t ->
     witness option;
 }
 
 let string_of_witness w =
-  Printf.sprintf "%s: concrete=%d abstract=%s" w.reason w.concrete
-    (Analyzer.Abs_domain.Abs_val.string_of_t w.abstract_value)
+  Printf.sprintf "%s: concrete=%d abstract=%s" w.reason w.cval
+    (Analyzer.Abs_domain.Abs_val.string_of_t w.aval)
 
 let final_concrete_value var tree =
-  let _, _, final_env = BigStep.get_c_concl tree in
-  Environment.lookup var final_env
+  let _, _, final_cenv = BigStep.get_c_concl tree in
+  Environment.lookup var final_cenv
 
-let abstract_value var analysis_result =
-  Analyzer.Abs_domain.Abs_mem.find var analysis_result
+let abstract_value var analysis_aenv =
+  Analyzer.Abs_domain.Abs_env.find var analysis_aenv
 
-let singleton n =
-  Analyzer.Itv.singleton n
+let singleton cval = Analyzer.Itv.singleton cval
 
-let contains_concrete concrete abstract_value =
-  Analyzer.Itv.(singleton concrete <= abstract_value)
+let contains_concrete cval aval =
+  Analyzer.Itv.(singleton cval <= aval)
 
-let is_singleton concrete abstract_value =
-  Analyzer.Itv.equal abstract_value (singleton concrete)
+let is_singleton cval aval = Analyzer.Itv.equal aval (singleton cval)
 
 let is_unbounded = function
   | Analyzer.Itv.Bot -> false
@@ -48,40 +46,41 @@ let make name check = { name; check }
 
 let top =
   make "top"
-    (fun ~cfg:_ ~var ~tree ~cmd:_ ~analysis_result ->
-      let concrete = final_concrete_value var tree in
-      let abstract_value = abstract_value var analysis_result in
-      if Analyzer.Abs_domain.Abs_val.is_top abstract_value then
-        Some { concrete; abstract_value; reason = "top" }
+    (fun ~cfg:_ ~var ~tree ~cmd:_ ~analysis_aenv ->
+      let cval = final_concrete_value var tree in
+      let aval = abstract_value var analysis_aenv in
+      if Analyzer.Abs_domain.Abs_val.is_top aval then
+        Some { cval; aval; reason = "top" }
       else None)
 
 let nonsingleton =
   make "nonsingleton"
-    (fun ~cfg:_ ~var ~tree ~cmd:_ ~analysis_result ->
-      let concrete = final_concrete_value var tree in
-      let abstract_value = abstract_value var analysis_result in
+    (fun ~cfg:_ ~var ~tree ~cmd:_ ~analysis_aenv ->
+      let cval = final_concrete_value var tree in
+      let aval = abstract_value var analysis_aenv in
       if
-        contains_concrete concrete abstract_value
-        && not (is_singleton concrete abstract_value)
-      then Some { concrete; abstract_value; reason = "non-singleton" }
+        contains_concrete cval aval
+        && not (is_singleton cval aval)
+      then
+        Some { cval; aval; reason = "non-singleton" }
       else None)
 
 let unbounded =
   make "unbounded"
-    (fun ~cfg:_ ~var ~tree ~cmd:_ ~analysis_result ->
-      let concrete = final_concrete_value var tree in
-      let abstract_value = abstract_value var analysis_result in
-      if contains_concrete concrete abstract_value && is_unbounded abstract_value
-      then Some { concrete; abstract_value; reason = "unbounded" }
+    (fun ~cfg:_ ~var ~tree ~cmd:_ ~analysis_aenv ->
+      let cval = final_concrete_value var tree in
+      let aval = abstract_value var analysis_aenv in
+      if contains_concrete cval aval && is_unbounded aval then
+        Some { cval; aval; reason = "unbounded" }
       else None)
 
 let unsound =
   make "unsound"
-    (fun ~cfg:_ ~var ~tree ~cmd:_ ~analysis_result ->
-      let concrete = final_concrete_value var tree in
-      let abstract_value = abstract_value var analysis_result in
-      if not (contains_concrete concrete abstract_value) then
-        Some { concrete; abstract_value; reason = "unsound" }
+    (fun ~cfg:_ ~var ~tree ~cmd:_ ~analysis_aenv ->
+      let cval = final_concrete_value var tree in
+      let aval = abstract_value var analysis_aenv in
+      if not (contains_concrete cval aval) then
+        Some { cval; aval; reason = "unsound" }
       else None)
 
 let all = [ top; nonsingleton; unbounded; unsound ]

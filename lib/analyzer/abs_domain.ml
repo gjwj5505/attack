@@ -17,107 +17,109 @@ module Abs_val = struct
   let compare = Stdlib.compare
   let equal = Itv.equal
   let top = Itv.top
-  let is_top v = equal v top
+  let is_top aval = equal aval top
   let singleton = Itv.singleton
   let string_of_t = Itv.string_of_t
 end
 
-module Abs_mem = struct
+module Abs_env = struct
   type t = Mem of Abs_val.t Loc.Map.t | Bot
 
   let empty : t = Mem Loc.Map.empty
   let default_val = Itv.singleton 0
 
-  let value_or_default = function Some v -> v | None -> default_val
+  let aval_or_default = function Some aval -> aval | None -> default_val
 
-  let keep_non_default v =
-    if Itv.equal v default_val then None else Some v
+  let keep_non_default aval =
+    if Itv.equal aval default_val then None else Some aval
 
-  let find loc mem =
-    match mem with
+  let find loc aenv =
+    match aenv with
     | Bot -> Itv.Bot
-    | Mem m -> (
-        match Loc.Map.find_opt loc m with
-        | Some v -> v
+    | Mem bindings -> (
+        match Loc.Map.find_opt loc bindings with
+        | Some aval -> aval
         | None -> default_val (* default value for uninitialized variables *))
-  
-  let string_of_t mem =
-    match mem with
-    | Bot -> "⟂"
-    | Mem m ->
-        let f k v (acc, first) =
-          let semicolon = if first then "" else "; " in
-          (acc ^ semicolon ^ k ^ " |-> " ^ Itv.string_of_t v, false)
-        in
-        fst (Loc.Map.fold f m ("[", true)) ^ "]"
 
-  let add loc v mem =
-    match mem with
+  let string_of_t aenv =
+    match aenv with
+    | Bot -> "⟂"
+    | Mem bindings ->
+        let f k aval (acc, first) =
+          let semicolon = if first then "" else "; " in
+          (acc ^ semicolon ^ k ^ " |-> " ^ Itv.string_of_t aval, false)
+        in
+        fst (Loc.Map.fold f bindings ("[", true)) ^ "]"
+
+  let add loc aval aenv =
+    match aenv with
     | Bot -> Bot
-    | Mem m ->
-        if Itv.equal v Itv.Bot then Bot
+    | Mem bindings ->
+        if Itv.equal aval Itv.Bot then Bot
         else
           (* Canonicalize the implicit [0,0] default so fixpoint checks do not
              oscillate between absent keys and explicit default bindings. *)
           Mem
-            (if Itv.equal v default_val then Loc.Map.remove loc m
-             else Loc.Map.add loc v m)
+            (if Itv.equal aval default_val then Loc.Map.remove loc bindings
+             else Loc.Map.add loc aval bindings)
 
   let of_concrete_env (cenv : Environment.t) : t =
     Environment.VarMap.fold
-      (fun x v mem -> add x (Abs_val.singleton v) mem)
+      (fun x cval aenv -> add x (Abs_val.singleton cval) aenv)
       cenv empty
 
-  let leq m1 m2 =
-    match (m1, m2) with
+  let leq aenv1 aenv2 =
+    match (aenv1, aenv2) with
     | Bot, _ -> true
     | _, Bot -> false
-    | Mem m1, Mem m2 ->
+    | Mem bindings1, Mem bindings2 ->
         Loc.Map.is_empty
           (Loc.Map.merge
-             (fun _ v1 v2 ->
-               let v1 = value_or_default v1 in
-               let v2 = value_or_default v2 in
-               if Itv.(v1 <= v2) then None else Some ())
-             m1 m2)
+             (fun _ aval1_opt aval2_opt ->
+               let aval1 = aval_or_default aval1_opt in
+               let aval2 = aval_or_default aval2_opt in
+               if Itv.(aval1 <= aval2) then None else Some ())
+             bindings1 bindings2)
 
-  let equal m1 m2 = leq m1 m2 && leq m2 m1
+  let equal aenv1 aenv2 = leq aenv1 aenv2 && leq aenv2 aenv1
 
-  let join m1 m2 =
-    match (m1, m2) with
+  let join aenv1 aenv2 =
+    match (aenv1, aenv2) with
     | Bot, m | m, Bot -> m
-    | Mem m1, Mem m2 ->
+    | Mem bindings1, Mem bindings2 ->
         Mem
           (Loc.Map.merge
-             (fun _ v1 v2 ->
+             (fun _ aval1_opt aval2_opt ->
                keep_non_default
-                 (Itv.join (value_or_default v1) (value_or_default v2)))
-             m1 m2)
+                 (Itv.join
+                    (aval_or_default aval1_opt)
+                    (aval_or_default aval2_opt)))
+             bindings1 bindings2)
 
-  let widen m_old m_new =
-    match (m_old, m_new) with
+  let widen old_aenv new_aenv =
+    match (old_aenv, new_aenv) with
     | Bot, m | m, Bot -> m
-    | Mem old, Mem new_ ->
-        let widen_val v_old v_new = Itv.widen v_old v_new in
+    | Mem old_bindings, Mem new_bindings ->
+        let widen_val old_aval new_aval = Itv.widen old_aval new_aval in
         Mem
           (Loc.Map.merge
-             (fun _ v_old_opt v_new_opt ->
+             (fun _ old_aval_opt new_aval_opt ->
                keep_non_default
                  (widen_val
-                    (value_or_default v_old_opt)
-                    (value_or_default v_new_opt)))
-             old new_)
+                    (aval_or_default old_aval_opt)
+                    (aval_or_default new_aval_opt)))
+             old_bindings new_bindings)
 end
 
 module Abs_sem = struct
-  type t = Abs_mem.t Cmd.Lbl_map.t
+  type t = Abs_env.t Cmd.Lbl_map.t
 
   let string_of_t sem =
     Cmd.Lbl_map.fold
-      (fun lbl mem acc ->
+      (fun lbl aenv acc ->
         let semicolon = if acc = "" then "" else "\n" in
         acc ^ semicolon
         ^ Cmd.Lbl_map.string_of_key lbl
-        ^ " |-> " ^ Abs_mem.string_of_t mem)
+        ^ " |-> " ^ Abs_env.string_of_t aenv)
       sem ""
 end

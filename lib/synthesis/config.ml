@@ -28,17 +28,17 @@ let attack () =
 let values_in_range (lo, hi) =
   if lo > hi then [] else List.init (hi - lo + 1) (fun i -> lo + i)
 
-let valid_env cfg env =
+let valid_env cfg cenv =
   let lo, hi = cfg.value_range in
   let vars_in_range =
     List.for_all
       (fun x ->
-        let v = Environment.lookup x env in
-        lo <= v && v <= hi)
+        let cval = Environment.lookup x cenv in
+        lo <= cval && cval <= hi)
       cfg.vars
   in
   let only_config_vars =
-    Environment.VarMap.bindings env
+    Environment.VarMap.bindings cenv
     |> List.for_all (fun (x, _) -> List.mem x cfg.vars)
   in
   vars_in_range && only_config_vars
@@ -49,8 +49,8 @@ let bounded_envs cfg =
     | [] -> [ Environment.empty ]
     | x :: xs ->
         aux xs
-        |> List.concat_map (fun env ->
-            List.map (fun v -> Environment.update x v env) values)
+        |> List.concat_map (fun cenv ->
+            List.map (fun cval -> Environment.update x cval cenv) values)
   in
   aux cfg.vars
 

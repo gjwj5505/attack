@@ -7,7 +7,7 @@ open Language.Syntax
 
 module Loc = Abs_domain.Loc
 module Abs_val = Abs_domain.Abs_val
-module Abs_mem = Abs_domain.Abs_mem
+module Abs_env = Abs_domain.Abs_env
 module Abs_sem = Abs_domain.Abs_sem
 
 module EdgeSet = Set.Make (struct
@@ -37,10 +37,7 @@ let rec collect_widen_edges (stmt : Cmd.lbl_t) : EdgeSet.t =
   | Cmd.While (_, body) ->
       EdgeSet.union (terminal_edges body stmt.lbl) (collect_widen_edges body)
 
-
-
-
-let analysis ?(init_cenv = Environment.empty) (prog : Cmd.lbl_t) : Abs_mem.t =
+let analysis ?(init_cenv = Environment.empty) (prog : Cmd.lbl_t) : Abs_env.t =
   let prog = Cmd.relabel prog in
   let table = Cmd.tabulate prog in
   let widen_edges = collect_widen_edges prog in
@@ -49,10 +46,10 @@ let analysis ?(init_cenv = Environment.empty) (prog : Cmd.lbl_t) : Abs_mem.t =
   let Cfg.{ next; next_true; next_false } = Cfg.make prog exit in
 
   let wl = Queue.create () in
-  let sem = ref (Cmd.Lbl_map.map (fun _ -> Abs_mem.Bot) table) in
-  let init_aenv = Abs_mem.of_concrete_env init_cenv in
+  let sem = ref (Cmd.Lbl_map.map (fun _ -> Abs_env.Bot) table) in
+  let init_aenv = Abs_env.of_concrete_env init_cenv in
   sem := Cmd.Lbl_map.add start init_aenv !sem;
-  sem := Cmd.Lbl_map.add exit Abs_mem.Bot !sem;
+  sem := Cmd.Lbl_map.add exit Abs_env.Bot !sem;
 
   Queue.push start wl;
 
@@ -64,29 +61,29 @@ let analysis ?(init_cenv = Environment.empty) (prog : Cmd.lbl_t) : Abs_mem.t =
       (* print_endline ("Processing label: " ^ Cmd.Lbl_map.string_of_key cur); *)
       if cur = exit then run () (* skip processing the exit label *)
       else
-        let cur_mem = Cmd.Lbl_map.find cur !sem in
+        let cur_aenv = Cmd.Lbl_map.find cur !sem in
         let update_list =
           match Cmd.Lbl_map.find cur table with
           | Cmd.Assign (x, e) ->
-              let v = Eval.antp_exp cur_mem e in
-              [ (next cur, Abs_mem.add x v cur_mem) ]
+              let aval = Eval.antp_exp cur_aenv e in
+              [ (next cur, Abs_env.add x aval cur_aenv) ]
           | Cmd.If (e, _, _) | Cmd.While (e, _) ->
               [
-                (next_true cur, Filter.filter_t e cur_mem);
-                (next_false cur, Filter.filter_f e cur_mem);
+                (next_true cur, Filter.filter_t e cur_aenv);
+                (next_false cur, Filter.filter_f e cur_aenv);
               ]
-          | _ -> [ (next cur, cur_mem) ]
+          | _ -> [ (next cur, cur_aenv) ]
         in
         List.iter
-          (fun (nex, mem) ->
-            let old_mem = Cmd.Lbl_map.find nex !sem in
-            let new_mem =
+          (fun (nex, aenv) ->
+            let old_aenv = Cmd.Lbl_map.find nex !sem in
+            let new_aenv =
               if EdgeSet.mem (cur, nex) widen_edges then
-                Abs_mem.widen old_mem mem
-              else Abs_mem.join old_mem mem
+                Abs_env.widen old_aenv aenv
+              else Abs_env.join old_aenv aenv
             in
-            if not (Abs_mem.leq new_mem old_mem) then (
-              sem := Cmd.Lbl_map.add nex new_mem !sem;
+            if not (Abs_env.leq new_aenv old_aenv) then (
+              sem := Cmd.Lbl_map.add nex new_aenv !sem;
               Queue.push nex wl))
           update_list;
         run ()

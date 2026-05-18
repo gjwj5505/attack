@@ -1,10 +1,7 @@
 - Analyzer 초기 concrete env 지원
   - 인자가 없으면 기존처럼 모든 변수 0에서 시작
-  - analyzer 내부에서 concrete env를 singleton abstract memory로 변환해 분석
-
-- Abstrac domain 모듈화 잘하기
-  - Abs_mem에서 Abs_val의 singleton을 사용해야 하는데, 지금 Itv의 singleton을 사용하고있음
-  - 등등 concrete, abstract 이름 명시해서 이쁘게 하기
+  - analyzer 내부에서 concrete env를 singleton abstract env로 변환해 분석
+  - 코드 용어는 cenv/cval, aenv/aval, Abs_env로 통일
 
 - Component에 analyzer-facing summary 포함
   - proof tree와 함께 concrete env, abstract result, target value precision,

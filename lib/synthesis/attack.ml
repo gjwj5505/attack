@@ -6,7 +6,7 @@ type result = {
   witness : Objective.witness;
   tree : BigStep.ctree;
   cmd : Syntax.Cmd.t;
-  analysis_result : Analyzer.Abs_domain.Abs_mem.t;
+  analysis_aenv : Analyzer.Abs_domain.Abs_env.t;
 }
 
 type progress = {
@@ -18,45 +18,47 @@ type progress = {
   skipped_reason : string option;
 }
 
-type analysis_cache = (Syntax.Cmd.t, Analyzer.Abs_domain.Abs_mem.t) Hashtbl.t
+type analysis_cache =
+  (Environment.t * Syntax.Cmd.t, Analyzer.Abs_domain.Abs_env.t) Hashtbl.t
 
 let create_analysis_cache () =
   Hashtbl.create 1024
 
-let analyze_cmd cmd =
-  Analyzer.Analyzer_engine.analysis (Syntax.Cmd.dummy_lbl cmd)
+let analyze_cmd ?init_cenv cmd =
+  Analyzer.Analyzer_engine.analysis ?init_cenv (Syntax.Cmd.dummy_lbl cmd)
 
-let analyze_cmd_cached cache cmd =
-  match Hashtbl.find_opt cache cmd with
-  | Some analysis_result -> analysis_result
+let analyze_cmd_cached cache ?(init_cenv = Environment.empty) cmd =
+  let key = (init_cenv, cmd) in
+  match Hashtbl.find_opt cache key with
+  | Some analysis_aenv -> analysis_aenv
   | None ->
-      let analysis_result = analyze_cmd cmd in
-      Hashtbl.add cache cmd analysis_result;
-      analysis_result
+      let analysis_aenv = analyze_cmd ~init_cenv cmd in
+      Hashtbl.add cache key analysis_aenv;
+      analysis_aenv
 
 let starts_from_zero_env cfg ct =
-  let env, _, _ = BigStep.get_c_concl ct in
-  List.for_all (fun x -> Environment.lookup x env = 0) cfg.Config.vars
+  let init_cenv, _, _ = BigStep.get_c_concl ct in
+  List.for_all (fun x -> Environment.lookup x init_cenv = 0) cfg.Config.vars
 
-let check_objectives ~objectives ~cfg ~var ~tree ~cmd ~analysis_result =
+let check_objectives ~objectives ~cfg ~var ~tree ~cmd ~analysis_aenv =
   objectives
   |> List.find_map (fun objective ->
          match
-           objective.Objective.check ~cfg ~var ~tree ~cmd ~analysis_result
+           objective.Objective.check ~cfg ~var ~tree ~cmd ~analysis_aenv
          with
          | Some witness -> Some (objective.Objective.name, witness)
          | None -> None)
 
 let check_ctree ~cache ~cfg ~var ~objectives size ct =
-  let _, cmd, _ = BigStep.get_c_concl ct in
+  let init_cenv, cmd, _ = BigStep.get_c_concl ct in
   if not (starts_from_zero_env cfg ct) then None
   else
-    let analysis_result = analyze_cmd_cached cache cmd in
+    let analysis_aenv = analyze_cmd_cached cache ~init_cenv cmd in
     match
-      check_objectives ~objectives ~cfg ~var ~tree:ct ~cmd ~analysis_result
+      check_objectives ~objectives ~cfg ~var ~tree:ct ~cmd ~analysis_aenv
     with
     | Some (objective, witness) ->
-        Some { size; objective; witness; tree = ct; cmd; analysis_result }
+        Some { size; objective; witness; tree = ct; cmd; analysis_aenv }
     | None -> None
 
 let find_first_in_ctrees ~cache ~cfg ~var ~objectives size tbl =

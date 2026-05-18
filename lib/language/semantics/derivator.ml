@@ -2,65 +2,65 @@ open BigStep
 open Syntax
 
 (* Expression Derivation *)
-let rec derive_exp (e : Exp.t) (env : Environment.t) : etree =
+let rec derive_exp (e : Exp.t) (cenv : Environment.t) : etree =
   match e with
-  | Exp.Int n -> EInt ((), (env, e, n))
-  | Exp.Var x -> EVar ((), (env, e, Environment.lookup x env))
+  | Exp.Int n -> EInt ((), (cenv, e, n))
+  | Exp.Var x -> EVar ((), (cenv, e, Environment.lookup x cenv))
   | Exp.Uop (op, e1) ->
-      let t1 = derive_exp e1 env in
-      let v1 = get_eval_val t1 in
-      let res = if op = Exp.Uminus then -v1 else v1 in
-      EUop (t1, (env, e, res))
+      let t1 = derive_exp e1 cenv in
+      let cval1 = get_eval_val t1 in
+      let cval = if op = Exp.Uminus then -cval1 else cval1 in
+      EUop (t1, (cenv, e, cval))
   | Exp.Bop (op, e1, e2) ->
-      let t1 = derive_exp e1 env in
-      let t2 = derive_exp e2 env in
-      let v1, v2 = (get_eval_val t1, get_eval_val t2) in
-      let res =
+      let t1 = derive_exp e1 cenv in
+      let t2 = derive_exp e2 cenv in
+      let cval1, cval2 = (get_eval_val t1, get_eval_val t2) in
+      let cval =
         match op with
-        | Plus -> v1 + v2
-        | Minus -> v1 - v2
-        | Times -> v1 * v2
-        | Eq -> if v1 = v2 then 1 else 0
-        | Ne -> if v1 <> v2 then 1 else 0
-        | Lt -> if v1 < v2 then 1 else 0
-        | Le -> if v1 <= v2 then 1 else 0
-        | Gt -> if v1 > v2 then 1 else 0
-        | Ge -> if v1 >= v2 then 1 else 0
+        | Plus -> cval1 + cval2
+        | Minus -> cval1 - cval2
+        | Times -> cval1 * cval2
+        | Eq -> if cval1 = cval2 then 1 else 0
+        | Ne -> if cval1 <> cval2 then 1 else 0
+        | Lt -> if cval1 < cval2 then 1 else 0
+        | Le -> if cval1 <= cval2 then 1 else 0
+        | Gt -> if cval1 > cval2 then 1 else 0
+        | Ge -> if cval1 >= cval2 then 1 else 0
       in
-      EBop ((t1, t2), (env, e, res))
+      EBop ((t1, t2), (cenv, e, cval))
 
 (* Command Derivation *)
-let rec derive_cmd (lc : Cmd.lbl_t) (env : Environment.t) : ctree =
+let rec derive_cmd (lc : Cmd.lbl_t) (cenv : Environment.t) : ctree =
   let cmd_raw = lc.cmd in
   (* 원본 커맨드 *)
   match cmd_raw with
   | Cmd.Assign (x, e) ->
-      let et = derive_exp e env in
-      let v = get_eval_val et in
-      let env' = Environment.update x v env in
-      CAssign (et, (env, cmd_raw, env'))
+      let et = derive_exp e cenv in
+      let cval = get_eval_val et in
+      let next_cenv = Environment.update x cval cenv in
+      CAssign (et, (cenv, cmd_raw, next_cenv))
   | Cmd.Seq (c1, c2) ->
-      let t1 = derive_cmd c1 env in
-      let env_mid = get_last_env t1 in
-      let t2 = derive_cmd c2 env_mid in
-      let env_final = get_last_env t2 in
-      CSeq ((t1, t2), (env, cmd_raw, env_final))
+      let t1 = derive_cmd c1 cenv in
+      let mid_cenv = get_last_cenv t1 in
+      let t2 = derive_cmd c2 mid_cenv in
+      let final_cenv = get_last_cenv t2 in
+      CSeq ((t1, t2), (cenv, cmd_raw, final_cenv))
   | Cmd.If (pred, con, alt) ->
-      let pt = derive_exp pred env in
+      let pt = derive_exp pred cenv in
       if get_eval_val pt <> 0 then
-        let t_con = derive_cmd con env in
-        let env' = get_last_env t_con in
-        CIfTrue ((pt, t_con), (env, cmd_raw, env'))
+        let t_con = derive_cmd con cenv in
+        let branch_cenv = get_last_cenv t_con in
+        CIfTrue ((pt, t_con), (cenv, cmd_raw, branch_cenv))
       else
-        let t_alt = derive_cmd alt env in
-        let env' = get_last_env t_alt in
-        CIfFalse ((pt, t_alt), (env, cmd_raw, env'))
+        let t_alt = derive_cmd alt cenv in
+        let branch_cenv = get_last_cenv t_alt in
+        CIfFalse ((pt, t_alt), (cenv, cmd_raw, branch_cenv))
   | Cmd.While (pred, body) ->
-      let pt = derive_exp pred env in
+      let pt = derive_exp pred cenv in
       if get_eval_val pt <> 0 then
-        let t_body = derive_cmd body env in
-        let env_next = get_last_env t_body in
-        let t_rest = derive_cmd lc env_next in
-        let env_final = get_last_env t_rest in
-        CWhileTrue ((pt, t_body, t_rest), (env, cmd_raw, env_final))
-      else CWhileFalse (pt, (env, cmd_raw, env))
+        let t_body = derive_cmd body cenv in
+        let next_cenv = get_last_cenv t_body in
+        let t_rest = derive_cmd lc next_cenv in
+        let final_cenv = get_last_cenv t_rest in
+        CWhileTrue ((pt, t_body, t_rest), (cenv, cmd_raw, final_cenv))
+      else CWhileFalse (pt, (cenv, cmd_raw, cenv))

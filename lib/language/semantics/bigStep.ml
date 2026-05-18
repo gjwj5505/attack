@@ -1,9 +1,9 @@
 open Syntax
 
-type env = Environment.t
-type value = int
-type e_concl = env * Exp.t * value
-type c_concl = env * Cmd.t * env
+type cenv = Environment.t
+type cval = int
+type e_concl = cenv * Exp.t * cval
+type c_concl = cenv * Cmd.t * cenv
 
 type tree = ETree of etree | CTree of ctree
 
@@ -33,28 +33,32 @@ let get_c_concl = function
   | CWhileFalse (_, c) ->
       c
 
-let get_start_env = function
+let get_start_cenv = function
   | ETree et ->
-      let env, _, _ = get_e_concl et in
-      env
+      let cenv, _, _ = get_e_concl et in
+      cenv
   | CTree ct ->
-      let env, _, _ = get_c_concl ct in
-      env
+      let cenv, _, _ = get_c_concl ct in
+      cenv
 
-type result = V of value | E of env
+let get_start_env = get_start_cenv
+
+type result = V of cval | E of cenv
 
 let get_result = function
   | ETree et ->
-      let _, _, v = get_e_concl et in
-      V v
+      let _, _, cval = get_e_concl et in
+      V cval
   | CTree ct ->
-      let _, _, e = get_c_concl ct in
-      E e
+      let _, _, cenv = get_c_concl ct in
+      E cenv
 
 let get_eval_val et =
-  let _, _, v = get_e_concl et in
-  v
+  let _, _, cval = get_e_concl et in
+  cval
 
-let get_last_env ct =
-  let _, _, env = get_c_concl ct in
-  env
+let get_last_cenv ct =
+  let _, _, cenv = get_c_concl ct in
+  cenv
+
+let get_last_env = get_last_cenv
