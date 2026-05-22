@@ -9,7 +9,7 @@ let grow_at_size (cfg : config) (target : Size.size) tbl =
     diagonal order로 grow하면 항상 먼저 생성되어 있다. *)
 
 let build_up_to cfg bound =
-  let sizes = Partition.diagonal_up_to bound in
+  let sizes = Size_schedule.diagonal_up_to bound in
   List.fold_left
     (fun tbl size -> grow_at_size cfg size tbl)
     Component_set.empty sizes

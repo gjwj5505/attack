@@ -1,6 +1,3 @@
-
-- 분석기가 expression도 받기?는 필요 없을듯
-
 -find_attack, find_all_attacks 구조 합치기.
 
 - Component에 analyzer-facing summary 포함

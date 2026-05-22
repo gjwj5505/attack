@@ -114,14 +114,14 @@ let assert_component_sizes name tbl =
     tbl ()
 
 let test_rectangular_up_to () =
-  let actual = Partition.rectangular_up_to (size 1 3) in
+  let actual = Size_schedule.rectangular_up_to (size 1 3) in
   let expected = [ size 1 0; size 1 1; size 1 2; size 1 3 ] in
-  Printf.printf "Partition.rectangular_up_to input=(1,3)\n  output=[%s]\n\n"
+  Printf.printf "Size_schedule.rectangular_up_to input=(1,3)\n  output=[%s]\n\n"
     (string_of_sizes actual);
   assert_equal_sizes "rectangular_up_to" expected actual
 
 let test_diagonal_up_to () =
-  let actual = Partition.diagonal_up_to (size 1 3) in
+  let actual = Size_schedule.diagonal_up_to (size 1 3) in
   let expected =
     [
       size 1 0;
@@ -136,7 +136,7 @@ let test_diagonal_up_to () =
       size 1 3;
     ]
   in
-  Printf.printf "Partition.diagonal_up_to input=(1,3)\n  output=[%s]\n\n"
+  Printf.printf "Size_schedule.diagonal_up_to input=(1,3)\n  output=[%s]\n\n"
     (string_of_sizes actual);
   assert_equal_sizes "diagonal_up_to" expected actual
 
@@ -150,31 +150,31 @@ let take_seq n seq =
   in
   aux [] n seq
 
-let test_attack_diagonal_forever () =
-  let actual = take_seq 16 Attack.diagonal_forever in
+let test_attack_square_forever () =
+  let actual = take_seq 16 Size_schedule.square_forever in
   let expected =
     [
       size 1 1;
       size 2 1;
       size 1 2;
-      size 3 1;
       size 2 2;
+      size 3 1;
       size 1 3;
-      size 4 1;
       size 1 0;
       size 3 2;
       size 2 3;
+      size 3 3;
+      size 4 1;
       size 1 4;
-      size 5 1;
       size 2 0;
       size 4 2;
-      size 3 3;
       size 2 4;
+      size 4 3;
     ]
   in
-  Printf.printf "Attack.diagonal_forever first 16\n  output=[%s]\n\n"
+  Printf.printf "Size_schedule.square_forever first 16\n  output=[%s]\n\n"
     (string_of_sizes actual);
-  assert_equal_sizes "attack_diagonal_forever" expected actual
+  assert_equal_sizes "attack_square_forever" expected actual
 
 let test_partition_with_constraints () =
   let parts =
@@ -740,7 +740,7 @@ let all_tests =
   [
     ("rect", test_rectangular_up_to);
     ("diag", test_diagonal_up_to);
-    ("forever", test_attack_diagonal_forever);
+    ("forever", test_attack_square_forever);
     ("part", test_partition_with_constraints);
     ("imp", test_impossible_partition);
     ("env", test_bounded_envs);
@@ -796,13 +796,13 @@ let () =
       ("-all", Arg.Unit add_all_tests, "run all tests");
       ( "-rect",
         Arg.Unit (fun () -> add_test "rect" test_rectangular_up_to),
-        "test Partition.rectangular_up_to" );
+        "test Size_schedule.rectangular_up_to" );
       ( "-diag",
         Arg.Unit (fun () -> add_test "diag" test_diagonal_up_to),
-        "test Partition.diagonal_up_to" );
+        "test Size_schedule.diagonal_up_to" );
       ( "-forever",
-        Arg.Unit (fun () -> add_test "forever" test_attack_diagonal_forever),
-        "test Attack.diagonal_forever" );
+        Arg.Unit (fun () -> add_test "forever" test_attack_square_forever),
+        "test Size_schedule.square_forever" );
       ( "-part",
         Arg.Unit (fun () -> add_test "part" test_partition_with_constraints),
         "test constrained partition generation" );

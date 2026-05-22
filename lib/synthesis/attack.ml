@@ -15,6 +15,7 @@ type progress = {
   cmds : int;
   etrees : int;
   ctrees : int;
+  found : int;
   skipped_reason : string option;
 }
 
@@ -81,22 +82,23 @@ let find_all_in_ctrees ~cache ~cfg ~var ~objectives size tbl =
     []
   |> List.rev
 
-let progress_of_bucket size bucket =
+let progress_of_bucket size found bucket =
   {
     size;
     exps = Component_set.ExpSet.cardinal bucket.Component_set.exps;
     cmds = Component_set.CmdSet.cardinal bucket.cmds;
     etrees = Component_set.ETreeSet.cardinal bucket.etrees;
     ctrees = Component_set.CTreeSet.cardinal bucket.ctrees;
+    found;
     skipped_reason = None;
   }
 
-let report_progress on_progress size tbl =
+let report_progress on_progress size found tbl =
   match on_progress with
   | None -> ()
   | Some f ->
       let bucket = Component_set.get_bucket size tbl in
-      f (progress_of_bucket size bucket)
+      f (progress_of_bucket size found bucket)
 
 let in_rect_bound bound size =
   Size.prog_size size <= Size.prog_size bound
@@ -118,77 +120,73 @@ let report_skipped_progress on_progress size reason =
           cmds = 0;
           etrees = 0;
           ctrees = 0;
+          found = 0;
           skipped_reason = Some reason;
         }
 
-let diagonal_forever =
-  let sizes_at_total total =
-    let rec loop prog () =
-      if prog < 1 then Seq.Nil
-      else
-        let proof = total - prog in
-        let cur = Size.make prog proof in
-        (* Raw syntax components are only needed for unexecuted command
-           positions in proof trees. The first such demand for a command of
-           prog size k is CWhileFalse at proof target (k + 2, 2), so emit
-           (k, 0) immediately before that target instead of eagerly walking
-           all syntax-only sizes. *)
-        if proof = 2 && prog >= 3 then
-          Seq.Cons (Size.make (prog - 2) 0, fun () ->
-              Seq.Cons (cur, loop (prog - 1)))
-        else Seq.Cons (cur, loop (prog - 1))
-    in
-    loop (total - 1)
-  in
-  let rec totals total () =
-    Seq.append (sizes_at_total total) (totals (total + 1)) ()
-  in
-  totals 2
-
-let find_attack ?(seed = default_seed) ?on_progress ~var ~objectives cfg =
+let search_sizes ?(seed = default_seed) ?on_progress ~var ~objectives cfg
+    ~init ~stop ~done_ ~skip ~collect ~found_count ~update =
   Random.init seed;
   let cache = create_analysis_cache () in
-  let rec loop tbl sizes =
+  let rec loop tbl acc sizes =
     match sizes () with
-    | Seq.Nil -> None
-    | Seq.Cons (size, sizes) -> (
-        let tbl = Bottom_up.grow_at_size cfg size tbl in
-        let tbl = Component_set.cap_size_by_score component_cap size tbl in
-        report_progress on_progress size tbl;
-        match find_first_in_ctrees ~cache ~cfg ~var ~objectives size tbl with
-        | Some result -> Some result
-        | None -> loop tbl sizes)
+    | Seq.Nil -> acc
+    | Seq.Cons (size, sizes) ->
+        if done_ acc || stop size then acc
+        else
+          match skip size with
+          | Some reason ->
+              report_skipped_progress on_progress size reason;
+              loop tbl acc sizes
+          | None ->
+              let tbl = Bottom_up.grow_at_size cfg size tbl in
+              let tbl =
+                Component_set.cap_size_by_score component_cap size tbl
+              in
+              let found = collect ~cache ~cfg ~var ~objectives size tbl in
+              report_progress on_progress size (found_count found) tbl;
+              let acc = update acc found in
+              loop tbl acc sizes
   in
-  loop Component_set.empty diagonal_forever
+  loop Component_set.empty init Size_schedule.square_forever
+
+let find_attack ?seed ?on_progress ~var ~objectives cfg =
+  search_sizes ?seed ?on_progress ~var ~objectives cfg ~init:None
+    ~stop:(fun _ -> false)
+    ~done_:(function Some _ -> true | None -> false)
+    ~skip:(fun _ -> None)
+    ~collect:find_first_in_ctrees
+    ~found_count:(function Some _ -> 1 | None -> 0)
+    ~update:(fun result found ->
+      match result with
+      | Some _ -> result
+      | None -> found)
 
 let find_top_attack ?seed ?on_progress ~var cfg =
   find_attack ?seed ?on_progress ~var
     ~objectives:[ Objective.unsound; Objective.top ]
     cfg
 
-let find_all_attacks ?(seed = default_seed) ?on_progress ~var ~objectives cfg
-    bound =
-  Random.init seed;
-  let cache = create_analysis_cache () in
-  let rec loop tbl results sizes =
-    match sizes () with
-    | Seq.Nil -> List.rev results
-    | Seq.Cons (size, sizes) ->
-        if Size.total size > Size.total bound then List.rev results
-        else if not (needed_in_bound bound size) then (
-          report_skipped_progress on_progress size
-            ("outside rectangular bound=" ^ Size.to_string bound);
-          loop tbl results sizes)
-        else
-          let tbl = Bottom_up.grow_at_size cfg size tbl in
-          let tbl = Component_set.cap_size_by_score component_cap size tbl in
-          report_progress on_progress size tbl;
-          let new_results =
-            find_all_in_ctrees ~cache ~cfg ~var ~objectives size tbl
-          in
-          loop tbl (List.rev_append new_results results) sizes
-  in
-  loop Component_set.empty [] diagonal_forever
+let iter_attacks ?seed ?on_progress ~var ~objectives cfg ~on_results =
+  search_sizes ?seed ?on_progress ~var ~objectives cfg ~init:()
+    ~stop:(fun _ -> false)
+    ~done_:(fun () -> false)
+    ~skip:(fun _ -> None)
+    ~collect:find_all_in_ctrees
+    ~found_count:List.length
+    ~update:(fun () results -> on_results results)
+
+let find_all_attacks ?seed ?on_progress ~var ~objectives cfg bound =
+  search_sizes ?seed ?on_progress ~var ~objectives cfg ~init:[]
+    ~stop:(fun size -> Size.total size > Size.total bound)
+    ~done_:(fun _ -> false)
+    ~skip:(fun size ->
+      if needed_in_bound bound size then None
+      else Some ("outside rectangular bound=" ^ Size.to_string bound))
+    ~collect:find_all_in_ctrees
+    ~found_count:List.length
+    ~update:(fun results found -> List.rev_append found results)
+  |> List.rev
 
 let find_all_top_attacks ?seed ?on_progress ~var cfg bound =
   find_all_attacks ?seed ?on_progress ~var

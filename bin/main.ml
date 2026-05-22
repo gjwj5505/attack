@@ -8,6 +8,7 @@ let opt_dintp = ref false
 let opt_analyze = ref false
 let opt_big = ref false
 let opt_attack = ref false
+let opt_forever = ref false
 let opt_verbose = ref false
 let objective_name = ref "top"
 let bound_prog = ref 0
@@ -42,6 +43,9 @@ let selected_objectives () =
 let blue s =
   "\027[34m" ^ s ^ "\027[0m"
 
+let red s =
+  "\027[31m" ^ s ^ "\027[0m"
+
 let nonzero_field name n =
   if n = 0 then None else Some (Printf.sprintf "%-5s = %d" name n)
 
@@ -50,21 +54,28 @@ let string_of_fields fields =
   | [] -> "empty"
   | fields -> String.concat "; " fields
 
+let found_field n =
+  if n = 0 then "" else Printf.sprintf "; found = %d" n
+
 let print_attack_progress
-    Synthesis.Attack.{ size; exps; cmds; etrees; ctrees; skipped_reason } =
+    Synthesis.Attack.
+      { size; exps; cmds; etrees; ctrees; found; skipped_reason } =
   match skipped_reason with
   | Some _ -> ()
   | None when Size.proof_size size = 0 ->
-      Printf.printf "%s\n%!"
+      Printf.printf "%s%s\n%!"
         (blue
            (Printf.sprintf "Trying raw   size = %-8s : %s"
               (Size.to_string size)
               (string_of_fields
                  [ nonzero_field "exp" exps; nonzero_field "cmd" cmds ])))
+        (found_field found)
   | None ->
-      Printf.printf "Trying proof size = %-8s : %s\n%!" (Size.to_string size)
+      Printf.printf "Trying proof size = %-8s : %s%s\n%!"
+        (Size.to_string size)
         (string_of_fields
            [ nonzero_field "etree" etrees; nonzero_field "ctree" ctrees ])
+        (found_field found)
 
 let print_attack_result (result : Synthesis.Attack.result) =
   let labeled_cmd = Syntax.Cmd.(relabel (dummy_lbl result.cmd)) in
@@ -80,6 +91,50 @@ let print_attack_result (result : Synthesis.Attack.result) =
     (Analyzer.Abs_domain.Abs_env.string_of_t result.analysis_aenv);
   print_endline "== proof tree ==";
   Visualizer.print_tree ~verbose:!opt_verbose (CTree result.tree)
+
+let rec string_of_source_cmd ?(lvl = 0) (cmd : Syntax.Cmd.t) =
+  let indent = String.make (2 * lvl) ' ' in
+  let string_of_exp = Syntax.Exp.string_of_t in
+  match cmd with
+  | Assign (id, e) -> Printf.sprintf "%s%s := %s" indent id (string_of_exp e)
+  | Seq (c1, c2) ->
+      Printf.sprintf "%s;\n%s"
+        (string_of_source_cmd ~lvl c1.Syntax.Cmd.cmd)
+        (string_of_source_cmd ~lvl c2.Syntax.Cmd.cmd)
+  | If (pred, con, alt) ->
+      Printf.sprintf "%sif %s then\n%s\n%selse\n%s\n%send" indent
+        (string_of_exp pred)
+        (string_of_source_cmd ~lvl:(lvl + 1) con.Syntax.Cmd.cmd)
+        indent
+        (string_of_source_cmd ~lvl:(lvl + 1) alt.Syntax.Cmd.cmd)
+        indent
+  | While (pred, body) ->
+      Printf.sprintf "%swhile %s do\n%s\n%send" indent
+        (string_of_exp pred)
+        (string_of_source_cmd ~lvl:(lvl + 1) body.Syntax.Cmd.cmd)
+        indent
+
+let result_path = "result.d"
+
+let clear_attack_result_file () =
+  let oc = open_out result_path in
+  close_out oc
+
+let append_attack_result_file index (result : Synthesis.Attack.result) =
+  let oc =
+    open_out_gen [ Open_creat; Open_text; Open_append ] 0o666 result_path
+  in
+  Fun.protect
+    ~finally:(fun () -> close_out_noerr oc)
+    (fun () ->
+      Printf.fprintf oc "(* attack = %d *)\n" index;
+      Printf.fprintf oc "(* size = %s; concrete = %d; abstract = %s *)\n"
+        (Size.to_string result.Synthesis.Attack.size)
+        result.Synthesis.Attack.witness.cval
+        (Analyzer.Abs_domain.Abs_val.string_of_t
+           result.Synthesis.Attack.witness.aval);
+      output_string oc (string_of_source_cmd result.cmd);
+      output_string oc "\n\n")
 
 let run_synth_attack () =
   let cfg = Synthesis.Config.attack () in
@@ -105,8 +160,28 @@ let run_synth_attack_all () =
       print_attack_result result)
     results
 
+let run_synth_attack_forever () =
+  let cfg = Synthesis.Config.attack () in
+  let attack_count = ref 0 in
+  clear_attack_result_file ();
+  Synthesis.Attack.iter_attacks ~on_progress:print_attack_progress ~var:"x"
+    ~seed:!seed ~objectives:(selected_objectives ()) cfg
+    ~on_results:(fun results ->
+      List.iter
+        (fun result ->
+          incr attack_count;
+          append_attack_result_file !attack_count result)
+        results;
+      match results with
+      | [] -> ()
+      | _ ->
+          Printf.printf "%s\n%!"
+            (red (Printf.sprintf "found = %d" (List.length results))))
+
 let run_attack () =
-  if has_attack_bound () then run_synth_attack_all () else run_synth_attack ()
+  if !opt_forever then run_synth_attack_forever ()
+  else if has_attack_bound () then run_synth_attack_all ()
+  else run_synth_attack ()
 
 let main () =
   Arg.parse
@@ -129,6 +204,9 @@ let main () =
       ( "-attack",
         Arg.Unit (fun _ -> opt_attack := true),
         "synthesize attack programs for analyzer objective on x" );
+      ( "-forever",
+        Arg.Unit (fun _ -> opt_forever := true),
+        "keep synthesizing attacks and write the latest result to result.d" );
       ( "-objective",
         Arg.Set_string objective_name,
         "set attack objective: " ^ Synthesis.Objective.names ()
@@ -144,6 +222,10 @@ let main () =
 
   if has_attack_bound () && not !opt_attack then
     fail_usage "-bound requires -attack";
+  if !opt_forever && not !opt_attack then
+    fail_usage "-forever requires -attack";
+  if !opt_forever && has_attack_bound () then
+    fail_usage "-forever cannot be used with -bound";
   if !opt_attack && !src <> "" then
     fail_usage "-attack does not take an input file";
   if (not !opt_attack) && not (program_options ()) then (
