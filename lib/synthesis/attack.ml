@@ -22,6 +22,7 @@ type analysis_cache =
   (Environment.t * Syntax.Cmd.t, Analyzer.Abs_domain.Abs_env.t) Hashtbl.t
 
 let component_cap = 1000
+let default_seed = 42
 
 let create_analysis_cache () =
   Hashtbl.create 1024
@@ -144,8 +145,8 @@ let diagonal_forever =
   in
   totals 2
 
-let find_attack ?on_progress ~var ~objectives cfg =
-  Random.init 42;
+let find_attack ?(seed = default_seed) ?on_progress ~var ~objectives cfg =
+  Random.init seed;
   let cache = create_analysis_cache () in
   let rec loop tbl sizes =
     match sizes () with
@@ -160,13 +161,14 @@ let find_attack ?on_progress ~var ~objectives cfg =
   in
   loop Component_set.empty diagonal_forever
 
-let find_top_attack ?on_progress ~var cfg =
-  find_attack ?on_progress ~var
+let find_top_attack ?seed ?on_progress ~var cfg =
+  find_attack ?seed ?on_progress ~var
     ~objectives:[ Objective.unsound; Objective.top ]
     cfg
 
-let find_all_attacks ?on_progress ~var ~objectives cfg bound =
-  Random.init 42;
+let find_all_attacks ?(seed = default_seed) ?on_progress ~var ~objectives cfg
+    bound =
+  Random.init seed;
   let cache = create_analysis_cache () in
   let rec loop tbl results sizes =
     match sizes () with
@@ -188,7 +190,7 @@ let find_all_attacks ?on_progress ~var ~objectives cfg bound =
   in
   loop Component_set.empty [] diagonal_forever
 
-let find_all_top_attacks ?on_progress ~var cfg bound =
-  find_all_attacks ?on_progress ~var
+let find_all_top_attacks ?seed ?on_progress ~var cfg bound =
+  find_all_attacks ?seed ?on_progress ~var
     ~objectives:[ Objective.unsound; Objective.top ]
     cfg bound

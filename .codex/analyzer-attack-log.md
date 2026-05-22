@@ -90,3 +90,5 @@ x := (x * x)
 - 미정.
 - 후보: unary guard에 대한 relational filtering 강화.
 - 후보: 같은 변수끼리의 multiplication 같은 단순 relational pattern을 별도 처리.
+
+* 랜덤 시드 42 말고 다른 값 넣으면 다른 공격도 생성 (x := x * x 대신 x := (- x) 같은거)

@@ -12,6 +12,7 @@ let opt_verbose = ref false
 let objective_name = ref "top"
 let bound_prog = ref 0
 let bound_proof = ref 0
+let seed = ref Synthesis.Attack.default_seed
 
 let usage =
   "Usage : " ^ Filename.basename Sys.argv.(0) ^ " [-option] [filename] "
@@ -84,7 +85,7 @@ let run_synth_attack () =
   let cfg = Synthesis.Config.attack () in
   match
     Synthesis.Attack.find_attack ~on_progress:print_attack_progress ~var:"x"
-      ~objectives:(selected_objectives ()) cfg
+      ~seed:!seed ~objectives:(selected_objectives ()) cfg
   with
   | None -> print_endline "No attack found"
   | Some result -> print_attack_result result
@@ -94,7 +95,7 @@ let run_synth_attack_all () =
   let bound = Size.make !bound_prog !bound_proof in
   let results =
     Synthesis.Attack.find_all_attacks ~on_progress:print_attack_progress ~var:"x"
-      ~objectives:(selected_objectives ()) cfg bound
+      ~seed:!seed ~objectives:(selected_objectives ()) cfg bound
   in
   Printf.printf "Found %d attacks up to bound=%s\n"
     (List.length results) (Size.to_string bound);
@@ -135,6 +136,9 @@ let main () =
       ( "-bound",
         Arg.Tuple [ Arg.Set_int bound_prog; Arg.Set_int bound_proof ],
         "set bounded attack search as <prog_size> <proof_size>" );
+      ( "-seed",
+        Arg.Set_int seed,
+        "set random seed for attack component scoring" );
     ]
     set_src usage;
 

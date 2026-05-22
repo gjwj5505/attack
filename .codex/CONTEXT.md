@@ -60,14 +60,6 @@
     identity/absorbing pruning, and independent assignment order
     canonicalization.
   - pruning decisions are recorded in `.codex/prune.txt`.
-- Recent unbounded attack behavior:
-  - With all-zero initial-env filtering enabled, the previous `(9,4)` attack
-    starting from `{x: 1}` is correctly ignored.
-  - Current pruning/schedule can reach around `(14,1)` without finding an
-    all-zero initial-state attack in the observed run.
-  - Remaining bottlenecks are large syntax buckets such as `(10,0)` and large
-    `ctree` buckets around `(n,2)`, especially from raw commands used by
-    `CWhileFalse`.
 - Current component-cap experiment:
   - Components are being wrapped as payload + metadata records in
     `lib/synthesis/component_pool/component.ml`.
@@ -82,10 +74,17 @@
     rules can still try `1000 * 1000` combinations per partition, and ternary
     rules such as `CIfTrue`, `CIfFalse`, and `CWhileTrue` can still try up to
     `1000 * 1000 * 1000` combinations per partition.
-  - Near-term heuristic: cap rule inputs as well as outputs. For binary rules,
-    use about top 32 from each input bucket; for ternary rules, use about top
-    10 from each input bucket. Multiple partitions may still produce more than
-    1000 outputs, so keep the existing final top-1000 bucket cap.
+  - Current near-term heuristic: cap rule inputs as well as outputs.
+    `Grow_util.binary_fanout_cap = 32` and
+    `Grow_util.ternary_fanout_cap = 10`. Multiple partitions may still produce
+    more than 1000 outputs, so `Synthesis.Attack` keeps the final top-1000
+    bucket cap.
+  - The full folds are left as comments near the temporary limited folds in
+    `Grow_prog` and `Grow_proof`; the new code is explicitly marked as a
+    temporary random-score fanout cap.
+  - With the current seed and temporary caps, `./attack -attack -objective top`
+    finds a top attack at size `(13,16)`:
+    `x := 1; while (- x) do x := 0 end; x := x * x`.
   - Longer-term direction: replace random scoring with analyzer-aware priority
     and diversity metrics, and add a schedule that eventually explores beyond
     the current top slice so the search can retain an "eventual success"
@@ -131,11 +130,22 @@
   - The analysis engine lives in `lib/analyzer/analyzer_engine.ml` and is
     referenced as `Analyzer.Analyzer_engine`.
   - Other analyzer modules are referenced directly through the wrapped library
-    namespace, e.g. `Analyzer.Itv` and `Analyzer.Abs_domain.Abs_mem`.
+    namespace, e.g. `Analyzer.Itv` and `Analyzer.Abs_domain.Abs_env`.
   - This keeps the library namespace distinct from the analysis engine module.
+  - `Analyzer_engine.analysis` returns the exit abstract environment.
+    `Analyzer_engine.analysis_sem` returns the whole label-to-abstract-env map.
+  - `Analyzer.Visualizer` prints `analysis_sem` next to the same program text
+    used by `-pp`. `./attack -analyze -v file.d` uses this view.
 - `Visualizer` has a proof-tree-only command printer and short labels:
   - `Int`, `Var`, `Bop`, `Uop`, `Asgn`, `Seq`, `IfT`, `IfF`, `WhlT`, `WhlF`
   - size prints as `(prog,proof)`.
+- Analyzer attack examples:
+  - Successful attacks are logged in `.codex/analyzer-attack-log.md`.
+  - Date-stamped runnable programs live in `examples/` using `yymmdd-*.d`
+    filenames, e.g. `260421-while-0-truthiness.d`,
+    `260511-one-iteration-widening.d`, and
+    `260522-unary-guard-square-top.d`.
+  - The input language now parses `*` as multiplication (`Times`).
 
 # Important Files
 
@@ -146,12 +156,15 @@
 - `lib/synthesis/grow_proof.ml`: proof tree growth
 - `lib/synthesis/attack.ml`: analyzer attack search and unbounded size schedule
 - `lib/synthesis/prune.ml`: syntactic pruning predicates
-- `lib/synthesis/component/component_set.ml`: size bucket table
+- `lib/synthesis/component_pool/component.ml`: component payload + metadata
+- `lib/synthesis/component_pool/component_set.ml`: size bucket table and
+  score-based temporary caps
 - `lib/language/semantics/size.ml`: size definitions
 - `lib/language/semantics/bigStep.ml`: proof tree constructors
 - `lib/language/semantics/bigStepChecker.ml`: proof validity checker
 - `lib/language/semantics/visualizer.ml`: proof tree output
 - `lib/analyzer/analyzer_engine.ml`: analyzer worklist engine
+- `lib/analyzer/visualizer.ml`: analyzer result + program output
 - `lib/analyzer/itv.ml`: interval domain implementation
 - `lib/synthesis/objective.ml`: swappable attack success objectives
 - `test/synthesis_test.ml`: synthesis regression tests
@@ -176,6 +189,7 @@
     - `dune exec attack -- -attack -bound 3 3`
     - `dune exec attack -- -pp path/to/file`
     - `dune exec attack -- -analyze path/to/file`
+    - `dune exec attack -- -analyze -v path/to/file`
     - `dune exec attack -- -big path/to/file`
 - Run tests:
   - pass/fail only, stdout hidden on success: `dune runtest`
