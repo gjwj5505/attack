@@ -27,26 +27,26 @@ let equal_envs actual expected =
   && List.for_all2 equal_env actual expected
 
 let string_of_exps exps =
-  exps |> Component_set.ExpSet.elements
+  exps |> Component_set.exp_elements
   |> List.map Syntax.Exp.string_of_t
   |> String.concat "; "
 
 let string_of_cmds cmds =
   let cmds =
-    cmds |> Component_set.CmdSet.elements
+    cmds |> Component_set.cmd_elements
     |> List.map Syntax.Cmd.string_of_nolabel_t
   in
   if List.length cmds > 10 then String.concat "\n" cmds
   else String.concat "; " cmds
 
 let print_etrees etrees =
-  etrees |> Component_set.ETreeSet.elements
+  etrees |> Component_set.etree_elements
   |> List.iter (fun et ->
       Visualizer.print_tree (BigStep.ETree et);
       print_endline "")
 
 let print_ctrees ctrees =
-  ctrees |> Component_set.CTreeSet.elements
+  ctrees |> Component_set.ctree_elements
   |> List.iter (fun ct ->
       Visualizer.print_tree (BigStep.CTree ct);
       print_endline "")
@@ -275,11 +275,12 @@ let test_bottom_up_exp_growth () =
     (string_of_exps exps_2) (string_of_exps exps_3) (string_of_exps exps_4)
     (string_of_exps exps_5);
   assert_true "generated -x" (Component_set.ExpSet.mem neg_x exps_2);
-  assert_true "generated -0" (Component_set.ExpSet.mem neg_zero exps_2);
-  assert_true "generated --x"
-    (Component_set.ExpSet.mem
-       (Syntax.Exp.Uop (Syntax.Exp.Uminus, neg_x))
-       exps_3);
+  assert_true "pruned -0" (not (Component_set.ExpSet.mem neg_zero exps_2));
+  assert_true "pruned --x"
+    (not
+       (Component_set.ExpSet.mem
+          (Syntax.Exp.Uop (Syntax.Exp.Uminus, neg_x))
+          exps_3));
   assert_true "generated x < x"
     (Component_set.ExpSet.mem (Syntax.Exp.Bop (Syntax.Exp.Lt, x, x)) exps_3);
   assert_true "generated x < 0"
@@ -290,11 +291,12 @@ let test_bottom_up_exp_growth () =
     (Component_set.ExpSet.mem
        (Syntax.Exp.Bop (Syntax.Exp.Lt, zero, zero))
        exps_3);
-  assert_true "generated ---x"
-    (Component_set.ExpSet.mem
-       (Syntax.Exp.Uop
-          (Syntax.Exp.Uminus, Syntax.Exp.Uop (Syntax.Exp.Uminus, neg_x)))
-       exps_4);
+  assert_true "pruned ---x"
+    (not
+       (Component_set.ExpSet.mem
+          (Syntax.Exp.Uop
+             (Syntax.Exp.Uminus, Syntax.Exp.Uop (Syntax.Exp.Uminus, neg_x)))
+          exps_4));
   assert_true "generated x < -x"
     (Component_set.ExpSet.mem (Syntax.Exp.Bop (Syntax.Exp.Lt, x, neg_x)) exps_4);
   assert_true "generated -x < x"
@@ -671,17 +673,20 @@ let test_bottom_up_seq_growth () =
        (Syntax.Cmd.Seq
           (Syntax.Cmd.dummy_lbl assign_x, Syntax.Cmd.dummy_lbl assign_neg_x))
        cmds_6);
-  assert_true "generated (x := x); (x := --x)"
-    (Component_set.CmdSet.mem
-       (Syntax.Cmd.Seq
-          (Syntax.Cmd.dummy_lbl assign_x, Syntax.Cmd.dummy_lbl assign_neg_neg_x))
-       cmds_7);
-  assert_true "generated (x := x); (x := ---x)"
-    (Component_set.CmdSet.mem
-       (Syntax.Cmd.Seq
-          ( Syntax.Cmd.dummy_lbl assign_x,
-            Syntax.Cmd.dummy_lbl assign_neg_neg_neg_x ))
-       cmds_8);
+  assert_true "pruned (x := x); (x := --x)"
+    (not
+       (Component_set.CmdSet.mem
+          (Syntax.Cmd.Seq
+             ( Syntax.Cmd.dummy_lbl assign_x,
+               Syntax.Cmd.dummy_lbl assign_neg_neg_x ))
+          cmds_7));
+  assert_true "pruned (x := x); (x := ---x)"
+    (not
+       (Component_set.CmdSet.mem
+          (Syntax.Cmd.Seq
+             ( Syntax.Cmd.dummy_lbl assign_x,
+               Syntax.Cmd.dummy_lbl assign_neg_neg_neg_x ))
+          cmds_8));
   assert_true "generated ((x := x); (x := x)); (x := x)"
     (Component_set.CmdSet.mem
        (Syntax.Cmd.Seq

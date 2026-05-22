@@ -43,6 +43,7 @@ rule read =
   | "<="      { LE }
   | ">="      { GE }
   | '+'       { PLUS }
+  | '*'       { TIMES }
   | '-'       { MINUS }
   | ":="      { COLONEQ }
   | '('       { LPAREN }

@@ -21,6 +21,8 @@ type progress = {
 type analysis_cache =
   (Environment.t * Syntax.Cmd.t, Analyzer.Abs_domain.Abs_env.t) Hashtbl.t
 
+let component_cap = 1000
+
 let create_analysis_cache () =
   Hashtbl.create 1024
 
@@ -62,18 +64,19 @@ let check_ctree ~cache ~cfg ~var ~objectives size ct =
     | None -> None
 
 let find_first_in_ctrees ~cache ~cfg ~var ~objectives size tbl =
-  Component_set.CTreeSet.to_seq (Component_set.ctrees_of_size size tbl)
-  |> Seq.filter_map (check_ctree ~cache ~cfg ~var ~objectives size)
-  |> Seq.uncons
-  |> Option.map fst
+  Component_set.fold_ctrees size tbl
+    (fun ct result ->
+      match result with
+      | Some _ -> result
+      | None -> check_ctree ~cache ~cfg ~var ~objectives size ct)
+    None
 
 let find_all_in_ctrees ~cache ~cfg ~var ~objectives size tbl =
-  Component_set.CTreeSet.fold
+  Component_set.fold_ctrees size tbl
     (fun ct results ->
       match check_ctree ~cache ~cfg ~var ~objectives size ct with
       | Some result -> result :: results
       | None -> results)
-    (Component_set.ctrees_of_size size tbl)
     []
   |> List.rev
 
@@ -142,12 +145,14 @@ let diagonal_forever =
   totals 2
 
 let find_attack ?on_progress ~var ~objectives cfg =
+  Random.init 42;
   let cache = create_analysis_cache () in
   let rec loop tbl sizes =
     match sizes () with
     | Seq.Nil -> None
     | Seq.Cons (size, sizes) -> (
         let tbl = Bottom_up.grow_at_size cfg size tbl in
+        let tbl = Component_set.cap_size_by_score component_cap size tbl in
         report_progress on_progress size tbl;
         match find_first_in_ctrees ~cache ~cfg ~var ~objectives size tbl with
         | Some result -> Some result
@@ -161,6 +166,7 @@ let find_top_attack ?on_progress ~var cfg =
     cfg
 
 let find_all_attacks ?on_progress ~var ~objectives cfg bound =
+  Random.init 42;
   let cache = create_analysis_cache () in
   let rec loop tbl results sizes =
     match sizes () with
@@ -173,6 +179,7 @@ let find_all_attacks ?on_progress ~var ~objectives cfg bound =
           loop tbl results sizes)
         else
           let tbl = Bottom_up.grow_at_size cfg size tbl in
+          let tbl = Component_set.cap_size_by_score component_cap size tbl in
           report_progress on_progress size tbl;
           let new_results =
             find_all_in_ctrees ~cache ~cfg ~var ~objectives size tbl

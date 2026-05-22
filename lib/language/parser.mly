@@ -11,7 +11,7 @@ open Cmd
 %token WHILE DO END
 %token IF THEN ELSE
 %token EQ LT GT NE LE GE
-%token PLUS MINUS
+%token PLUS MINUS TIMES
 %token LPAREN RPAREN
 %token SEMI
 %token EOF
@@ -20,6 +20,7 @@ open Cmd
 %nonassoc ELSE /* (if ... then ... else ...) */
 %left     EQ LT GT NE LE GE
 %left     PLUS MINUS
+%left     TIMES
 %nonassoc prec_unary
 
 %start <Cmd.lbl_t> prog
@@ -56,6 +57,7 @@ exp:
     | GE    { Ge }
     | PLUS  { Plus }
     | MINUS { Minus }
+    | TIMES { Times }
 atom:
     | n = INT                 { Int n }
     | x = ID                  { Var x }

@@ -68,6 +68,28 @@
   - Remaining bottlenecks are large syntax buckets such as `(10,0)` and large
     `ctree` buckets around `(n,2)`, especially from raw commands used by
     `CWhileFalse`.
+- Current component-cap experiment:
+  - Components are being wrapped as payload + metadata records in
+    `lib/synthesis/component_pool/component.ml`.
+  - As a temporary stress test, each component gets a random score when it is
+    made, and `Synthesis.Attack` caps each grown size bucket to the top 1000
+    components by score.
+  - This is intentionally heuristic and not the final design. The goal is to
+    quickly increase reachable sizes and study where the combinatorial
+    bottlenecks move.
+  - A bucket-level top-1000 cap reduces stored components but does not prevent
+    expensive rule input products. With capped buckets of size 1000, binary
+    rules can still try `1000 * 1000` combinations per partition, and ternary
+    rules such as `CIfTrue`, `CIfFalse`, and `CWhileTrue` can still try up to
+    `1000 * 1000 * 1000` combinations per partition.
+  - Near-term heuristic: cap rule inputs as well as outputs. For binary rules,
+    use about top 32 from each input bucket; for ternary rules, use about top
+    10 from each input bucket. Multiple partitions may still produce more than
+    1000 outputs, so keep the existing final top-1000 bucket cap.
+  - Longer-term direction: replace random scoring with analyzer-aware priority
+    and diversity metrics, and add a schedule that eventually explores beyond
+    the current top slice so the search can retain an "eventual success"
+    argument rather than becoming a permanent random/top-k prune.
 - Attack objective discussion:
   - In the general sense, an analyzer attack succeeds whenever the abstract
     result is strictly less precise than the concrete result; using `top` was
