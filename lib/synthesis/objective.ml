@@ -18,7 +18,7 @@ type t = {
 }
 
 let string_of_witness w =
-  Printf.sprintf "%s: concrete=%d abstract=%s" w.reason w.cval
+  Printf.sprintf "concrete=%d abstract=%s" w.cval
     (Analyzer.Abs_domain.Abs_val.string_of_t w.aval)
 
 let final_concrete_value var tree =
