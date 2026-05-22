@@ -37,12 +37,15 @@ let rec collect_widen_edges (stmt : Cmd.lbl_t) : EdgeSet.t =
   | Cmd.While (_, body) ->
       EdgeSet.union (terminal_edges body stmt.lbl) (collect_widen_edges body)
 
-let analysis ?(init_cenv = Environment.empty) (prog : Cmd.lbl_t) : Abs_env.t =
+let exit_lbl = -1
+
+let analysis_sem ?(init_cenv = Environment.empty) (prog : Cmd.lbl_t) :
+    Abs_sem.t =
   let prog = Cmd.relabel prog in
   let table = Cmd.tabulate prog in
   let widen_edges = collect_widen_edges prog in
   let start = 1 in
-  let exit = 9999 in
+  let exit = exit_lbl in
   let Cfg.{ next; next_true; next_false } = Cfg.make prog exit in
 
   let wl = Queue.create () in
@@ -90,4 +93,9 @@ let analysis ?(init_cenv = Environment.empty) (prog : Cmd.lbl_t) : Abs_env.t =
   in
   run ();
   (* print_endline (Abs_sem.string_of_t !sem); *)
-  !sem |> Cmd.Lbl_map.find exit
+  !sem
+
+let analysis ?init_cenv (prog : Cmd.lbl_t) : Abs_env.t =
+  analysis_sem ?init_cenv prog |> Cmd.Lbl_map.find exit_lbl
+
+let exit_aenv sem = Cmd.Lbl_map.find exit_lbl sem

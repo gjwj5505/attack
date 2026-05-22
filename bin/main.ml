@@ -169,9 +169,13 @@ let main () =
   (if !opt_dintp then
      Language.Interpreter.(def_intp pgm |> Mem.string_of_t |> print_endline));
   (if !opt_analyze then
-     Analyzer.Analyzer_engine.analysis pgm
-     |> Analyzer.Abs_domain.Abs_env.string_of_t
-     |> print_endline);
+     if !opt_verbose then
+       let sem = Analyzer.Analyzer_engine.analysis_sem pgm in
+       Analyzer.Visualizer.print_analysis_sem sem pgm
+     else
+       Analyzer.Analyzer_engine.analysis pgm
+       |> Analyzer.Abs_domain.Abs_env.string_of_t
+       |> print_endline);
   if !opt_big then begin
     let tree = Derivator.derive_cmd pgm Environment.empty in
     Visualizer.print_tree ~verbose:!opt_verbose (CTree tree);
