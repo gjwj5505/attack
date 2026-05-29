@@ -1,5 +1,8 @@
 휴리스틱 구조 조정하기
-분석기 갈아끼기 구조 조정하기
+binary, ternary 뽑는 갯수도 휴리스틱으로 지정
+seed는 config에서만 설정하기. 입력으로도 받지 말기
+
+
 
 -find_attack, find_all_attacks 구조 합치기.
 

@@ -13,9 +13,9 @@ Always follow these rules:
 - When the user gives a durable workflow instruction, add it to this
   `AGENTS.md` file after approval.
 - During design discussions, keep durable conclusions, hypotheses, and next
-  actions updated in `.codex/CONTEXT.md` as the conversation progresses.
+  actions updated in `.agents/CONTEXT.md` as the conversation progresses.
 
-Start by reading `.codex/CONTEXT.md`, `.codex/todo.txt`, then inspect only the files relevant to
+Start by reading `.agents/CONTEXT.md`, `.agents/todo.txt`, then inspect only the files relevant to
 the current request. Prefer concise status updates in Korean.
 
 Attack workflow:
@@ -23,7 +23,7 @@ Attack workflow:
   produced the bad result.
 - Strengthen the analyzer against that weakness in small approved steps.
 - Re-run the relevant attack/example/tests after the fix.
-- Record each successful attack and fix in `.codex/analyzer-attack-log.md`
+- Record each successful attack and fix in `.agents/analyzer-attack-log.md`
   using the format: date - name - metadata including git version and analyzer
   engine when available - attack program - analyzer weakness - strengthening
   method.

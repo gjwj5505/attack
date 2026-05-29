@@ -22,7 +22,6 @@ type progress = {
 type analysis_cache =
   (Environment.t * Syntax.Cmd.t, Analyzer.aenv) Hashtbl.t
 
-let component_cap = 1000
 let default_seed = Config.seed
 
 let create_analysis_cache () =
@@ -141,9 +140,6 @@ let search_sizes ?(heuristic = Heuristic.none)
               loop tbl acc sizes
           | None ->
               let tbl = Bottom_up.grow_at_size cfg size tbl in
-              let tbl =
-                Component_set.cap_size_by_score component_cap size tbl
-              in
               let found =
                 collect ~cache ~analyzer ~cfg ~var ~objectives size tbl
               in
@@ -153,7 +149,8 @@ let search_sizes ?(heuristic = Heuristic.none)
   in
   loop Component_set.empty init Size_schedule.square_forever
 
-let find_attack ?heuristic ?analyzer ?on_progress ~var ~objectives cfg =
+let find_attack ?heuristic ?analyzer ?on_progress ?var ~objectives cfg =
+  let var = Option.value var ~default:cfg.Config.target_var in
   search_sizes ?heuristic ?analyzer ?on_progress ~var ~objectives cfg ~init:None
     ~stop:(fun _ -> false)
     ~done_:(function Some _ -> true | None -> false)
@@ -165,13 +162,14 @@ let find_attack ?heuristic ?analyzer ?on_progress ~var ~objectives cfg =
       | Some _ -> result
       | None -> found)
 
-let find_top_attack ?heuristic ?analyzer ?on_progress ~var cfg =
-  find_attack ?heuristic ?analyzer ?on_progress ~var
+let find_top_attack ?heuristic ?analyzer ?on_progress ?var cfg =
+  find_attack ?heuristic ?analyzer ?on_progress ?var
     ~objectives:[ Objective.unsound; Objective.top ]
     cfg
 
-let iter_attacks ?heuristic ?analyzer ?on_progress ~var ~objectives cfg
+let iter_attacks ?heuristic ?analyzer ?on_progress ?var ~objectives cfg
     ~on_results =
+  let var = Option.value var ~default:cfg.Config.target_var in
   search_sizes ?heuristic ?analyzer ?on_progress ~var ~objectives cfg ~init:()
     ~stop:(fun _ -> false)
     ~done_:(fun () -> false)
@@ -180,7 +178,8 @@ let iter_attacks ?heuristic ?analyzer ?on_progress ~var ~objectives cfg
     ~found_count:List.length
     ~update:(fun () results -> on_results results)
 
-let find_all_attacks ?heuristic ?analyzer ?on_progress ~var ~objectives cfg bound =
+let find_all_attacks ?heuristic ?analyzer ?on_progress ?var ~objectives cfg bound =
+  let var = Option.value var ~default:cfg.Config.target_var in
   search_sizes ?heuristic ?analyzer ?on_progress ~var ~objectives cfg ~init:[]
     ~stop:(fun size -> Size.total size > Size.total bound)
     ~done_:(fun _ -> false)
@@ -192,7 +191,7 @@ let find_all_attacks ?heuristic ?analyzer ?on_progress ~var ~objectives cfg boun
     ~update:(fun results found -> List.rev_append found results)
   |> List.rev
 
-let find_all_top_attacks ?heuristic ?analyzer ?on_progress ~var cfg bound =
-  find_all_attacks ?heuristic ?analyzer ?on_progress ~var
+let find_all_top_attacks ?heuristic ?analyzer ?on_progress ?var cfg bound =
+  find_all_attacks ?heuristic ?analyzer ?on_progress ?var
     ~objectives:[ Objective.unsound; Objective.top ]
     cfg bound

@@ -16,11 +16,10 @@ let score_etree t (_ : BigStep.etree) = score t
 
 let score_ctree t (_ : BigStep.ctree) = score t
 
-let select_top_by_score ~limit ~score items =
-  if limit <= 0 then []
-  else
-    items
-    |> List.sort (fun left right ->
-           let by_score = Float.compare (score right) (score left) in
-           if by_score <> 0 then by_score else Stdlib.compare left right)
-    |> List.to_seq |> Seq.take limit |> List.of_seq
+let select_some (t : t) items =
+  items
+  |> List.map (fun (item, score) ->
+       (Random.State.float t.rng 1.0, item, score))
+  |> List.stable_sort (fun (left, _, _) (right, _, _) ->
+       Float.compare right left)
+  |> List.map (fun (_, item, score) -> (item, score))

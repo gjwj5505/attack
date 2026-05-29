@@ -38,24 +38,13 @@ module Make_payload_set (C : Component) = struct
   let for_all p set =
     Internal.for_all (fun component -> p (C.payload component)) set
 
-  let top_by_score limit set =
-    Heuristic.select_current_top_by_score ~limit ~score:C.score
-      (Internal.elements set)
+  let select_some set =
+    set |> Internal.elements
+    |> List.map (fun component -> (C.payload component, C.score component))
+    |> Heuristic.select_current_some
+    |> List.map fst
 
-  (* Temporary fanout control for the random-score experiment. This should
-     eventually be replaced by analyzer-aware priority/diversity scheduling. *)
-  let fold_top_by_score limit f set acc =
-    top_by_score limit set
-    |> List.fold_left
-         (fun acc component -> f (C.payload component) acc)
-         acc
-
-  let cap_by_score limit set =
-    if limit <= 0 then empty
-    else if cardinal set <= limit then set
-    else
-      top_by_score limit set
-      |> List.fold_left (fun acc component -> Internal.add component acc) empty
+  let select_some_all set = select_some set
 end
 
 module ExpSet = Make_payload_set (Exp_component)
@@ -126,17 +115,6 @@ let cmds_of_size size tbl = (get_bucket size tbl).cmds
 let etrees_of_size size tbl = (get_bucket size tbl).etrees
 let ctrees_of_size size tbl = (get_bucket size tbl).ctrees
 
-let cap_bucket_by_score limit bucket =
-  {
-    exps = ExpSet.cap_by_score limit bucket.exps;
-    cmds = CmdSet.cap_by_score limit bucket.cmds;
-    etrees = ETreeSet.cap_by_score limit bucket.etrees;
-    ctrees = CTreeSet.cap_by_score limit bucket.ctrees;
-  }
-
-let cap_size_by_score limit bucket_size tbl =
-  update_bucket bucket_size (cap_bucket_by_score limit) tbl
-
 let fold_exps size tbl f acc =
   ExpSet.fold f (exps_of_size size tbl) acc
 
@@ -149,17 +127,61 @@ let fold_etrees size tbl f acc =
 let fold_ctrees size tbl f acc =
   CTreeSet.fold f (ctrees_of_size size tbl) acc
 
-let fold_top_exps limit size tbl f acc =
-  ExpSet.fold_top_by_score limit f (exps_of_size size tbl) acc
+let select_exps size tbl =
+  ExpSet.select_some_all (exps_of_size size tbl)
 
-let fold_top_cmds limit size tbl f acc =
-  CmdSet.fold_top_by_score limit f (cmds_of_size size tbl) acc
+let fold_selected_exps size tbl f acc =
+  select_exps size tbl |> List.fold_left (fun acc exp -> f exp acc) acc
 
-let fold_top_etrees limit size tbl f acc =
-  ETreeSet.fold_top_by_score limit f (etrees_of_size size tbl) acc
+let select_cmds size tbl =
+  CmdSet.select_some_all (cmds_of_size size tbl)
 
-let fold_top_ctrees limit size tbl f acc =
-  CTreeSet.fold_top_by_score limit f (ctrees_of_size size tbl) acc
+let fold_selected_cmds size tbl f acc =
+  select_cmds size tbl |> List.fold_left (fun acc cmd -> f cmd acc) acc
+
+let select_etrees size tbl =
+  ETreeSet.select_some_all (etrees_of_size size tbl)
+
+let fold_selected_etrees size tbl f acc =
+  select_etrees size tbl |> List.fold_left (fun acc etree -> f etree acc) acc
+let select_ctrees size tbl =
+  CTreeSet.select_some_all (ctrees_of_size size tbl)
+
+let fold_selected_ctrees size tbl f acc =
+  select_ctrees size tbl |> List.fold_left (fun acc ctree -> f ctree acc) acc
+
+let trim_size_with_heuristic size tbl =
+  match Size.Map.find_opt size tbl with
+  | None -> tbl
+  | Some _ ->
+      let exps =
+        select_exps size tbl
+        |> List.fold_left
+             (fun acc e -> ExpSet.add e acc)
+             ExpSet.empty
+      in
+      let cmds =
+        select_cmds size tbl
+        |> List.fold_left
+             (fun acc c -> CmdSet.add c acc)
+             CmdSet.empty
+      in
+      let etrees =
+        select_etrees size tbl
+        |> List.fold_left
+             (fun acc et -> ETreeSet.add et acc)
+             ETreeSet.empty
+      in
+      let ctrees =
+        select_ctrees size tbl
+        |> List.fold_left
+             (fun acc ct -> CTreeSet.add ct acc)
+             CTreeSet.empty
+      in
+      update_bucket size
+        (fun _ ->
+          { exps; cmds; etrees; ctrees })
+        tbl
 
 let exp_elements = ExpSet.elements
 

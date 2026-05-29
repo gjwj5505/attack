@@ -79,9 +79,8 @@ end
 - `Component_set`의 score top-N selection도 `Synthesis.Heuristic`을 통해 수행한다.
 - `Synthesis.Attack.component_cap = 1000`.
 - `heuristic_name = "none"`이면 grown bucket cap은 사실상 no-op이다.
-- Rule input product도 임시 제한:
-  - `Grow_util.binary_fanout_cap = 32`
-  - `Grow_util.ternary_fanout_cap = 10`
+- 컷팅/선별은 `Heuristic.select_some`이 전담하고, `Component_set`/`Grow_util`은
+  휴리스틱이 고른 후보를 그대로 순회한다.
 - `Grow_prog` / `Grow_proof`의 제한 fold는 `TEMP: random-score fanout cap` 표시.
 - 장기 방향:
   - random score를 analyzer-aware priority로 교체.
@@ -119,7 +118,7 @@ end
 - `lib/analyzer/analyzer.ml`: analyzer 선택 껍데기.
 - `lib/analyzer/engine/v260528/`, `lib/analyzer/engine/v260417/`: analyzer 구현.
 - `test/synthesis_test.ml`: regression tests.
-- 성공 공격 설명: `.codex/analyzer-attack-log.md`.
+- 성공 공격 설명: `.agents/analyzer-attack-log.md`.
 - 성공 공격 프로그램: `examples/yymmdd-*.d`.
 
 # Useful Commands

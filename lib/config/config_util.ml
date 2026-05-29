@@ -4,6 +4,7 @@ let attack () =
   Config.
     {
       vars;
+      target_var;
       ints;
       value_range;
       uops;

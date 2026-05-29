@@ -157,7 +157,7 @@ let append_attack_result_file index (result : Synthesis.Attack.result) =
 let run_synth_attack () =
   let cfg = Config_util.attack () in
   match
-    Synthesis.Attack.find_attack ~on_progress:print_attack_progress ~var:"x"
+    Synthesis.Attack.find_attack ~on_progress:print_attack_progress
       ~heuristic:(selected_heuristic ())
       ~analyzer:(selected_analyzer ())
       ~objectives:(selected_objectives ()) cfg
@@ -169,7 +169,7 @@ let run_synth_attack_all () =
   let cfg = Config_util.attack () in
   let bound = Size.make !bound_prog !bound_proof in
   let results =
-    Synthesis.Attack.find_all_attacks ~on_progress:print_attack_progress ~var:"x"
+    Synthesis.Attack.find_all_attacks ~on_progress:print_attack_progress
       ~heuristic:(selected_heuristic ())
       ~analyzer:(selected_analyzer ())
       ~objectives:(selected_objectives ()) cfg bound
@@ -186,7 +186,7 @@ let run_synth_attack_forever () =
   let cfg = Config_util.attack () in
   let attack_count = ref 0 in
   clear_attack_result_file ();
-  Synthesis.Attack.iter_attacks ~on_progress:print_attack_progress ~var:"x"
+  Synthesis.Attack.iter_attacks ~on_progress:print_attack_progress
     ~heuristic:(selected_heuristic ())
     ~analyzer:(selected_analyzer ())
     ~objectives:(selected_objectives ()) cfg

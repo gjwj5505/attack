@@ -7,7 +7,7 @@ module type HEURISTIC = sig
   val score_cmd : state -> Syntax.Cmd.t -> float
   val score_etree : state -> BigStep.etree -> float
   val score_ctree : state -> BigStep.ctree -> float
-  val select_top_by_score : limit:int -> score:('a -> float) -> 'a list -> 'a list
+  val select_some : state -> ('a * float) list -> ('a * float) list
 end
 
 type t = Pack : (module HEURISTIC with type state = 's) * 's -> t
@@ -20,16 +20,19 @@ let random1 ~seed =
 let random2 ~seed =
   Pack ((module Random2_heuristic), Random2_heuristic.make ~seed)
 
+let my ~seed = Pack ((module My_heuristic), My_heuristic.make ~seed)
+
 let current = ref none
 
 let set heuristic = current := heuristic
 
-let names () = "none|random1|random2"
+let names () = "none|random1|random2|my"
 
 let of_name ~seed = function
   | "none" -> Some none
   | "random1" -> Some (random1 ~seed)
   | "random2" -> Some (random2 ~seed)
+  | "my" -> Some (my ~seed)
   | _ -> None
 
 let score_exp (Pack ((module H), state)) exp = H.score_exp state exp
@@ -40,8 +43,8 @@ let score_etree (Pack ((module H), state)) etree = H.score_etree state etree
 
 let score_ctree (Pack ((module H), state)) ctree = H.score_ctree state ctree
 
-let select_top_by_score (Pack ((module H), _)) ~limit ~score items =
-  H.select_top_by_score ~limit ~score items
+let select_some (Pack ((module H), state)) items =
+  H.select_some state items
 
 let score_current_exp exp = score_exp !current exp
 
@@ -51,5 +54,5 @@ let score_current_etree etree = score_etree !current etree
 
 let score_current_ctree ctree = score_ctree !current ctree
 
-let select_current_top_by_score ~limit ~score items =
-  select_top_by_score !current ~limit ~score items
+let select_current_some (items : ('a * float) list) : ('a * float) list =
+  select_some !current items

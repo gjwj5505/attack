@@ -14,4 +14,4 @@ let score_etree () (_ : BigStep.etree) = 0.0
 
 let score_ctree () (_ : BigStep.ctree) = 0.0
 
-let select_top_by_score ~limit:_ ~score:_ items = items
+let select_some (_ : t) items = items

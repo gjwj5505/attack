@@ -96,4 +96,4 @@ random score 기반 pruning 구현입니다.
 - `lib/synthesis/component_pool/`: component wrapper, metadata, cap
 - `lib/analyzer/`: interval analyzer와 analyzer visualizer
 - `examples/`: 날짜별 공격 성공 프로그램
-- `.codex/analyzer-attack-log.md`: 성공한 공격 분석 로그
+- `.agents/analyzer-attack-log.md`: 성공한 공격 분석 로그

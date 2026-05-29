@@ -2,6 +2,7 @@ open Language
 
 type t = {
   vars : string list;
+  target_var : string;
   ints : int list;
   value_range : int * int;
   uops : Syntax.Exp.uop list;
@@ -12,6 +13,7 @@ type t = {
 }
 
 let vars = [ "x" (*; "y"*) ]
+let target_var = "x"
 
 let ints = [ -1; 0; 1 ]
 
@@ -27,7 +29,7 @@ let bops =
       (* Gt Ge는 (거의) 필요 없음 *)
     ]
 
-let heuristic_name = "random1"
+let heuristic_name = "my"
 
 let analyzer_name = "260528"
 

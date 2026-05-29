@@ -28,10 +28,12 @@ let equal_envs actual expected =
 
 let test_config ?(uops = Config.uops) ?(bops = Config.bops)
     ?(heuristic_name = Config.heuristic_name)
-    ?(analyzer_name = Config.analyzer_name) ?(seed = Config.seed) ~vars ~ints
+    ?(analyzer_name = Config.analyzer_name) ?(seed = Config.seed)
+    ?(target_var = Config.target_var) ~vars ~ints
     ~value_range () =
   {
     Config.vars;
+    target_var;
     ints;
     value_range;
     uops;
