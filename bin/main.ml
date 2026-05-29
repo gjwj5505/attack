@@ -13,7 +13,6 @@ let opt_verbose = ref false
 let objective_name = ref "top"
 let bound_prog = ref 0
 let bound_proof = ref 0
-let seed = ref Synthesis.Attack.default_seed
 
 let usage =
   "Usage : " ^ Filename.basename Sys.argv.(0) ^ " [-option] [filename] "
@@ -39,6 +38,26 @@ let selected_objectives () =
       fail_usage
         ("unknown objective: " ^ !objective_name ^ " (expected "
        ^ Synthesis.Objective.names () ^ ")")
+
+let selected_heuristic () =
+  let cfg = Config_util.attack () in
+  match
+    Synthesis.Heuristic.of_name ~seed:cfg.Config.seed cfg.Config.heuristic_name
+  with
+  | Some heuristic -> heuristic
+  | None ->
+      fail_usage
+        ("unknown heuristic: " ^ cfg.Config.heuristic_name ^ " (expected "
+       ^ Synthesis.Heuristic.names () ^ ")")
+
+let selected_analyzer () =
+  let cfg = Config_util.attack () in
+  match Analyzer.of_name cfg.Config.analyzer_name with
+  | Some analyzer -> analyzer
+  | None ->
+      fail_usage
+        ("unknown analyzer: " ^ cfg.Config.analyzer_name ^ " (expected "
+       ^ Analyzer.names () ^ ")")
 
 let blue s =
   "\027[34m" ^ s ^ "\027[0m"
@@ -87,8 +106,7 @@ let print_attack_result (result : Synthesis.Attack.result) =
   print_endline "== program ==";
   print_endline (Syntax.Cmd.string_of_lbl_t labeled_cmd);
   print_endline "== analysis result ==";
-  print_endline
-    (Analyzer.Abs_domain.Abs_env.string_of_t result.analysis_aenv);
+  print_endline (Analyzer.string_of_aenv result.analysis_aenv);
   print_endline "== proof tree ==";
   Visualizer.print_tree ~verbose:!opt_verbose (CTree result.tree)
 
@@ -131,26 +149,30 @@ let append_attack_result_file index (result : Synthesis.Attack.result) =
       Printf.fprintf oc "(* size = %s; concrete = %d; abstract = %s *)\n"
         (Size.to_string result.Synthesis.Attack.size)
         result.Synthesis.Attack.witness.cval
-        (Analyzer.Abs_domain.Abs_val.string_of_t
+        (Analyzer.string_of_aval
            result.Synthesis.Attack.witness.aval);
       output_string oc (string_of_source_cmd result.cmd);
       output_string oc "\n\n")
 
 let run_synth_attack () =
-  let cfg = Synthesis.Config.attack () in
+  let cfg = Config_util.attack () in
   match
     Synthesis.Attack.find_attack ~on_progress:print_attack_progress ~var:"x"
-      ~seed:!seed ~objectives:(selected_objectives ()) cfg
+      ~heuristic:(selected_heuristic ())
+      ~analyzer:(selected_analyzer ())
+      ~objectives:(selected_objectives ()) cfg
   with
   | None -> print_endline "No attack found"
   | Some result -> print_attack_result result
 
 let run_synth_attack_all () =
-  let cfg = Synthesis.Config.attack () in
+  let cfg = Config_util.attack () in
   let bound = Size.make !bound_prog !bound_proof in
   let results =
     Synthesis.Attack.find_all_attacks ~on_progress:print_attack_progress ~var:"x"
-      ~seed:!seed ~objectives:(selected_objectives ()) cfg bound
+      ~heuristic:(selected_heuristic ())
+      ~analyzer:(selected_analyzer ())
+      ~objectives:(selected_objectives ()) cfg bound
   in
   Printf.printf "Found %d attacks up to bound=%s\n"
     (List.length results) (Size.to_string bound);
@@ -161,11 +183,13 @@ let run_synth_attack_all () =
     results
 
 let run_synth_attack_forever () =
-  let cfg = Synthesis.Config.attack () in
+  let cfg = Config_util.attack () in
   let attack_count = ref 0 in
   clear_attack_result_file ();
   Synthesis.Attack.iter_attacks ~on_progress:print_attack_progress ~var:"x"
-    ~seed:!seed ~objectives:(selected_objectives ()) cfg
+    ~heuristic:(selected_heuristic ())
+    ~analyzer:(selected_analyzer ())
+    ~objectives:(selected_objectives ()) cfg
     ~on_results:(fun results ->
       List.iter
         (fun result ->
@@ -214,9 +238,6 @@ let main () =
       ( "-bound",
         Arg.Tuple [ Arg.Set_int bound_prog; Arg.Set_int bound_proof ],
         "set bounded attack search as <prog_size> <proof_size>" );
-      ( "-seed",
-        Arg.Set_int seed,
-        "set random seed for attack component scoring" );
     ]
     set_src usage;
 
@@ -256,11 +277,13 @@ let main () =
      Language.Interpreter.(def_intp pgm |> Mem.string_of_t |> print_endline));
   (if !opt_analyze then
      if !opt_verbose then
-       let sem = Analyzer.Analyzer_engine.analysis_sem pgm in
-       Analyzer.Visualizer.print_analysis_sem sem pgm
+       let sem =
+         Analyzer.analysis_sem (selected_analyzer ()) pgm
+       in
+       Analyzer.print_analysis_sem sem pgm
      else
-       Analyzer.Analyzer_engine.analysis pgm
-       |> Analyzer.Abs_domain.Abs_env.string_of_t
+       Analyzer.analysis (selected_analyzer ()) pgm
+       |> Analyzer.string_of_aenv
        |> print_endline);
   if !opt_big then begin
     let tree = Derivator.derive_cmd pgm Environment.empty in

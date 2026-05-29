@@ -1,0 +1,5 @@
+(library
+ (name attack_config)
+ (wrapped false)
+ (modules config config_util)
+ (libraries language))

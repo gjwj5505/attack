@@ -31,7 +31,7 @@ let is_eleaf_target target = Size.equal target (Size.make 1 1)
 let grow_eint (cfg : Config.t) target tbl =
   if not (is_eleaf_target target) then tbl
   else
-    Config.bounded_envs cfg
+    Config_util.bounded_envs cfg
     |> List.fold_left
          (fun tbl cenv ->
            List.fold_left
@@ -45,7 +45,7 @@ let grow_eint (cfg : Config.t) target tbl =
 let grow_evar (cfg : Config.t) target tbl =
   if not (is_eleaf_target target) then tbl
   else
-    Config.bounded_envs cfg
+    Config_util.bounded_envs cfg
     |> List.fold_left
          (fun tbl cenv ->
            List.fold_left
@@ -125,7 +125,7 @@ let grow_cassign (cfg : Config.t) target tbl =
              Grow_util.fold_etrees et_size tbl
                (fun et tbl ->
                  let cenv, e, cval = BigStep.get_e_concl et in
-                 if not (Config.is_in_bound cfg cval) then tbl
+                 if not (Config_util.is_in_bound cfg cval) then tbl
                  else
                    List.fold_left
                      (fun tbl x ->

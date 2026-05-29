@@ -1,4 +1,6 @@
+(include_subdirs qualified)
+
 (library
  (name analyzer)
- (modules analyzer_engine filter eval abs_domain itv dom dom_ex visualizer)
+ (modules :standard)
  (libraries language))

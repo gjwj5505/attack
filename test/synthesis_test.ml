@@ -26,6 +26,21 @@ let equal_envs actual expected =
   List.length actual = List.length expected
   && List.for_all2 equal_env actual expected
 
+let test_config ?(uops = Config.uops) ?(bops = Config.bops)
+    ?(heuristic_name = Config.heuristic_name)
+    ?(analyzer_name = Config.analyzer_name) ?(seed = Config.seed) ~vars ~ints
+    ~value_range () =
+  {
+    Config.vars;
+    ints;
+    value_range;
+    uops;
+    bops;
+    heuristic_name;
+    analyzer_name;
+    seed;
+  }
+
 let string_of_exps exps =
   exps |> Component_set.exp_elements
   |> List.map Syntax.Exp.string_of_t
@@ -210,8 +225,8 @@ let test_impossible_partition () =
   assert_true "impossible partition" (parts = [])
 
 let test_bounded_envs () =
-  let cfg = Config.make ~vars:[ "x"; "y" ] ~ints:[ 0 ] ~value_range:(0, 1) () in
-  let envs = Config.bounded_envs cfg in
+  let cfg = test_config ~vars:[ "x"; "y" ] ~ints:[ 0 ] ~value_range:(0, 1) () in
+  let envs = Config_util.bounded_envs cfg in
   let expected =
     [
       env_of_bindings [ ("x", 0); ("y", 0) ];
@@ -228,16 +243,16 @@ let test_bounded_envs () =
     (string_of_envs envs);
   assert_true "bounded_envs expected envs" (equal_envs envs expected);
   assert_true "valid_env accepts bounded env"
-    (Config.valid_env cfg (env_of_bindings [ ("x", 1); ("y", 0) ]));
+    (Config_util.valid_env cfg (env_of_bindings [ ("x", 1); ("y", 0) ]));
   assert_true "valid_env rejects unknown variable"
-    (not (Config.valid_env cfg env_with_unknown));
+    (not (Config_util.valid_env cfg env_with_unknown));
   assert_true "valid_env rejects out-of-range value"
-    (not (Config.valid_env cfg env_out_of_range))
+    (not (Config_util.valid_env cfg env_out_of_range))
 
 let test_bottom_up_initial_components () =
   let tbl =
     Bottom_up.build_up_to
-      (Config.make ~vars:[ "x"; "y" ] ~ints:[ 0; 1; 2 ] ~value_range:(0, 0) ())
+      (test_config ~vars:[ "x"; "y" ] ~ints:[ 0; 1; 2 ] ~value_range:(0, 0) ())
       (size 1 0)
   in
   assert_component_sizes "initial component sizes" tbl;
@@ -254,7 +269,7 @@ let test_bottom_up_initial_components () =
 let test_bottom_up_exp_growth () =
   let tbl =
     Bottom_up.build_up_to
-      (Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
+      (test_config ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
       (size 5 0)
   in
   assert_component_sizes "exp component sizes" tbl;
@@ -312,7 +327,7 @@ let test_bottom_up_exp_growth () =
        exps_5)
 
 let test_bottom_up_eint_growth () =
-  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
+  let cfg = test_config ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 1 1) in
   assert_component_sizes "eint component sizes" tbl;
   let etrees = Component_set.etrees_of_size (size 1 1) tbl in
@@ -334,7 +349,7 @@ let test_bottom_up_eint_growth () =
        etrees)
 
 let test_bottom_up_evar_growth () =
-  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
+  let cfg = test_config ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 1 1) in
   assert_component_sizes "evar component sizes" tbl;
   let etrees = Component_set.etrees_of_size (size 1 1) tbl in
@@ -356,7 +371,7 @@ let test_bottom_up_evar_growth () =
        etrees)
 
 let test_bottom_up_euop_growth () =
-  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
+  let cfg = test_config ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 2 2) in
   assert_component_sizes "euop component sizes" tbl;
   let etrees = Component_set.etrees_of_size (size 2 2) tbl in
@@ -376,7 +391,7 @@ let test_bottom_up_euop_growth () =
        etrees)
 
 let test_bottom_up_ebop_growth () =
-  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
+  let cfg = test_config ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 3 3) in
   assert_component_sizes "ebop component sizes" tbl;
   let etrees = Component_set.etrees_of_size (size 3 3) tbl in
@@ -406,7 +421,7 @@ let test_bottom_up_ebop_growth () =
        etrees)
 
 let test_bottom_up_cassign_growth () =
-  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
+  let cfg = test_config ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 2 2) in
   assert_component_sizes "cassign component sizes" tbl;
   let ctrees = Component_set.ctrees_of_size (size 2 2) tbl in
@@ -434,7 +449,7 @@ let test_bottom_up_cassign_growth () =
        ctrees)
 
 let test_bottom_up_cseq_growth () =
-  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
+  let cfg = test_config ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 5 5) in
   assert_component_sizes "cseq component sizes" tbl;
   let ctrees = Component_set.ctrees_of_size (size 5 5) tbl in
@@ -469,7 +484,7 @@ let test_bottom_up_cseq_growth () =
        ctrees)
 
 let test_bottom_up_ciftrue_growth () =
-  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
+  let cfg = test_config ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 6 4) in
   assert_component_sizes "ciftrue component sizes" tbl;
   let ctrees = Component_set.ctrees_of_size (size 6 4) tbl in
@@ -497,7 +512,7 @@ let test_bottom_up_ciftrue_growth () =
        ctrees)
 
 let test_bottom_up_ciffalse_growth () =
-  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
+  let cfg = test_config ~vars:[ "x" ] ~ints:[ 0; 1 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 6 4) in
   assert_component_sizes "ciffalse component sizes" tbl;
   let ctrees = Component_set.ctrees_of_size (size 6 4) tbl in
@@ -525,7 +540,7 @@ let test_bottom_up_ciffalse_growth () =
        ctrees)
 
 let test_bottom_up_cwhilefalse_growth () =
-  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 1) () in
+  let cfg = test_config ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 4 2) in
   assert_component_sizes "cwhilefalse component sizes" tbl;
   let ctrees = Component_set.ctrees_of_size (size 4 2) tbl in
@@ -546,7 +561,7 @@ let test_bottom_up_cwhilefalse_growth () =
        ctrees)
 
 let test_bottom_up_cwhiletrue_growth () =
-  let cfg = Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 1) () in
+  let cfg = test_config ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 1) () in
   let tbl = Bottom_up.build_up_to cfg (size 4 6) in
   assert_component_sizes "cwhiletrue component sizes" tbl;
   let ctrees = Component_set.ctrees_of_size (size 4 6) tbl in
@@ -583,7 +598,7 @@ let test_bottom_up_cwhiletrue_growth () =
 let test_bottom_up_assign_growth () =
   let tbl =
     Bottom_up.build_up_to
-      (Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
+      (test_config ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
       (size 4 0)
   in
   assert_component_sizes "assign component sizes" tbl;
@@ -613,7 +628,7 @@ let test_bottom_up_assign_growth () =
 let test_bottom_up_seq_growth () =
   let tbl =
     Bottom_up.build_up_to
-      (Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
+      (test_config ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
       (size 8 0)
   in
   assert_component_sizes "seq component sizes" tbl;
@@ -697,7 +712,7 @@ let test_bottom_up_seq_growth () =
 let test_bottom_up_if_growth () =
   let tbl =
     Bottom_up.build_up_to
-      (Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
+      (test_config ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
       (size 6 0)
   in
   assert_component_sizes "if component sizes" tbl;
@@ -717,7 +732,7 @@ let test_bottom_up_if_growth () =
 let test_bottom_up_while_growth () =
   let tbl =
     Bottom_up.build_up_to
-      (Config.make ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
+      (test_config ~vars:[ "x" ] ~ints:[ 0 ] ~value_range:(0, 0) ())
       (size 7 0)
   in
   assert_component_sizes "while component sizes" tbl;

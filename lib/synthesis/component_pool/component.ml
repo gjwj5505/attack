@@ -23,7 +23,7 @@ module Exp_component = struct
     type t = Exp.t
   end)
 
-  let make payload = make_with_score payload (Random.float 1.0) (* 임시로 랜덤 *)
+  let make payload = make_with_score payload (Heuristic.score_current_exp payload)
 end
 
 module Cmd_component = struct
@@ -31,7 +31,7 @@ module Cmd_component = struct
     type t = Cmd.t
   end)
 
-  let make payload = make_with_score payload (Random.float 1.0) (* 임시로 랜덤 *)
+  let make payload = make_with_score payload (Heuristic.score_current_cmd payload)
 end
 
 module Etree_component = struct
@@ -39,7 +39,8 @@ module Etree_component = struct
     type t = etree
   end)
 
-  let make payload = make_with_score payload (Random.float 1.0) (* 임시로 랜덤 *)
+  let make payload =
+    make_with_score payload (Heuristic.score_current_etree payload)
 end
 
 module Ctree_component = struct
@@ -47,5 +48,6 @@ module Ctree_component = struct
     type t = ctree
   end)
 
-  let make payload = make_with_score payload (Random.float 1.0) (* 임시로 랜덤 *)
+  let make payload =
+    make_with_score payload (Heuristic.score_current_ctree payload)
 end

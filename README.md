@@ -71,15 +71,16 @@ Big-Step proof tree 출력:
 ./attack -attack -objective top -bound 13 16
 ```
 
-현재 임시 random score heuristic의 seed를 지정할 수 있습니다.
+휴리스틱, 분석기 버전, random seed는 CLI 옵션이 아니라
+`lib/config/config.ml`의 `Config_util.attack ()`에서 설정합니다.
 
-```sh
-./attack -attack -objective top -seed 10
-```
+현재 가능한 이름은 heuristic `none|random1|random2`, analyzer `260417|260528`입니다.
 
 ## 현재 휴리스틱
 
-현재는 더 큰 크기까지 빠르게 가보기 위해 임시로 random score 기반 pruning을 사용합니다.
+휴리스틱은 `lib/config/config.ml`의 `heuristic_name`으로 선택합니다.
+`none`은 score/cap을 사용하지 않고, `random1`과 `random2`는 같은 임시
+random score 기반 pruning 구현입니다.
 
 - 각 size bucket은 score 상위 1000개 component만 유지합니다.
 - binary rule은 각 입력 bucket에서 상위 32개씩만 조합합니다.
@@ -96,4 +97,3 @@ Big-Step proof tree 출력:
 - `lib/analyzer/`: interval analyzer와 analyzer visualizer
 - `examples/`: 날짜별 공격 성공 프로그램
 - `.codex/analyzer-attack-log.md`: 성공한 공격 분석 로그
-

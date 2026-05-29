@@ -4,6 +4,7 @@
  (libraries
   language
   analyzer
+  attack_config
   synthesis))
 
 (rule

@@ -1,3 +1,6 @@
+휴리스틱 구조 조정하기
+분석기 갈아끼기 구조 조정하기
+
 -find_attack, find_all_attacks 구조 합치기.
 
 - Component에 analyzer-facing summary 포함

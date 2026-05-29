@@ -39,13 +39,8 @@ module Make_payload_set (C : Component) = struct
     Internal.for_all (fun component -> p (C.payload component)) set
 
   let top_by_score limit set =
-    if limit <= 0 then []
-    else
-      set |> Internal.elements
-      |> List.sort (fun left right ->
-             let by_score = Float.compare (C.score right) (C.score left) in
-             if by_score <> 0 then by_score else Stdlib.compare left right)
-      |> List.to_seq |> Seq.take limit |> List.of_seq
+    Heuristic.select_current_top_by_score ~limit ~score:C.score
+      (Internal.elements set)
 
   (* Temporary fanout control for the random-score experiment. This should
      eventually be replaced by analyzer-aware priority/diversity scheduling. *)

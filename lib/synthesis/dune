@@ -3,4 +3,4 @@
 (library
  (name synthesis)
  (modules :standard)
- (libraries language analyzer))
+ (libraries language analyzer attack_config))

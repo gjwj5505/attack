@@ -1,6 +1,19 @@
 # Analyzer Attack Log
 
+각 공격 항목에는 가능한 한 다음 metadata를 함께 기록한다.
+
+- Git version: 공격을 찾았거나 fix를 적용한 commit/hash.
+- Analyzer engine: `260417`, `260528` 같은 analyzer 선택 이름.
+- Heuristic: 사용한 synthesis heuristic 이름.
+- Command: 공격을 찾은 CLI 명령.
+
 ## 2026-04-21 - while 0 truthiness attack
+
+Metadata
+- Git version: not recorded
+- Analyzer engine: not recorded
+- Heuristic: not recorded
+- Command: not recorded
 
 공격 프로그램
 ```
@@ -24,6 +37,12 @@ while 0
 
 ## 2026-05-11 - one-iteration while widening precision attack
 
+Metadata
+- Git version: not recorded
+- Analyzer engine: not recorded
+- Heuristic: not recorded
+- Command: `./attack -attack -objective nonsingleton -bound 7 9`
+
 공격 프로그램
 ```
 x := 1;
@@ -35,7 +54,6 @@ while x
 - Big-Step concrete result: `x = 0`
 - Analyzer result: `x |-> [-∞,1]`
 - Objective: `nonsingleton`
-- Found by: `./attack -attack -objective nonsingleton -bound 7 9`
 
 분석기 약점
 - Concrete execution enters the loop once, assigns `x := 0`, then exits.
@@ -51,6 +69,12 @@ while x
   검토.
 
 ## 2026-05-22 - top attack via weak loop filtering and lost correlation
+
+Metadata
+- Git version: not recorded
+- Analyzer engine: not recorded
+- Heuristic: random score, seed not recorded
+- Command: `./attack -attack -objective top`
 
 공격 명령
 ```
