@@ -87,17 +87,13 @@ let grow_ebop (cfg : Config.t) target tbl =
          | [ et1_size; et2_size ] ->
              (* Original full fold:
                 Grow_util.fold_etrees et1_size tbl *)
-            Grow_util.fold_some_etrees
-              Grow_util.binary_fanout_cap
-              et1_size tbl
+            Grow_util.fold_some_etrees BigStep.GrowEBop et1_size tbl
                (* TEMP: random-score fanout cap *)
                (fun et1 tbl ->
                  let cenv1, e1, cval1 = BigStep.get_e_concl et1 in
                  (* Original full fold:
                     Grow_util.fold_etrees et2_size tbl *)
-                Grow_util.fold_some_etrees
-                  Grow_util.binary_fanout_cap
-                  et2_size
+                Grow_util.fold_some_etrees BigStep.GrowEBop et2_size
                    tbl
                    (fun et2 tbl ->
                      let cenv2, e2, cval2 = BigStep.get_e_concl et2 in
@@ -151,17 +147,13 @@ let grow_cseq target tbl =
          | [ ct1_size; ct2_size ] ->
              (* Original full fold:
                 Grow_util.fold_ctrees ct1_size tbl *)
-            Grow_util.fold_some_ctrees
-              Grow_util.binary_fanout_cap
-              ct1_size tbl
+            Grow_util.fold_some_ctrees BigStep.GrowCSeq ct1_size tbl
                (* TEMP: random-score fanout cap *)
                (fun ct1 tbl ->
                  let cenv1, c1, mid_cenv = BigStep.get_c_concl ct1 in
                  (* Original full fold:
                     Grow_util.fold_ctrees ct2_size tbl *)
-                Grow_util.fold_some_ctrees
-                  Grow_util.binary_fanout_cap
-                   ct2_size
+                Grow_util.fold_some_ctrees BigStep.GrowCSeq ct2_size
                    tbl
                    (fun ct2 tbl ->
                      let cenv2, c2, final_cenv = BigStep.get_c_concl ct2 in
@@ -194,9 +186,7 @@ let grow_ciftrue target tbl =
          | [ et_size; ct_size; c_size ] ->
              (* Original full fold:
                 Grow_util.fold_etrees et_size tbl *)
-            Grow_util.fold_some_etrees
-              Grow_util.ternary_fanout_cap
-              et_size tbl
+            Grow_util.fold_some_etrees BigStep.GrowCIfTrue et_size tbl
                (* TEMP: random-score fanout cap *)
                (fun et tbl ->
                  let cenv1, e1, cval1 = BigStep.get_e_concl et in
@@ -204,18 +194,14 @@ let grow_ciftrue target tbl =
                  else
                    (* Original full fold:
                       Grow_util.fold_ctrees ct_size tbl *)
-                   Grow_util.fold_some_ctrees
-                     Grow_util.ternary_fanout_cap
-                     ct_size tbl
+                   Grow_util.fold_some_ctrees BigStep.GrowCIfTrue ct_size tbl
                      (fun ct tbl ->
                        let cenv2, c2, branch_cenv = BigStep.get_c_concl ct in
                        if not (equal_cenv cenv1 cenv2) then tbl
                        else
                          (* Original full fold:
                             Grow_util.fold_cmds c_size tbl *)
-                         Grow_util.fold_some_cmds
-                           Grow_util.ternary_fanout_cap
-                           c_size tbl
+                         Grow_util.fold_some_cmds BigStep.GrowCIfTrue c_size tbl
                            (fun c3 tbl ->
                              add_pruned_ctree target
                                (BigStep.CIfTrue
@@ -246,9 +232,7 @@ let grow_ciffalse target tbl =
          | [ et_size; ct_size; c_size ] ->
              (* Original full fold:
                 Grow_util.fold_etrees et_size tbl *)
-            Grow_util.fold_some_etrees
-              Grow_util.ternary_fanout_cap
-              et_size tbl
+            Grow_util.fold_some_etrees BigStep.GrowCIfFalse et_size tbl
                (* TEMP: random-score fanout cap *)
                (fun et tbl ->
                  let cenv1, e1, cval1 = BigStep.get_e_concl et in
@@ -256,18 +240,14 @@ let grow_ciffalse target tbl =
                  else
                    (* Original full fold:
                       Grow_util.fold_ctrees ct_size tbl *)
-                   Grow_util.fold_some_ctrees
-                     Grow_util.ternary_fanout_cap
-                     ct_size tbl
+                   Grow_util.fold_some_ctrees BigStep.GrowCIfFalse ct_size tbl
                      (fun ct tbl ->
                        let cenv2, c2, branch_cenv = BigStep.get_c_concl ct in
                        if not (equal_cenv cenv1 cenv2) then tbl
                        else
                          (* Original full fold:
                             Grow_util.fold_cmds c_size tbl *)
-                         Grow_util.fold_some_cmds
-                           Grow_util.ternary_fanout_cap
-                           c_size tbl
+                         Grow_util.fold_some_cmds BigStep.GrowCIfFalse c_size tbl
                            (fun c3 tbl ->
                              add_pruned_ctree target
                                (BigStep.CIfFalse
@@ -292,9 +272,7 @@ let grow_cwhiletrue target tbl =
          | [ et_size; ct2_size; ct3_size ] ->
              (* Original full fold:
                 Grow_util.fold_etrees et_size tbl *)
-            Grow_util.fold_some_etrees
-              Grow_util.ternary_fanout_cap
-              et_size tbl
+            Grow_util.fold_some_etrees BigStep.GrowCWhileTrue et_size tbl
                (* TEMP: random-score fanout cap *)
                (fun et tbl ->
                  let cenv1, e1, cval1 = BigStep.get_e_concl et in
@@ -302,9 +280,7 @@ let grow_cwhiletrue target tbl =
                  else
                    (* Original full fold:
                       Grow_util.fold_ctrees ct2_size tbl *)
-                   Grow_util.fold_some_ctrees
-                     Grow_util.ternary_fanout_cap
-                     ct2_size tbl
+                   Grow_util.fold_some_ctrees BigStep.GrowCWhileTrue ct2_size tbl
                      (fun ct2 tbl ->
                        let cenv2, c2, body_final_cenv =
                          BigStep.get_c_concl ct2
@@ -313,9 +289,7 @@ let grow_cwhiletrue target tbl =
                        else
                          (* Original full fold:
                             Grow_util.fold_ctrees ct3_size tbl *)
-                         Grow_util.fold_some_ctrees
-                           Grow_util.ternary_fanout_cap
-                           ct3_size tbl
+                         Grow_util.fold_some_ctrees BigStep.GrowCWhileTrue ct3_size tbl
                            (fun ct3 tbl ->
                              let rest_init_cenv, c3, final_cenv =
                                BigStep.get_c_concl ct3
@@ -344,9 +318,7 @@ let grow_cwhilefalse target tbl =
          | [ et_size; c_size ] ->
              (* Original full fold:
                 Grow_util.fold_etrees et_size tbl *)
-            Grow_util.fold_some_etrees
-              Grow_util.binary_fanout_cap
-              et_size tbl
+            Grow_util.fold_some_etrees BigStep.GrowCWhileFalse et_size tbl
                (* TEMP: random-score fanout cap *)
                (fun et tbl ->
                  let cenv, e, cval = BigStep.get_e_concl et in
@@ -354,9 +326,7 @@ let grow_cwhilefalse target tbl =
                  else
                    (* Original full fold:
                       Grow_util.fold_cmds c_size tbl *)
-                   Grow_util.fold_some_cmds
-                     Grow_util.binary_fanout_cap
-                     c_size tbl
+                   Grow_util.fold_some_cmds BigStep.GrowCWhileFalse c_size tbl
                      (fun c tbl ->
                        add_pruned_ctree target
                          (BigStep.CWhileFalse

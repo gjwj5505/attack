@@ -10,31 +10,22 @@ let fold_etrees size tbl f acc =
 let fold_ctrees size tbl f acc =
   Component_set.fold_ctrees size tbl f acc
 
-let binary_fanout_cap = 32
+let fold_some_exps rule size tbl f acc =
+  Component_set.scored_exp_elements size tbl
+  |> Heuristic.choose_current_for_grow rule |> List.map fst
+  |> List.fold_left (fun acc e -> f e acc) acc
 
-let ternary_fanout_cap = 10
+let fold_some_cmds rule size tbl f acc =
+  Component_set.scored_cmd_elements size tbl
+  |> Heuristic.choose_current_for_grow rule |> List.map fst
+  |> List.fold_left (fun acc c -> f c acc) acc
 
-let take_n n xs =
-  let rec loop k xs acc =
-    match (k, xs) with
-    | 0, _ -> List.rev acc
-    | _, [] -> List.rev acc
-    | k, x :: xs -> loop (k - 1) xs (x :: acc)
-  in
-  loop n xs []
-
-let fold_some_exps cap size tbl f acc =
-  Component_set.select_exps size tbl |> take_n cap |> List.fold_left (fun acc e -> f e acc) acc
-
-let fold_some_cmds cap size tbl f acc =
-  Component_set.select_cmds size tbl |> take_n cap |> List.fold_left (fun acc c -> f c acc) acc
-
-let fold_some_etrees cap size tbl f acc =
-  Component_set.select_etrees size tbl
-  |> take_n cap
+let fold_some_etrees rule size tbl f acc =
+  Component_set.scored_etree_elements size tbl
+  |> Heuristic.choose_current_for_grow rule |> List.map fst
   |> List.fold_left (fun acc et -> f et acc) acc
 
-let fold_some_ctrees cap size tbl f acc =
-  Component_set.select_ctrees size tbl
-  |> take_n cap
+let fold_some_ctrees rule size tbl f acc =
+  Component_set.scored_ctree_elements size tbl
+  |> Heuristic.choose_current_for_grow rule |> List.map fst
   |> List.fold_left (fun acc ct -> f ct acc) acc

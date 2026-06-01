@@ -1,5 +1,6 @@
 휴리스틱 구조 조정하기
 binary, ternary 뽑는 갯수도 휴리스틱으로 지정
+select 하는 헬퍼 함수들 component_set.ml에서 다 빼서 휴리스틱으로 옮기기. 최대한 휴리스틱이 많은 것을 할 수 있게
 seed는 config에서만 설정하기. 입력으로도 받지 말기
 
 

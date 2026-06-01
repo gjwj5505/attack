@@ -21,6 +21,37 @@ and ctree =
   | CWhileTrue of (etree * ctree * ctree) * c_concl
   | CWhileFalse of etree * c_concl
 
+type grow_rule =
+  | GrowProgBop
+  | GrowProgSeq
+  | GrowProgIf
+  | GrowProgWhile
+  | GrowEInt
+  | GrowEVar
+  | GrowEBop
+  | GrowEUop
+  | GrowCAssign
+  | GrowCSeq
+  | GrowCIfTrue
+  | GrowCIfFalse
+  | GrowCWhileTrue
+  | GrowCWhileFalse
+
+type grow_rule_arity = Unary | Binary | Ternary
+
+let arity_of_grow_rule = function
+  | GrowEInt | GrowEVar | GrowEUop | GrowCAssign -> Unary
+  | GrowProgBop | GrowProgSeq | GrowProgWhile | GrowEBop | GrowCSeq
+  | GrowCWhileFalse ->
+      Binary
+  | GrowProgIf | GrowCIfTrue | GrowCIfFalse | GrowCWhileTrue -> Ternary
+
+let is_binary_grow_rule rule =
+  match arity_of_grow_rule rule with Binary -> true | _ -> false
+
+let is_ternary_grow_rule rule =
+  match arity_of_grow_rule rule with Ternary -> true | _ -> false
+
 let get_e_concl = function
   | EInt (_, c) | EVar (_, c) | EBop (_, c) | EUop (_, c) -> c
 

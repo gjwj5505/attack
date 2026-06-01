@@ -38,13 +38,17 @@ module Make_payload_set (C : Component) = struct
   let for_all p set =
     Internal.for_all (fun component -> p (C.payload component)) set
 
-  let select_some set =
+  let scored_elements set =
     set |> Internal.elements
     |> List.map (fun component -> (C.payload component, C.score component))
-    |> Heuristic.select_current_some
-    |> List.map fst
 
-  let select_some_all set = select_some set
+  let trim_with_heuristic set =
+    set |> Internal.elements
+    |> List.map (fun component -> (component, C.score component))
+    |> Heuristic.trim_current
+    |> List.fold_left
+         (fun acc (component, _score) -> Internal.add component acc)
+         Internal.empty
 end
 
 module ExpSet = Make_payload_set (Exp_component)
@@ -127,57 +131,15 @@ let fold_etrees size tbl f acc =
 let fold_ctrees size tbl f acc =
   CTreeSet.fold f (ctrees_of_size size tbl) acc
 
-let select_exps size tbl =
-  ExpSet.select_some_all (exps_of_size size tbl)
-
-let fold_selected_exps size tbl f acc =
-  select_exps size tbl |> List.fold_left (fun acc exp -> f exp acc) acc
-
-let select_cmds size tbl =
-  CmdSet.select_some_all (cmds_of_size size tbl)
-
-let fold_selected_cmds size tbl f acc =
-  select_cmds size tbl |> List.fold_left (fun acc cmd -> f cmd acc) acc
-
-let select_etrees size tbl =
-  ETreeSet.select_some_all (etrees_of_size size tbl)
-
-let fold_selected_etrees size tbl f acc =
-  select_etrees size tbl |> List.fold_left (fun acc etree -> f etree acc) acc
-let select_ctrees size tbl =
-  CTreeSet.select_some_all (ctrees_of_size size tbl)
-
-let fold_selected_ctrees size tbl f acc =
-  select_ctrees size tbl |> List.fold_left (fun acc ctree -> f ctree acc) acc
-
 let trim_size_with_heuristic size tbl =
   match Size.Map.find_opt size tbl with
   | None -> tbl
   | Some _ ->
-      let exps =
-        select_exps size tbl
-        |> List.fold_left
-             (fun acc e -> ExpSet.add e acc)
-             ExpSet.empty
-      in
-      let cmds =
-        select_cmds size tbl
-        |> List.fold_left
-             (fun acc c -> CmdSet.add c acc)
-             CmdSet.empty
-      in
-      let etrees =
-        select_etrees size tbl
-        |> List.fold_left
-             (fun acc et -> ETreeSet.add et acc)
-             ETreeSet.empty
-      in
-      let ctrees =
-        select_ctrees size tbl
-        |> List.fold_left
-             (fun acc ct -> CTreeSet.add ct acc)
-             CTreeSet.empty
-      in
+      let bucket = get_bucket size tbl in
+      let exps = ExpSet.trim_with_heuristic bucket.exps in
+      let cmds = CmdSet.trim_with_heuristic bucket.cmds in
+      let etrees = ETreeSet.trim_with_heuristic bucket.etrees in
+      let ctrees = CTreeSet.trim_with_heuristic bucket.ctrees in
       update_bucket size
         (fun _ ->
           { exps; cmds; etrees; ctrees })
@@ -190,6 +152,16 @@ let cmd_elements = CmdSet.elements
 let etree_elements = ETreeSet.elements
 
 let ctree_elements = CTreeSet.elements
+
+let scored_exp_elements size tbl = ExpSet.scored_elements (exps_of_size size tbl)
+
+let scored_cmd_elements size tbl = CmdSet.scored_elements (cmds_of_size size tbl)
+
+let scored_etree_elements size tbl =
+  ETreeSet.scored_elements (etrees_of_size size tbl)
+
+let scored_ctree_elements size tbl =
+  CTreeSet.scored_elements (ctrees_of_size size tbl)
 
 let contains_exp = ExpSet.mem
 let contains_cmd = CmdSet.mem

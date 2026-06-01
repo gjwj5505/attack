@@ -29,7 +29,7 @@ let bops =
       (* Gt Ge는 (거의) 필요 없음 *)
     ]
 
-let heuristic_name = "my"
+let heuristic_name = "random1"
 
 let analyzer_name = "260528"
 

@@ -47,15 +47,11 @@ let grow_bop (cfg : Config.t) target tbl =
          | [ e1_size; e2_size ] ->
              (* Original full fold:
                 Grow_util.fold_exps e1_size tbl *)
-            Grow_util.fold_some_exps
-              Grow_util.binary_fanout_cap
-               e1_size tbl
+            Grow_util.fold_some_exps BigStep.GrowProgBop e1_size tbl
                (fun e1 tbl ->
                  (* Original full fold:
                     Grow_util.fold_exps e2_size tbl *)
-                Grow_util.fold_some_exps
-                  Grow_util.binary_fanout_cap
-                   e2_size tbl
+                Grow_util.fold_some_exps BigStep.GrowProgBop e2_size tbl
                    (fun e2 tbl ->
                      List.fold_left
                        (fun tbl op ->
@@ -93,15 +89,11 @@ let grow_seq target tbl =
          | [ c1_size; c2_size ] ->
              (* Original full fold:
                 Grow_util.fold_cmds c1_size tbl *)
-            Grow_util.fold_some_cmds
-              Grow_util.binary_fanout_cap
-              c1_size tbl
+            Grow_util.fold_some_cmds BigStep.GrowProgSeq c1_size tbl
                (fun c1 tbl ->
                  (* Original full fold:
                     Grow_util.fold_cmds c2_size tbl *)
-                Grow_util.fold_some_cmds
-                  Grow_util.binary_fanout_cap
-                   c2_size tbl
+                Grow_util.fold_some_cmds BigStep.GrowProgSeq c2_size tbl
                    (fun c2 tbl ->
                      add_pruned_cmd target
                        (Syntax.Cmd.Seq
@@ -125,22 +117,16 @@ let grow_if target tbl =
          | [ e_size; c1_size; c2_size ] ->
              (* Original full fold:
                 Grow_util.fold_exps e_size tbl *)
-            Grow_util.fold_some_exps
-              Grow_util.ternary_fanout_cap
-              e_size tbl
+            Grow_util.fold_some_exps BigStep.GrowProgIf e_size tbl
                (fun e tbl ->
                  (* Original full fold:
                     Grow_util.fold_cmds c1_size tbl *)
-                 Grow_util.fold_some_cmds
-                   Grow_util.ternary_fanout_cap
-                   c1_size
+                 Grow_util.fold_some_cmds BigStep.GrowProgIf c1_size
                    tbl
                    (fun c1 tbl ->
                      (* Original full fold:
                         Grow_util.fold_cmds c2_size tbl *)
-                     Grow_util.fold_some_cmds
-                       Grow_util.ternary_fanout_cap
-                       c2_size tbl
+                     Grow_util.fold_some_cmds BigStep.GrowProgIf c2_size tbl
                        (fun c2 tbl ->
                          add_pruned_cmd target
                            (Syntax.Cmd.If
@@ -163,15 +149,11 @@ let grow_while target tbl =
          | [ e_size; c_size ] ->
              (* Original full fold:
                 Grow_util.fold_exps e_size tbl *)
-            Grow_util.fold_some_exps
-              Grow_util.binary_fanout_cap
-              e_size tbl
+            Grow_util.fold_some_exps BigStep.GrowProgWhile e_size tbl
                (fun e tbl ->
                  (* Original full fold:
                     Grow_util.fold_cmds c_size tbl *)
-                Grow_util.fold_some_cmds
-                  Grow_util.binary_fanout_cap
-                   c_size tbl
+                Grow_util.fold_some_cmds BigStep.GrowProgWhile c_size tbl
                    (fun c tbl ->
                      add_pruned_cmd target
                        (Syntax.Cmd.While (e, Syntax.Cmd.dummy_lbl c))

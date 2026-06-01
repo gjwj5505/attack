@@ -7,7 +7,10 @@ module type HEURISTIC = sig
   val score_cmd : state -> Syntax.Cmd.t -> float
   val score_etree : state -> BigStep.etree -> float
   val score_ctree : state -> BigStep.ctree -> float
-  val select_some : state -> ('a * float) list -> ('a * float) list
+  val choose_n : state -> int -> ('a * float) list -> ('a * float) list
+  val trim : state -> ('a * float) list -> ('a * float) list
+  val choose_for_grow :
+    state -> BigStep.grow_rule -> ('a * float) list -> ('a * float) list
 end
 
 type t = Pack : (module HEURISTIC with type state = 's) * 's -> t
@@ -43,8 +46,12 @@ let score_etree (Pack ((module H), state)) etree = H.score_etree state etree
 
 let score_ctree (Pack ((module H), state)) ctree = H.score_ctree state ctree
 
-let select_some (Pack ((module H), state)) items =
-  H.select_some state items
+let choose_n (Pack ((module H), state)) n items = H.choose_n state n items
+
+let trim (Pack ((module H), state)) items = H.trim state items
+
+let choose_for_grow (Pack ((module H), state)) rule items =
+  H.choose_for_grow state rule items
 
 let score_current_exp exp = score_exp !current exp
 
@@ -54,5 +61,12 @@ let score_current_etree etree = score_etree !current etree
 
 let score_current_ctree ctree = score_ctree !current ctree
 
-let select_current_some (items : ('a * float) list) : ('a * float) list =
-  select_some !current items
+let choose_current_n n (items : ('a * float) list) : ('a * float) list =
+  choose_n !current n items
+
+let trim_current (items : ('a * float) list) : ('a * float) list =
+  trim !current items
+
+let choose_current_for_grow rule (items : ('a * float) list) :
+    ('a * float) list =
+  choose_for_grow !current rule items

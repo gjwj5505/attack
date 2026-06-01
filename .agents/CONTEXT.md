@@ -81,6 +81,13 @@ end
 - `heuristic_name = "none"`이면 grown bucket cap은 사실상 no-op이다.
 - 컷팅/선별은 `Heuristic.select_some`이 전담하고, `Component_set`/`Grow_util`은
   휴리스틱이 고른 후보를 그대로 순회한다.
+- Heuristic selection API는 `choose_n`, `trim`, `choose_for_grow`로 나뉜다.
+  `trim`/`choose_for_grow`는 각 휴리스틱 내부에서 `choose_n`을 재사용할 수 있다.
+  `choose_for_grow`의 선택 개수도 휴리스틱 내부 정책이다.
+  `choose_for_grow`는 `BigStep.grow_rule`을 받아 rule별/binary/ternary별 정책을
+  정할 수 있고, arity 구분은 `BigStep.arity_of_grow_rule` 헬퍼가 담당한다.
+  `Bottom_up.grow_at_size`는 grow를 끝낸 뒤 `Component_set.trim_size_with_heuristic`
+  으로 현재 size bucket을 `Heuristic.trim` 결과만 남기게 한다.
 - `Grow_prog` / `Grow_proof`의 제한 fold는 `TEMP: random-score fanout cap` 표시.
 - 장기 방향:
   - random score를 analyzer-aware priority로 교체.

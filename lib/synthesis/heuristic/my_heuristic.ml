@@ -211,7 +211,13 @@ let weighted_sample_without_replacement (t : t) k items =
   in
   aux k items []
 
-let select_some (t : t) items =
+let choose_n (_t : t) n items =
+  items
+  |> List.stable_sort
+       (fun (_, left) (_, right) -> Float.compare right left)
+  |> fun items -> fst (split_at n items)
+
+let trim (t : t) items =
   let fixed_count = 300 in
   let max_count = 1000 in
   let by_score =
@@ -226,3 +232,9 @@ let select_some (t : t) items =
   let sample_count = max 0 (min (max_count - fixed_len) (List.length remaining)) in
   let sampled = weighted_sample_without_replacement t sample_count remaining in
   kept_fixed @ sampled
+
+let grow_count = function
+  | rule when BigStep.is_ternary_grow_rule rule -> 10
+  | _ -> 32
+
+let choose_for_grow t rule items = choose_n t (grow_count rule) items
