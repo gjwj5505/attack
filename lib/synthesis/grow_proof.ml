@@ -82,21 +82,23 @@ let grow_ebop (cfg : Config.t) target tbl =
   let payload = Size.sub target (Size.make 1 1) in
   Partition.partition_with_constraints payload
     [ Partition.proof_component; Partition.proof_component ]
-  |> List.fold_left
+    |> List.fold_left
        (fun tbl -> function
          | [ et1_size; et2_size ] ->
              (* Original full fold:
                 Grow_util.fold_etrees et1_size tbl *)
-            Grow_util.fold_some_etrees Grow_util.binary_fanout_cap et1_size tbl
+            Grow_util.fold_some_etrees
+              Grow_util.binary_fanout_cap
+              et1_size tbl
                (* TEMP: random-score fanout cap *)
                (fun et1 tbl ->
                  let cenv1, e1, cval1 = BigStep.get_e_concl et1 in
                  (* Original full fold:
                     Grow_util.fold_etrees et2_size tbl *)
                 Grow_util.fold_some_etrees
-                  Grow_util.binary_fanout_cap et2_size
+                  Grow_util.binary_fanout_cap
+                  et2_size
                    tbl
-                   (* TEMP: random-score fanout cap *)
                    (fun et2 tbl ->
                      let cenv2, e2, cval2 = BigStep.get_e_concl et2 in
                      if not (equal_cenv cenv1 cenv2) then tbl
@@ -144,20 +146,23 @@ let grow_cseq target tbl =
   let payload = Size.sub target (Size.make 1 1) in
   Partition.partition_with_constraints payload
     [ Partition.proof_component; Partition.proof_component ]
-  |> List.fold_left
+    |> List.fold_left
        (fun tbl -> function
          | [ ct1_size; ct2_size ] ->
              (* Original full fold:
                 Grow_util.fold_ctrees ct1_size tbl *)
-            Grow_util.fold_some_ctrees Grow_util.binary_fanout_cap ct1_size tbl
+            Grow_util.fold_some_ctrees
+              Grow_util.binary_fanout_cap
+              ct1_size tbl
                (* TEMP: random-score fanout cap *)
                (fun ct1 tbl ->
                  let cenv1, c1, mid_cenv = BigStep.get_c_concl ct1 in
                  (* Original full fold:
                     Grow_util.fold_ctrees ct2_size tbl *)
-                Grow_util.fold_some_ctrees Grow_util.binary_fanout_cap ct2_size
+                Grow_util.fold_some_ctrees
+                  Grow_util.binary_fanout_cap
+                   ct2_size
                    tbl
-                   (* TEMP: random-score fanout cap *)
                    (fun ct2 tbl ->
                      let cenv2, c2, final_cenv = BigStep.get_c_concl ct2 in
                      if not (equal_cenv mid_cenv cenv2) then tbl
@@ -184,12 +189,14 @@ let grow_ciftrue target tbl =
       Partition.proof_component;
       Partition.prog_component;
     ]
-  |> List.fold_left
+    |> List.fold_left
        (fun tbl -> function
          | [ et_size; ct_size; c_size ] ->
              (* Original full fold:
                 Grow_util.fold_etrees et_size tbl *)
-            Grow_util.fold_some_etrees Grow_util.ternary_fanout_cap et_size tbl
+            Grow_util.fold_some_etrees
+              Grow_util.ternary_fanout_cap
+              et_size tbl
                (* TEMP: random-score fanout cap *)
                (fun et tbl ->
                  let cenv1, e1, cval1 = BigStep.get_e_concl et in
@@ -198,8 +205,8 @@ let grow_ciftrue target tbl =
                    (* Original full fold:
                       Grow_util.fold_ctrees ct_size tbl *)
                    Grow_util.fold_some_ctrees
-                     Grow_util.ternary_fanout_cap ct_size tbl
-                     (* TEMP: random-score fanout cap *)
+                     Grow_util.ternary_fanout_cap
+                     ct_size tbl
                      (fun ct tbl ->
                        let cenv2, c2, branch_cenv = BigStep.get_c_concl ct in
                        if not (equal_cenv cenv1 cenv2) then tbl
@@ -207,8 +214,8 @@ let grow_ciftrue target tbl =
                          (* Original full fold:
                             Grow_util.fold_cmds c_size tbl *)
                          Grow_util.fold_some_cmds
-                           Grow_util.ternary_fanout_cap c_size tbl
-                           (* TEMP: random-score fanout cap *)
+                           Grow_util.ternary_fanout_cap
+                           c_size tbl
                            (fun c3 tbl ->
                              add_pruned_ctree target
                                (BigStep.CIfTrue
@@ -234,12 +241,14 @@ let grow_ciffalse target tbl =
       Partition.proof_component;
       Partition.prog_component;
     ]
-  |> List.fold_left
+    |> List.fold_left
        (fun tbl -> function
          | [ et_size; ct_size; c_size ] ->
              (* Original full fold:
                 Grow_util.fold_etrees et_size tbl *)
-            Grow_util.fold_some_etrees Grow_util.ternary_fanout_cap et_size tbl
+            Grow_util.fold_some_etrees
+              Grow_util.ternary_fanout_cap
+              et_size tbl
                (* TEMP: random-score fanout cap *)
                (fun et tbl ->
                  let cenv1, e1, cval1 = BigStep.get_e_concl et in
@@ -248,8 +257,8 @@ let grow_ciffalse target tbl =
                    (* Original full fold:
                       Grow_util.fold_ctrees ct_size tbl *)
                    Grow_util.fold_some_ctrees
-                     Grow_util.ternary_fanout_cap ct_size tbl
-                     (* TEMP: random-score fanout cap *)
+                     Grow_util.ternary_fanout_cap
+                     ct_size tbl
                      (fun ct tbl ->
                        let cenv2, c2, branch_cenv = BigStep.get_c_concl ct in
                        if not (equal_cenv cenv1 cenv2) then tbl
@@ -257,8 +266,8 @@ let grow_ciffalse target tbl =
                          (* Original full fold:
                             Grow_util.fold_cmds c_size tbl *)
                          Grow_util.fold_some_cmds
-                           Grow_util.ternary_fanout_cap c_size tbl
-                           (* TEMP: random-score fanout cap *)
+                           Grow_util.ternary_fanout_cap
+                           c_size tbl
                            (fun c3 tbl ->
                              add_pruned_ctree target
                                (BigStep.CIfFalse
@@ -278,12 +287,14 @@ let grow_ciffalse target tbl =
 
 let grow_cwhiletrue target tbl =
   Partition.partition_special_while target
-  |> List.fold_left
+    |> List.fold_left
        (fun tbl -> function
          | [ et_size; ct2_size; ct3_size ] ->
              (* Original full fold:
                 Grow_util.fold_etrees et_size tbl *)
-            Grow_util.fold_some_etrees Grow_util.ternary_fanout_cap et_size tbl
+            Grow_util.fold_some_etrees
+              Grow_util.ternary_fanout_cap
+              et_size tbl
                (* TEMP: random-score fanout cap *)
                (fun et tbl ->
                  let cenv1, e1, cval1 = BigStep.get_e_concl et in
@@ -292,8 +303,8 @@ let grow_cwhiletrue target tbl =
                    (* Original full fold:
                       Grow_util.fold_ctrees ct2_size tbl *)
                    Grow_util.fold_some_ctrees
-                     Grow_util.ternary_fanout_cap ct2_size tbl
-                     (* TEMP: random-score fanout cap *)
+                     Grow_util.ternary_fanout_cap
+                     ct2_size tbl
                      (fun ct2 tbl ->
                        let cenv2, c2, body_final_cenv =
                          BigStep.get_c_concl ct2
@@ -303,8 +314,8 @@ let grow_cwhiletrue target tbl =
                          (* Original full fold:
                             Grow_util.fold_ctrees ct3_size tbl *)
                          Grow_util.fold_some_ctrees
-                           Grow_util.ternary_fanout_cap ct3_size tbl
-                           (* TEMP: random-score fanout cap *)
+                           Grow_util.ternary_fanout_cap
+                           ct3_size tbl
                            (fun ct3 tbl ->
                              let rest_init_cenv, c3, final_cenv =
                                BigStep.get_c_concl ct3
@@ -328,12 +339,14 @@ let grow_cwhilefalse target tbl =
   let payload = Size.sub target (Size.make 1 1) in
   Partition.partition_with_constraints payload
     [ Partition.proof_component; Partition.prog_component ]
-  |> List.fold_left
+    |> List.fold_left
        (fun tbl -> function
          | [ et_size; c_size ] ->
              (* Original full fold:
                 Grow_util.fold_etrees et_size tbl *)
-            Grow_util.fold_some_etrees Grow_util.binary_fanout_cap et_size tbl
+            Grow_util.fold_some_etrees
+              Grow_util.binary_fanout_cap
+              et_size tbl
                (* TEMP: random-score fanout cap *)
                (fun et tbl ->
                  let cenv, e, cval = BigStep.get_e_concl et in
@@ -342,8 +355,8 @@ let grow_cwhilefalse target tbl =
                    (* Original full fold:
                       Grow_util.fold_cmds c_size tbl *)
                    Grow_util.fold_some_cmds
-                     Grow_util.binary_fanout_cap c_size tbl
-                     (* TEMP: random-score fanout cap *)
+                     Grow_util.binary_fanout_cap
+                     c_size tbl
                      (fun c tbl ->
                        add_pruned_ctree target
                          (BigStep.CWhileFalse

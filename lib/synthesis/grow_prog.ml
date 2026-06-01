@@ -42,19 +42,20 @@ let grow_bop (cfg : Config.t) target tbl =
   let payload = Size.sub target (Size.make 1 0) in
   Partition.partition_with_constraints payload
     [ Partition.prog_component; Partition.prog_component ]
-  |> List.fold_left
+    |> List.fold_left
        (fun tbl -> function
          | [ e1_size; e2_size ] ->
              (* Original full fold:
                 Grow_util.fold_exps e1_size tbl *)
-            Grow_util.fold_some_exps Grow_util.binary_fanout_cap
+            Grow_util.fold_some_exps
+              Grow_util.binary_fanout_cap
                e1_size tbl
                (fun e1 tbl ->
                  (* Original full fold:
                     Grow_util.fold_exps e2_size tbl *)
-                Grow_util.fold_some_exps Grow_util.binary_fanout_cap
+                Grow_util.fold_some_exps
+                  Grow_util.binary_fanout_cap
                    e2_size tbl
-                   (* TEMP: random-score fanout cap *)
                    (fun e2 tbl ->
                      List.fold_left
                        (fun tbl op ->
@@ -87,19 +88,20 @@ let grow_seq target tbl =
   let payload = Size.sub target (Size.make 1 0) in
   Partition.partition_with_constraints payload
     [ Partition.prog_component; Partition.prog_component ]
-  |> List.fold_left
+    |> List.fold_left
        (fun tbl -> function
          | [ c1_size; c2_size ] ->
              (* Original full fold:
                 Grow_util.fold_cmds c1_size tbl *)
-            Grow_util.fold_some_cmds Grow_util.binary_fanout_cap
+            Grow_util.fold_some_cmds
+              Grow_util.binary_fanout_cap
               c1_size tbl
                (fun c1 tbl ->
                  (* Original full fold:
                     Grow_util.fold_cmds c2_size tbl *)
-                Grow_util.fold_some_cmds Grow_util.binary_fanout_cap
+                Grow_util.fold_some_cmds
+                  Grow_util.binary_fanout_cap
                    c2_size tbl
-                   (* TEMP: random-score fanout cap *)
                    (fun c2 tbl ->
                      add_pruned_cmd target
                        (Syntax.Cmd.Seq
@@ -118,27 +120,27 @@ let grow_if target tbl =
       Partition.prog_component;
       Partition.prog_component;
     ]
-  |> List.fold_left
+    |> List.fold_left
        (fun tbl -> function
          | [ e_size; c1_size; c2_size ] ->
              (* Original full fold:
                 Grow_util.fold_exps e_size tbl *)
-            Grow_util.fold_some_exps Grow_util.ternary_fanout_cap
+            Grow_util.fold_some_exps
+              Grow_util.ternary_fanout_cap
               e_size tbl
                (fun e tbl ->
                  (* Original full fold:
                     Grow_util.fold_cmds c1_size tbl *)
-                 Grow_util.fold_some_cmds Grow_util.ternary_fanout_cap
+                 Grow_util.fold_some_cmds
+                   Grow_util.ternary_fanout_cap
                    c1_size
                    tbl
-                   (* TEMP: random-score fanout cap *)
                    (fun c1 tbl ->
                      (* Original full fold:
                         Grow_util.fold_cmds c2_size tbl *)
                      Grow_util.fold_some_cmds
                        Grow_util.ternary_fanout_cap
                        c2_size tbl
-                       (* TEMP: random-score fanout cap *)
                        (fun c2 tbl ->
                          add_pruned_cmd target
                            (Syntax.Cmd.If
@@ -156,19 +158,20 @@ let grow_while target tbl =
   let payload = Size.sub target (Size.make 1 0) in
   Partition.partition_with_constraints payload
     [ Partition.prog_component; Partition.prog_component ]
-  |> List.fold_left
+    |> List.fold_left
        (fun tbl -> function
          | [ e_size; c_size ] ->
              (* Original full fold:
                 Grow_util.fold_exps e_size tbl *)
-            Grow_util.fold_some_exps Grow_util.binary_fanout_cap
+            Grow_util.fold_some_exps
+              Grow_util.binary_fanout_cap
               e_size tbl
                (fun e tbl ->
                  (* Original full fold:
                     Grow_util.fold_cmds c_size tbl *)
-                Grow_util.fold_some_cmds Grow_util.binary_fanout_cap
+                Grow_util.fold_some_cmds
+                  Grow_util.binary_fanout_cap
                    c_size tbl
-                   (* TEMP: random-score fanout cap *)
                    (fun c tbl ->
                      add_pruned_cmd target
                        (Syntax.Cmd.While (e, Syntax.Cmd.dummy_lbl c))
