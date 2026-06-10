@@ -1,138 +1,106 @@
 # Context
 
 정적 분석기가 false alarm 또는 unsound result를 내는 프로그램을 합성하는
-프로젝트. 프로그램 자체가 아니라 Big-Step proof tree를 bottom-up으로 합성하고,
-tree 결론의 command를 analyzer에 넣어 공격 성공 여부를 확인한다.
+프로젝트. 현재 코드는 G 언어 baseline이며, 다음 큰 방향은 C subset 언어로
+차근차근 전환하는 것이다.
 
-# Current Shape
+# Current State
 
-- Entry: `bin/main.ml`, root executable: `./attack`.
-- Attack config는 `Config_util.attack ()`이 `Config.t` record를 만들어 반환한다.
-- User-tunable config lives in `lib/config/config.ml`.
-  - 직접 수정할 값: `vars`, `ints`, `value_range`, `uops`, `bops`,
+- Entry: `bin/main.ml`, executable: `./attack`.
+- 기존 G source extension은 `.g`였고, C rewrite 이후 예제는 `.c`를 사용한다.
+- C subset rewrite 준비를 위해 현재 프로젝트는 language-only shell 상태다.
+  - `bin/main.ml`은 `-pp`, `-tab`, `-tintp`, `-dintp`, `-big`만 유지한다.
+  - `-attack`, `-analyze`, `-forever`, `-objective`, `-bound`는 임시 비활성화됐다.
+  - `analyzer`, `attack_config`, `synthesis`, `test` dune stanzas는
+    `(enabled_if false)`로 꺼져 있다.
+- Attack config는 `Config_util.attack ()`이 만든다.
+  - 주요 값: `vars`, `ints`, `value_range`, `uops`, `bops`,
     `heuristic_name`, `analyzer_name`, `seed`.
-  - 기본 변수는 `x`.
-- Derived helper functions such as `attack`, env enumeration/checking, bounds
-  checks live in `lib/config/config_util.ml`.
-- 프로그램 시작 concrete memory는 all-zero로 본다.
-- 선택된 Analyzer는 concrete initial memory를 받을 수 있고, 없으면 all-zero로 돈다.
-- Attack check는 proof tree initial concrete memory가 config 변수들에 대해
-  all-zero일 때만 수행한다.
-- Input language는 `*` multiplication을 파싱한다.
-
-# Size / Search
-
+  - seed는 config에서만 설정하고 CLI 입력으로 받지 않는다.
+- 기존 Attack search는 Big-Step proof tree를 bottom-up으로 합성하고, tree 결론의
+  command를 analyzer에 넣어 objective를 확인했다. 현재는 C rewrite 동안 꺼져 있다.
 - Size는 `(prog_size, proof_size)`.
-- Size schedule은 `lib/synthesis/size_schedule.ml`.
-  - `diagonal_up_to`: bounded bottom-up build용.
-  - `rectangular_up_to`: partition용.
-  - `square_forever`: attack search용 무한 순회.
-- `square_forever`는 square bound를 1,2,3,... 키우되 frontier 안에서는 작은
-  total size부터 처리한다.
-- Raw syntax size `(k,0)`은 처음 필요한 proof target `(k+2,2)` 직전에만 삽입한다.
-- `Partition.partition_special_while`은 `CWhileTrue`용. rest ctree는 같은 while
-  command를 증명하므로 `rest.prog_size = target.prog_size`이고 proof size만 작다.
+- 프로그램 시작 concrete memory는 config 변수들에 대해 all-zero로 본다.
 
-# Attack CLI
+# CLI / Commands
 
-- `./attack -attack`: 첫 공격 하나.
-- `./attack -attack -bound p q`: bound 안의 공격 전부.
-- `./attack -attack -forever`: 무한 탐색하며 `result.d`에 append.
-- `-bound`와 `-forever`는 같이 쓰지 않는다.
-- Heuristic/analyzer/seed는 CLI 옵션이 아니라 `Config_util.attack ()`에서 설정한다.
-  - `heuristic_name`: `none|random1|random2`.
-  - `analyzer_name`: `260417|260528`.
-  - `seed`: random heuristic seed.
-- `-objective top|nonsingleton|unbounded|unsound`.
-- precision objective를 골라도 `unsound`를 항상 먼저 검사한다.
-- Progress:
-  - raw syntax line은 파란색.
-  - skipped size는 출력하지 않음.
-  - 해당 size에서 공격을 찾으면 `found = N`.
-  - forever mode는 별도 빨간 줄로 `found = N`만 출력.
+- `dune build`
+- C parser가 준비되면 `./attack -pp examples/simple.c`
+- C Big-Step이 준비되면 `./attack -big examples/simple.c`
 
-`result.d` forever format:
-
-```d
-(* attack = 1 *)
-(* size = (18,16); concrete = 0; abstract = [-∞,∞] *)
-x := 1;
-while (- x) do
-  x := 0
-end
-
-```
-
-`-forever` 시작 시 `result.d`는 비워지고, 이후 공격마다 빈 줄 하나를 두고 append.
-
-# Heuristic
+# Heuristic / Selection
 
 - Heuristic 구현은 `lib/synthesis/heuristic/` 아래에 둔다.
-  - `heuristic.ml`: 선택 껍데기와 current heuristic.
-  - `none_heuristic.ml`: score 0.0, selection no-op.
-  - `random1_heuristic.ml`, `random2_heuristic.ml`: 현재 같은 random 구현.
-- `heuristic.ml`은 `HEURISTIC` module signature와 existential `Pack` wrapper를
-  사용한다. 새 heuristic 추가 시 concrete module을 만들고 `of_name` string
-  mapping만 추가하면 된다.
-- Component는 `lib/synthesis/component_pool/component.ml`에서 payload + metadata를
-  들고, score는 `Synthesis.Heuristic`을 통해 받는다.
-- `Component_set`의 score top-N selection도 `Synthesis.Heuristic`을 통해 수행한다.
-- `Synthesis.Attack.component_cap = 1000`.
-- `heuristic_name = "none"`이면 grown bucket cap은 사실상 no-op이다.
-- 컷팅/선별은 `Heuristic.select_some`이 전담하고, `Component_set`/`Grow_util`은
-  휴리스틱이 고른 후보를 그대로 순회한다.
-- Heuristic selection API는 `choose_n`, `trim`, `choose_for_grow`로 나뉜다.
-  `trim`/`choose_for_grow`는 각 휴리스틱 내부에서 `choose_n`을 재사용할 수 있다.
-  `choose_for_grow`의 선택 개수도 휴리스틱 내부 정책이다.
-  `choose_for_grow`는 `BigStep.grow_rule`을 받아 rule별/binary/ternary별 정책을
-  정할 수 있고, arity 구분은 `BigStep.arity_of_grow_rule` 헬퍼가 담당한다.
-  `Bottom_up.grow_at_size`는 grow를 끝낸 뒤 `Component_set.trim_size_with_heuristic`
-  으로 현재 size bucket을 `Heuristic.trim` 결과만 남기게 한다.
-- `Grow_prog` / `Grow_proof`의 제한 fold는 `TEMP: random-score fanout cap` 표시.
-- 장기 방향:
-  - random score를 analyzer-aware priority로 교체.
-  - diversity metric 추가.
-  - top-k 밖도 언젠가 탐색하는 eventual-success 근거 마련.
+- `Heuristic` API는 score와 selection 정책을 모두 담당한다.
+  - `choose_n`: n개 고르는 기본 선택 함수.
+  - `trim`: size bucket을 실제로 pruning하는 함수.
+  - `choose_for_grow`: grow 중 rule별 후보를 고르는 함수.
+- `choose_for_grow`는 `BigStep.grow_rule`을 받아 rule별/binary/ternary별 정책을
+  정한다.
+- arity 구분은 `BigStep.arity_of_grow_rule`,
+  `BigStep.is_binary_grow_rule`, `BigStep.is_ternary_grow_rule`가 담당한다.
+- `Bottom_up.grow_at_size`는 grow를 끝낸 뒤
+  `Component_set.trim_size_with_heuristic`으로 현재 size bucket을
+  `Heuristic.trim` 결과만 남기게 한다.
+- `random1`/`random2`는 component 생성 시 score를 한 번 붙이고, 선택 시 저장된
+  score를 사용한다. 기본 trim cap은 1000.
 
-# Analyzer Versions
+# Analyzer
 
 - Analyzer 선택 껍데기는 `lib/analyzer/analyzer.ml`.
-- `lib/analyzer/analyzer.ml`은 `ENGINE` module signature와 existential `Pack`
-  wrapper를 사용한다. 새 analyzer 추가 시 version folder와 concrete module을
-  만들고 `of_name` string mapping만 추가하면 된다.
-- 실제 analyzer 구현은 버전별 폴더에 둔다.
-  - `lib/analyzer/engine/v260528/`: 현재 analyzer 구현.
-  - `lib/analyzer/engine/v260417/`: git
-    `bff9bac2dcbd1456dd399eaf20fbb391d7a99fe6` 시점 analyzer 구현.
+- 실제 analyzer 구현은 버전별 폴더에 있다.
+  - `lib/analyzer/engine/v260528/`
+  - `lib/analyzer/engine/v260417/`
 - 외부 코드는 `Analyzer.analysis`, `Analyzer.analysis_sem`,
-  `Analyzer.string_of_aenv`, `Analyzer.print_analysis_sem` 등 껍데기 API만 사용한다.
-- `260417` analyzer는 옛 동작을 보존한다. `Config_util.attack ()`에서
-  `analyzer_name = "260417"`로 설정 후 `./attack -attack -bound 25 25
-  -objective unsound` 실행 시 `(5,8)` 근처에서
-  `Failure("filter_ne: unexpected Bot")` crash가 재현된다. 이는 의도한 동작이다.
-- `./attack -analyze -v file.d`도 선택된 analyzer의 printer를 사용한다.
+  `Analyzer.string_of_aenv`, `Analyzer.print_analysis_sem` 등 wrapper API만 사용한다.
+
+# C Subset Rewrite Plan
+
+목표는 G baseline을 C 분석기 공격용 C subset으로 옮기는 것이다. 초기에는 현재
+G와 거의 1:1 대응되는 subset에서 시작하고, C다운 기능을 단계적으로 추가한다.
+
+초기 C subset:
+
+- `int main() { ... }`에서 시작.
+- `int x;`, `int x = expr;`
+- `x = expr;`
+- block `{ stmt* }`
+- `if (expr) stmt else stmt`
+- `while (expr) stmt`
+- `return expr;`
+- pure integer expressions: literal, variable, unary `-`, binary
+  `+ - * == != < <= > >=`.
+
+초기에는 제외:
+
+- pointer, array, struct
+- function call
+- side-effect expression (`++`, assignment expression, `+=`, etc.)
+- short-circuit `&&`, `||`
+- machine integer overflow / UB modeling
+- preprocessor
+
+# C Big-Step Design
+
+C subset은 나중에 side-effect expression을 자연스럽게 추가할 수 있게 처음부터
+expression semantics를 effect-aware 형태로 둔다.
+
+- Expression judgment: `<state, expr> ⇓ <state', value>`
+- Statement judgment: `<state, stmt> ⇓ control`
+- `control`은 최소한 `Normal state`, `Return (state, value)`를 포함한다.
+  나중에 `Break`, `Continue`를 추가할 수 있게 둔다.
+- 초기 pure expression은 `state = state'`인 특수 경우다.
+- evaluation order는 일단 deterministic left-to-right subset으로 명시한다.
+  ISO C 전체 semantics가 아니라 analyzer attack용 C-like subset이다.
 
 # Important Files
 
 - `bin/main.ml`: CLI.
+- `lib/language/`: syntax/parser/printer/semantics.
+- `lib/language/semantics/bigStep.ml`: Big-Step tree and grow rule metadata.
 - `lib/synthesis/attack.ml`: attack search.
-- `lib/synthesis/size_schedule.ml`: size traversal.
 - `lib/synthesis/grow_prog.ml`, `grow_proof.ml`, `grow_util.ml`: component growth.
-- `lib/synthesis/component_pool/component.ml`, `component_set.ml`: component metadata,
-  bucket table, caps.
-- `lib/synthesis/objective.ml`: attack objectives and witnesses.
-- `lib/synthesis/heuristic/`: heuristic 선택과 구현.
-- `lib/analyzer/analyzer.ml`: analyzer 선택 껍데기.
-- `lib/analyzer/engine/v260528/`, `lib/analyzer/engine/v260417/`: analyzer 구현.
-- `test/synthesis_test.ml`: regression tests.
-- 성공 공격 설명: `.agents/analyzer-attack-log.md`.
-- 성공 공격 프로그램: `examples/yymmdd-*.d`.
-
-# Useful Commands
-
-- `dune build`
-- `./attack -attack -objective top`
-- `./attack -attack -bound 5 5`
-- `./attack -attack -forever -objective top`
-- `./attack -analyze -v examples/260522-unary-guard-square-top.d`
-- `dune exec ./test/synthesis_test.exe -- -forever`
+- `lib/synthesis/component_pool/`: component storage.
+- `lib/synthesis/heuristic/`: scoring/selection policy.
+- `lib/analyzer/`: analyzer wrapper and engines.
+- `examples/simple.c`: initial C subset example.

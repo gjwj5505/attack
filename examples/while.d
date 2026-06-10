@@ -1,3 +1,0 @@
-while x < 1 do
-  x := x + 1
-end

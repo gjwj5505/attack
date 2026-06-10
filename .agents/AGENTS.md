@@ -14,6 +14,9 @@ Always follow these rules:
   `AGENTS.md` file after approval.
 - During design discussions, keep durable conclusions, hypotheses, and next
   actions updated in `.agents/CONTEXT.md` as the conversation progresses.
+- Do not delete or overwrite user-written content without explicit approval.
+- Before modifying files, show the planned diff/patch and present options to
+  the user; apply changes only after the user confirms.
 
 Start by reading `.agents/CONTEXT.md`, `.agents/todo.txt`, then inspect only the files relevant to
 the current request. Prefer concise status updates in Korean.

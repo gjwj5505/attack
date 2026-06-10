@@ -1,45 +1,34 @@
-휴리스틱 구조 조정하기
-binary, ternary 뽑는 갯수도 휴리스틱으로 지정
-select 하는 헬퍼 함수들 component_set.ml에서 다 빼서 휴리스틱으로 옮기기. 최대한 휴리스틱이 많은 것을 할 수 있게
-seed는 config에서만 설정하기. 입력으로도 받지 말기
+C언어의 부분집합으로 문법/의미 정의하기
+side effect/UB/여러 실행경로 있는 프로그램 big-step으로 어떻게 할 지 고민하기
 
+C subset rewrite
 
+docker로 연결해서 실행 파일 계속 호출하면 오래걸리니까. 한 번만 실행해서 socket 연결하던 아예 같이 빌드하던 방법 찾기
 
--find_attack, find_all_attacks 구조 합치기.
+- Keep the project temporarily language-only:
+  - `bin/main.ml` exposes only language commands.
+  - analyzer/config/synthesis/test dune stanzas are disabled.
+- Define initial C subset AST in `lib/language/`.
+- Add C parser/printer for:
+  - `int main() { ... }`
+  - declarations, assignment statements, blocks, if/else, while, return
+  - pure integer expressions
+- Redesign Big-Step semantics around:
+  - expression: state -> state * value
+  - statement: state -> control
+- Port synthesis sizes, prune rules, grow rules, and proof constructors to the C subset.
+- Keep evaluation order deterministic left-to-right for now.
+- Keep side-effect expressions, pointers, arrays, structs, calls, overflow/UB for later.
 
-- Component에 analyzer-facing summary 포함
-  - proof tree와 함께 concrete env, abstract result, target value precision,
-    loop/widening/guard/update feature를 들고 다니기
-  - summary는 ranking/diversity/cap용 heuristic으로만 사용
-  - 최종 attack 판정은 완성된 command 전체를 다시 analyzer로 확인
+Heuristic / search cleanup
 
-- Size bucket 생성 후 selection phase 추가
-  - boolean pruning이 아니라 bucket 전체를 본 뒤 줄이기
-  - priority + diversity + cap 방식 사용
-  - raw cmd / CWhileFalse 병목부터 적용
+- Keep seed config-only.
+- Keep `choose_n` / `trim` / `choose_for_grow` as the heuristic selection boundary.
+- Remove stale TEMP comments once grow-rule-based selection is stable.
+- Later: add analyzer-facing summaries and diversity-aware trimming.
 
-- Priority 기준 설계
-  - target abstract value가 넓을수록 높게
-  - unbounded/top/unsound 징후, loop/widening 가능성, target update,
-    filter에 걸리는 guard를 높게
-  - size가 크고 feature가 중복되면 낮게
+Validation targets
 
-- Diversity/cap 기준 설계
-  - has_while, has_if, assignment target, guard op, update kind,
-    target abstract kind 기준으로 feature bucket 나누기
-  - 전체 top-N이 아니라 feature bucket별 top-k 유지
-  - low-priority 후보와 size별 최소 대표도 일부 보존해서
-    "언젠가는 공격 성공" 가능성을 최대한 유지
-  - cap은 점진적으로 완화 가능한 파라미터로 두기
-
-- 효과 측정
-  - `(9,9)` 근처 etree/ctree 개수 비교
-  - raw cmd bucket 크기와 CWhileFalse 생성량 따로 기록
-  - attack 성공 여부는 whole-program analyzer 결과만 신뢰
-
-Later:
-- C-style syntax: assign, if-else, while, block, bool condition
-- side effect가 있는 expression 고려 여부 결정
-- component lookup 최적화: env/prog/id index 또는 component_pool
-- raw cmd를 단순 shape로 금지하지 말 것
-- 공격 구조를 보존하는 analyzer-respecting 대표화/dedup 검토
+- `dune build`
+- `./attack -pp examples/simple.c` once the C parser exists
+- `./attack -big examples/simple.c` once the C Big-Step semantics exists

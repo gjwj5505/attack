@@ -1,5 +1,0 @@
-(x := 1;
-while (- x) do
-  x := 0
-end);
-x := x * x

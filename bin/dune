@@ -2,10 +2,7 @@
  (public_name attack)
  (name main)
  (libraries
-  language
-  analyzer
-  attack_config
-  synthesis))
+  language))
 
 (rule
  (deps main.exe)

@@ -27,25 +27,25 @@ dune exec attack -- <options>
 라벨이 붙은 프로그램 출력:
 
 ```sh
-./attack -pp examples/260522-unary-guard-square-top.d
+./attack -pp examples/260522-unary-guard-square-top.g
 ```
 
 분석기 실행:
 
 ```sh
-./attack -analyze examples/260522-unary-guard-square-top.d
+./attack -analyze examples/260522-unary-guard-square-top.g
 ```
 
 각 라벨 위치의 분석 결과를 프로그램 왼쪽에 함께 출력:
 
 ```sh
-./attack -analyze -v examples/260522-unary-guard-square-top.d
+./attack -analyze -v examples/260522-unary-guard-square-top.g
 ```
 
 Big-Step proof tree 출력:
 
 ```sh
-./attack -big examples/260522-unary-guard-square-top.d
+./attack -big examples/260522-unary-guard-square-top.g
 ```
 
 ## 공격 합성

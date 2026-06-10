@@ -2,5 +2,6 @@
 
 (library
  (name synthesis)
+ (enabled_if false)
  (modules :standard)
  (libraries language analyzer attack_config))
