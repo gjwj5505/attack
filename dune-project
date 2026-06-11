@@ -18,7 +18,8 @@
    ocaml
    (ocaml-base-compiler
      (= 5.3.0))
-   menhir)
+   menhir
+   yojson)
  (tags
   ("abstract interpretation" "program analysis")))
 

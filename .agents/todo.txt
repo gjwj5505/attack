@@ -3,7 +3,8 @@ side effect/UB/여러 실행경로 있는 프로그램 big-step으로 어떻게 
 
 C subset rewrite
 
-docker로 연결해서 실행 파일 계속 호출하면 오래걸리니까. 한 번만 실행해서 socket 연결하던 아예 같이 빌드하던 방법 찾기
+지금은 sparrow 매번 호출하는데, 나중에 멀티프로세싱으로 호출해놓고 안기다리다가 응답 오면 받아서 쓰는 구조로 바꾸자.
+
 
 - Keep the project temporarily language-only:
   - `bin/main.ml` exposes only language commands.

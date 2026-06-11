@@ -1,6 +1,7 @@
-(library
- (name attack_config)
- (enabled_if false)
- (wrapped false)
- (modules config config_util)
- (libraries language))
+; Temporarily disabled during the language-only C subset rewrite.
+; Re-enable after the C language definition stabilizes.
+; (library
+;  (name attack_config)
+;  (wrapped false)
+;  (modules config config_util)
+;  (libraries language))

@@ -1,7 +1,8 @@
-(include_subdirs qualified)
+; Temporarily disabled during the language-only C subset rewrite.
+; Re-enable this first once the C language layer is ready.
+; (include_subdirs qualified)
 
-(library
- (name analyzer)
- (enabled_if false)
- (modules :standard)
- (libraries language))
+; (library
+;  (name analyzer)
+;  (modules analyzer sparrow_result sparrow_result_json)
+;  (libraries language unix yojson))

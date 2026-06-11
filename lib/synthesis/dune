@@ -1,7 +1,8 @@
-(include_subdirs unqualified)
+; Temporarily disabled during the language-only C subset rewrite.
+; Re-enable after config/analyzer are restored for C programs.
+; (include_subdirs unqualified)
 
-(library
- (name synthesis)
- (enabled_if false)
- (modules :standard)
- (libraries language analyzer attack_config))
+; (library
+;  (name synthesis)
+;  (modules :standard)
+;  (libraries language analyzer attack_config))

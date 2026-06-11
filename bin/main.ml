@@ -6,6 +6,16 @@ let opt_tab = ref false
 let opt_tintp = ref false
 let opt_dintp = ref false
 let opt_big = ref false
+(*
+ * Analyzer/synthesis CLI options are temporarily disabled while the project is
+ * reduced to language-only for the C subset rewrite.
+let opt_attack = ref false
+let opt_sparrow = ref false
+let sparrow_find_var = ref None
+let objective_name = ref "top"
+let bound_prog = ref 0
+let bound_proof = ref 0
+*)
 let opt_verbose = ref false
 
 let usage =
@@ -34,7 +44,7 @@ let parse_program () =
 let print_label_table pgm =
   Syntax.Cmd.tabulate pgm
   |> Syntax.Cmd.Lbl_map.iter (fun l c ->
-         Syntax.Cmd.string_of_key l ^ " |-> " ^ Syntax.Cmd.string_of_t c
+         Syntax.Cmd.string_of_lb l ^ " |-> " ^ Syntax.Cmd.string_of_t c
          |> print_endline)
 
 let run_big_step pgm =
@@ -44,11 +54,93 @@ let run_big_step pgm =
   | Ok -> print_endline "Success: the Big-Step proof tree is valid."
   | Error msg -> print_endline ("Error: invalid derivation tree: " ^ msg)
 
+(*
+ * Analyzer/synthesis entry points are kept here as disabled reference code.
+ * Re-enable these after the C language layer is in place, starting with the
+ * Sparrow analyzer connection.
+let blue s = "\027[34m" ^ s ^ "\027[0m"
+
+let nonzero_field name n =
+  if n = 0 then None else Some (Printf.sprintf "%-5s = %d" name n)
+
+let string_of_fields fields =
+  match List.filter_map (fun x -> x) fields with
+  | [] -> "empty"
+  | fields -> String.concat "; " fields
+
+let has_attack_bound () = !bound_prog <> 0 || !bound_proof <> 0
+
+let selected_objectives () =
+  match Synthesis.Objective.of_name !objective_name with
+  | Some objective -> [ Synthesis.Objective.unsound; objective ]
+  | None ->
+      fail_usage
+        ("unknown objective: " ^ !objective_name ^ " (expected "
+       ^ Synthesis.Objective.names () ^ ")")
+
+let print_attack_progress
+    Synthesis.Attack.{ size; exps; cmds; etrees; ctrees; skipped_reason; _ } =
+  match skipped_reason with
+  | Some _ -> ()
+  | None when Size.proof_size size = 0 ->
+      Printf.printf "%s\n%!"
+        (blue
+           (Printf.sprintf "Trying raw   size = %-8s : %s"
+              (Size.to_string size)
+              (string_of_fields
+                 [ nonzero_field "exp" exps; nonzero_field "cmd" cmds ])))
+  | None ->
+      Printf.printf "Trying proof size = %-8s : %s\n%!" (Size.to_string size)
+        (string_of_fields
+           [ nonzero_field "etree" etrees; nonzero_field "ctree" ctrees ])
+
+let print_attack_result (result : Synthesis.Attack.result) =
+  let labeled_cmd = Syntax.Cmd.(relabel (dummy_lbl result.cmd)) in
+  Printf.printf "Attack found at size=%s\n"
+    (Size.to_string result.Synthesis.Attack.size);
+  print_endline "== objective ==";
+  Printf.printf "%s: %s\n" result.objective
+    (Synthesis.Objective.string_of_witness result.witness);
+  print_endline "== program ==";
+  print_endline (Syntax.Cmd.string_of_lbl_t labeled_cmd);
+  print_endline "== analysis result ==";
+  print_endline (Analyzer.string_of_aenv result.analysis_aenv);
+  print_endline "== proof tree ==";
+  Visualizer.print_tree ~verbose:!opt_verbose (CTree result.tree)
+
+let run_synth_attack () =
+  let cfg = Config_util.attack () in
+  match
+    Synthesis.Attack.find_attack ~on_progress:print_attack_progress ~var:"x"
+      ~objectives:(selected_objectives ()) cfg
+  with
+  | None -> print_endline "No attack found"
+  | Some result -> print_attack_result result
+
+let run_synth_attack_all () =
+  let cfg = Config_util.attack () in
+  let bound = Size.make !bound_prog !bound_proof in
+  let results =
+    Synthesis.Attack.find_all_attacks ~on_progress:print_attack_progress ~var:"x"
+      ~objectives:(selected_objectives ()) cfg bound
+  in
+  Printf.printf "Found %d attacks up to bound=%s\n"
+    (List.length results) (Size.to_string bound);
+  List.iteri
+    (fun i result ->
+      Printf.printf "\n== attack %d ==\n" (i + 1);
+      print_attack_result result)
+    results
+
+let run_attack () =
+  if has_attack_bound () then run_synth_attack_all () else run_synth_attack ()
+
 let unavailable name =
   Printf.eprintf
     "%s is temporarily disabled while the project is reduced to language-only.\n"
     name;
   exit 2
+*)
 
 let main () =
   Arg.parse
@@ -64,28 +156,61 @@ let main () =
       ( "-big",
         Arg.Unit (fun _ -> opt_big := true),
         "derive, verify, and print a Big-Step tree" );
+(*
+      ( "-sparrow",
+        Arg.Unit (fun _ -> opt_sparrow := true),
+        "run Sparrow on the input file by copying it to a temporary .i file" );
+      ( "-sparrow-find",
+        Arg.String (fun var -> sparrow_find_var := Some var),
+        "run Sparrow and print Analyzer.find for the given variable" );
       ( "-v",
         Arg.Unit (fun _ -> opt_verbose := true),
         "show rule names and sizes in Big-Step tree output" );
       ("-analyze", Arg.Unit (fun _ -> unavailable "-analyze"), "disabled");
-      ("-attack", Arg.Unit (fun _ -> unavailable "-attack"), "disabled");
+      ( "-attack",
+        Arg.Unit (fun _ -> opt_attack := true),
+        "synthesize attack programs with the Sparrow analyzer wrapper" );
       ("-forever", Arg.Unit (fun _ -> unavailable "-forever"), "disabled");
       ( "-objective",
-        Arg.String (fun _ -> unavailable "-objective"),
-        "disabled" );
+        Arg.Set_string objective_name,
+        "set attack objective: " ^ Synthesis.Objective.names ()
+        ^ " (unsound is always checked first)" );
       ( "-bound",
-        Arg.Tuple
-          [
-            Arg.Int (fun _ -> unavailable "-bound");
-            Arg.Int (fun _ -> unavailable "-bound");
-          ],
-        "disabled" );
+        Arg.Tuple [ Arg.Set_int bound_prog; Arg.Set_int bound_proof ],
+        "set bounded attack search as <prog_size> <proof_size>" );
+*)
     ]
     set_src usage;
 
+(*
+  if has_attack_bound () && not !opt_attack then
+    fail_usage "-bound requires -attack";
+  if !opt_attack && !src <> "" then
+    fail_usage "-attack does not take an input file";
+*)
   if not (has_action ()) then (
-    print_endline "Please provide an option! (-pp, -tab, -tintp, -dintp, -big)";
+    print_endline
+      "Please provide an option! (-pp, -tab, -tintp, -dintp, -big)";
     exit 0);
+
+(*
+  if !opt_attack then (
+    run_attack ();
+    exit 0);
+
+  if !opt_sparrow then (
+    if !src = "" then fail_usage "-sparrow requires an input file";
+    Analyzer.analyze_file !src |> Analyzer.string_of_result |> print_endline;
+    exit 0);
+
+  (match !sparrow_find_var with
+  | Some var ->
+      if !src = "" then fail_usage "-sparrow-find requires an input file";
+      Analyzer.analyze_file !src |> Analyzer.find var |> Analyzer.string_of_aval
+      |> print_endline;
+      exit 0
+  | None -> ());
+*)
 
   let pgm = parse_program () in
   if !opt_pp then Syntax.Cmd.string_of_lbl_t pgm |> print_endline;

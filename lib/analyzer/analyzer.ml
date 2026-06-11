@@ -1,66 +1,235 @@
 open Language
+module Result = Sparrow_result
 
-module type ENGINE = sig
-  type aval
-  type aenv
-  type sem
+type result =
+  | Alarm of string
+  | NoAlarm of string
+  | ParseError of string
+  | AnalyzerError of string
 
-  val analysis : ?init_cenv:Environment.t -> Syntax.Cmd.lbl_t -> aenv
-  val analysis_sem : ?init_cenv:Environment.t -> Syntax.Cmd.lbl_t -> sem
-  val exit_aenv : sem -> aenv
-  val find : string -> aenv -> aval
-  val contains_concrete : int -> aval -> bool
-  val is_singleton : int -> aval -> bool
-  val is_top : aval -> bool
-  val is_unbounded : aval -> bool
-  val string_of_aval : aval -> string
-  val string_of_aenv : aenv -> string
-  val print_analysis_sem : sem -> Syntax.Cmd.lbl_t -> unit
-end
+type status =
+  | Finished
+  | Failed of result
 
-type t = Pack : (module ENGINE) -> t
+type t = unit
+type aval = Result.value option
+type analysis_result = {
+  status : status;
+  stdout : string;
+  stderr : string;
+  json : Result.analysis option;
+}
+type aenv = analysis_result
+type sem = aenv
 
-type aval = Aval : (module ENGINE with type aval = 'a) * 'a -> aval
+let default_checks = [ "-dz" ]
+let default = ()
 
-type aenv = Aenv : (module ENGINE with type aenv = 'e) * 'e -> aenv
+let names () = "sparrow"
+let of_name = function "sparrow" | "260417" | "260528" -> Some () | _ -> None
 
-type sem = Sem : (module ENGINE with type sem = 's) * 's -> sem
+let read_all ic =
+  let buf = Buffer.create 4096 in
+  (try
+     while true do
+       Buffer.add_string buf (input_line ic);
+       Buffer.add_char buf '\n'
+     done
+   with End_of_file -> ());
+  Buffer.contents buf
 
-let analyzer_260417 = Pack (module Engine.V260417.Analyzer : ENGINE)
+let copy_file src dst =
+  let ic = open_in_bin src in
+  Fun.protect
+    ~finally:(fun () -> close_in_noerr ic)
+    (fun () ->
+      let oc = open_out_bin dst in
+      Fun.protect
+        ~finally:(fun () -> close_out_noerr oc)
+        (fun () ->
+          let bytes = Bytes.create 65536 in
+          let rec loop () =
+            match input ic bytes 0 (Bytes.length bytes) with
+            | 0 -> ()
+            | n ->
+                output oc bytes 0 n;
+                loop ()
+          in
+          loop ()))
 
-let analyzer_260528 = Pack (module Engine.V260528.Analyzer : ENGINE)
+let read_file path =
+  let ic = open_in_bin path in
+  Fun.protect
+    ~finally:(fun () -> close_in_noerr ic)
+    (fun () -> read_all ic)
 
-let default = analyzer_260528
+let classify_output status stdout stderr =
+  let combined = stdout ^ stderr in
+  match status with
+  | Unix.WEXITED 0 ->
+      if String.contains combined '#' && String.contains combined 'u' then
+        if String.contains combined 'U' then Alarm combined else NoAlarm combined
+      else if String.contains combined 'F' then NoAlarm combined
+      else NoAlarm combined
+  | Unix.WEXITED _ | Unix.WSIGNALED _ | Unix.WSTOPPED _ ->
+      if
+        String.contains combined 'P'
+        || String.contains combined 'p'
+        || String.contains combined 'E'
+      then ParseError combined
+      else AnalyzerError combined
 
-let names () = "260417|260528"
+let analyze_i_file ?(checks = default_checks) ?json_dump path =
+  let cwd = Sys.getcwd () in
+  let dump_args =
+    match json_dump with
+    | None -> []
+    | Some path -> [ "-json_dump"; path ]
+  in
+  let args =
+    String.concat " " (List.map Filename.quote (checks @ dump_args @ [ path ]))
+  in
+  let command =
+    Printf.sprintf "docker run --rm -v %s:/work attack-sparrow %s"
+      (Filename.quote cwd) args
+  in
+  let env = Unix.environment () in
+  let stdout, stdin, stderr = Unix.open_process_full command env in
+  close_out_noerr stdin;
+  let out = read_all stdout in
+  let err = read_all stderr in
+  let process_status = Unix.close_process_full (stdout, stdin, stderr) in
+  let json_text =
+    match json_dump with
+    | Some path when Sys.file_exists path -> Some (read_file path)
+    | _ -> None
+  in
+  let json = Option.map Sparrow_result_json.analysis_of_string json_text in
+  let stdout =
+    match json_text with
+    | Some text -> out ^ "\n== JSON dump ==\n" ^ text
+    | None -> out
+  in
+  let status =
+    match process_status with
+    | Unix.WEXITED 0 -> Finished
+    | _ -> Failed (classify_output process_status stdout err)
+  in
+  { status; stdout; stderr = err; json }
 
-let of_name = function
-  | "260417" -> Some analyzer_260417
-  | "260528" -> Some analyzer_260528
-  | _ -> None
+let analyze_file ?(checks = default_checks) path =
+  let tmp = Filename.temp_file ~temp_dir:"." "attack-sparrow-" ".i" in
+  let json = Filename.temp_file ~temp_dir:"." "attack-sparrow-" ".json" in
+  let tmp_base = Filename.basename tmp in
+  let json_base = Filename.basename json in
+  Fun.protect
+    ~finally:(fun () ->
+      if Sys.file_exists tmp then Sys.remove tmp;
+      if Sys.file_exists json then Sys.remove json)
+    (fun () ->
+      copy_file path tmp;
+      analyze_i_file ~checks ~json_dump:json_base tmp_base)
 
-let analysis_sem (Pack (module E)) ?init_cenv pgm =
-  Sem ((module E), E.analysis_sem ?init_cenv pgm)
+let analyze_program_text ?(checks = default_checks) text =
+  let tmp = Filename.temp_file ~temp_dir:"." "attack-sparrow-" ".i" in
+  let json = Filename.temp_file ~temp_dir:"." "attack-sparrow-" ".json" in
+  let tmp_base = Filename.basename tmp in
+  let json_base = Filename.basename json in
+  Fun.protect
+    ~finally:(fun () ->
+      if Sys.file_exists tmp then Sys.remove tmp;
+      if Sys.file_exists json then Sys.remove json)
+    (fun () ->
+      let oc = open_out_bin tmp in
+      Fun.protect
+        ~finally:(fun () -> close_out_noerr oc)
+        (fun () -> output_string oc text);
+      analyze_i_file ~checks ~json_dump:json_base tmp_base)
 
-let analysis (Pack (module E)) ?init_cenv pgm =
-  Aenv ((module E), E.analysis ?init_cenv pgm)
+let analysis ?(init_cenv = Environment.empty) _analyzer pgm =
+  ignore init_cenv;
+  Syntax.Cmd.string_of_lbl_t pgm |> analyze_program_text
 
-let exit_aenv (Sem ((module E), sem)) = Aenv ((module E), E.exit_aenv sem)
+let analysis_sem ?init_cenv analyzer pgm = analysis ?init_cenv analyzer pgm
 
-let find var (Aenv ((module E), aenv)) = Aval ((module E), E.find var aenv)
+let exit_aenv sem = sem
 
-let contains_concrete cval (Aval ((module E), aval)) =
-  E.contains_concrete cval aval
+let ends_with s suffix =
+  let len_s = String.length s in
+  let len_suffix = String.length suffix in
+  len_s >= len_suffix
+  && String.sub s (len_s - len_suffix) len_suffix = suffix
 
-let is_singleton cval (Aval ((module E), aval)) = E.is_singleton cval aval
+let binding_matches_var var binding =
+  binding.Result.loc = var || ends_with binding.Result.loc ("," ^ var ^ ")")
 
-let is_top (Aval ((module E), aval)) = E.is_top aval
+let find_binding_in_node var node =
+  node.Result.mem.Result.bindings
+  |> List.find_opt (binding_matches_var var)
+  |> Option.map (fun binding -> binding.Result.value)
 
-let is_unbounded (Aval ((module E), aval)) = E.is_unbounded aval
+let find var aenv =
+  match aenv.json with
+  | None -> None
+  | Some json ->
+      let find_in_main_exit () =
+        match json.Result.main_exit_node with
+        | None -> None
+        | Some main_exit_node ->
+            Option.bind
+              (json.Result.input
+              |> List.find_opt (fun node -> node.Result.node = main_exit_node))
+              (find_binding_in_node var)
+      in
+      (match find_in_main_exit () with
+      | Some value -> Some value
+      | None ->
+          json.Result.output |> List.rev
+          |> List.find_map (find_binding_in_node var))
 
-let string_of_aval (Aval ((module E), aval)) = E.string_of_aval aval
+let contains_concrete cval = function
+  | Some { Result.itv = Result.Interval (lo, hi); _ } ->
+      Result.bound_le lo (Result.Int cval) && Result.bound_le (Result.Int cval) hi
+  | _ -> false
 
-let string_of_aenv (Aenv ((module E), aenv)) = E.string_of_aenv aenv
+let is_singleton cval = function
+  | Some { Result.itv = Result.Interval (Result.Int lo, Result.Int hi); _ } ->
+      lo = cval && hi = cval
+  | _ -> false
 
-let print_analysis_sem (Sem ((module E), sem)) pgm =
-  E.print_analysis_sem sem pgm
+let is_top = function
+  | Some { Result.itv = Result.Interval (Result.Neg_inf, Result.Pos_inf); _ } -> true
+  | None -> true
+  | _ -> false
+
+let is_unbounded = function
+  | Some { Result.itv = Result.Interval (Result.Neg_inf, _); _ }
+  | Some { Result.itv = Result.Interval (_, Result.Pos_inf); _ } ->
+      true
+  | _ -> false
+
+let string_of_failure = function
+  | Alarm output -> "Alarm\n" ^ output
+  | NoAlarm output -> "NoAlarm\n" ^ output
+  | ParseError output -> "ParseError\n" ^ output
+  | AnalyzerError output -> "AnalyzerError\n" ^ output
+
+let string_of_result aenv =
+  match aenv.status with
+  | Finished ->
+      if
+        match aenv.json with
+        | Some json -> json.Result.alarms.Result.unproven > 0
+        | None -> false
+      then
+        "Alarm\n" ^ aenv.stdout
+      else "NoAlarm\n" ^ aenv.stdout
+  | Failed failure -> string_of_failure failure
+
+let string_of_aval = function
+  | None -> "none"
+  | Some value -> Result.string_of_value value
+
+let string_of_aenv = string_of_result
+
+let print_analysis_sem sem _pgm = print_endline (string_of_result sem)

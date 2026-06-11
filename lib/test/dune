@@ -1,0 +1,5 @@
+; Temporarily disabled during the language-only C subset rewrite.
+; (test
+;  (name synthesis_test)
+;  (enabled_if false)
+;  (libraries language attack_config synthesis))

@@ -1,0 +1,17 @@
+sudo: required
+
+language: c
+
+os:
+  - osx
+
+before_install:
+  - brew update
+  - brew unlink python
+  - brew install opam
+
+install:
+  - ./build.sh
+
+script:
+  - make test

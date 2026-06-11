@@ -2,7 +2,13 @@
  (public_name attack)
  (name main)
  (libraries
-  language))
+  language
+  ; Temporarily disabled during the language-only C subset rewrite.
+  ; Re-enable analyzer first once the C language layer is ready.
+  ; analyzer
+  ; attack_config
+  ; synthesis
+  ))
 
 (rule
  (deps main.exe)

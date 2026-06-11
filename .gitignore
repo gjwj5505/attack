@@ -46,3 +46,4 @@ _opam/
 # temp files
 *~
 *.swp
+attack-sparrow-*
