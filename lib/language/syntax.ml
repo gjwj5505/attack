@@ -1,181 +1,125 @@
 (*
- * SNU 4190.664A Static Program Analysis
- * 2025 Jay Lee <jhlee@ropas.snu.ac.kr>, <jaeho.lee@snu.ac.kr>
+ * Syntax for the Sparrow-facing C subset.
  *)
 
+type id = string
+
+type binding = {
+  typ : Typ.t;
+  name : id;
+}
+
+type lval =
+  | LVar of id
+
 module Exp = struct
-  type id = string
   type uop = Uminus
-  type bop = Eq | Lt | Gt | Ne | Le | Ge | Plus | Minus | Times
-  type t = Int of int | Var of id | Bop of bop * t * t | Uop of uop * t
 
-  let string_of_uop : uop -> string = function Uminus -> "-"
+  type bop =
+    | Eq
+    | Ne
+    | Lt
+    | Le
+    | Gt
+    | Ge
+    | Plus
+    | Minus
+    | Times
+    | Div
+    | Mod
 
-  let string_of_bop : bop -> string = function
-    | Eq -> "="
+  type t =
+    | Int of int
+    | Lval of lval
+    | Uop of uop * t
+    | Bop of bop * t * t
+
+  let string_of_uop = function
+    | Uminus -> "-"
+
+  let string_of_bop = function
+    | Eq -> "=="
+    | Ne -> "!="
     | Lt -> "<"
-    | Gt -> ">"
-    | Ne -> "<>"
     | Le -> "<="
+    | Gt -> ">"
     | Ge -> ">="
     | Plus -> "+"
     | Minus -> "-"
     | Times -> "*"
+    | Div -> "/"
+    | Mod -> "%"
 
-  let rec string_of_t : t -> string = function
-    | Var id -> id
+  let rec string_of_t = function
     | Int n -> string_of_int n
+    | Lval lv -> string_of_lval lv
+    | Uop (op, e) -> Printf.sprintf "(%s%s)" (string_of_uop op) (string_of_t e)
     | Bop (op, e1, e2) ->
         Printf.sprintf "(%s %s %s)" (string_of_t e1) (string_of_bop op)
           (string_of_t e2)
-    | Uop (op, e) -> Printf.sprintf "(%s %s)" (string_of_uop op) (string_of_t e)
+
+  and string_of_lval = function
+    | LVar id -> id
 end
 
-module Cmd = struct
-  type lbl_t = { lbl : int; cmd : t }
-  and lbl = int
+let string_of_lval = Exp.string_of_lval
 
-  and t =
-    | Assign of string * Exp.t
-    | Seq of lbl_t * lbl_t
-    | If of Exp.t * lbl_t * lbl_t
-    | While of Exp.t * lbl_t
+let string_of_binding { typ; name } =
+  Printf.sprintf "%s %s" (Typ.string_of_t typ) name
 
-  let dummy_lbl cmd = { lbl = 0; cmd }
+module Stmt = struct
+  type t =
+    | Decl of binding * Exp.t
+    | Assign of lval * Exp.t
+    | If of Exp.t * codeblock * codeblock
+    | While of Exp.t * codeblock
+    | Return of Exp.t
 
-  let rec equal_nolbl c1 c2 =
-    match (c1, c2) with
-    | Assign (x1, e1), Assign (x2, e2) -> x1 = x2 && e1 = e2
-    | ( Seq ({ cmd = c11; _ }, { cmd = c12; _ }),
-        Seq ({ cmd = c21; _ }, { cmd = c22; _ }) ) ->
-        equal_nolbl c11 c21 && equal_nolbl c12 c22
-    | ( If (e1, { cmd = c11; _ }, { cmd = c12; _ }),
-        If (e2, { cmd = c21; _ }, { cmd = c22; _ }) ) ->
-        e1 = e2 && equal_nolbl c11 c21 && equal_nolbl c12 c22
-    | While (e1, { cmd = c1; _ }), While (e2, { cmd = c2; _ }) ->
-        e1 = e2 && equal_nolbl c1 c2
-    | _ -> false
+  and codeblock = t list
 
-  module Lbl_map = struct
-    include Map.Make (struct
-      type t = int
+  let indent lvl = String.make (2 * lvl) ' '
 
-      let compare = Int.compare
-    end)
+  let rec string_of_t ?(lvl = 0) stmt =
+    let pad = indent lvl in
+    match stmt with
+    | Decl (binding, e) ->
+        Printf.sprintf "%s%s = %s;" pad (string_of_binding binding)
+          (Exp.string_of_t e)
+    | Assign (lv, e) ->
+        Printf.sprintf "%s%s = %s;" pad (string_of_lval lv) (Exp.string_of_t e)
+    | If (cond, tb, fb) ->
+        Printf.sprintf "%sif (%s) %s else %s" pad (Exp.string_of_t cond)
+          (string_of_codeblock ~lvl tb)
+          (string_of_codeblock ~lvl fb)
+    | While (cond, body) ->
+        Printf.sprintf "%swhile (%s) %s" pad (Exp.string_of_t cond)
+          (string_of_codeblock ~lvl body)
+    | Return e -> Printf.sprintf "%sreturn %s;" pad (Exp.string_of_t e)
 
-    let string_of_key : key -> string = function
-      | lbl -> Printf.sprintf "[L]%3d" lbl (* normal [L]abel *)
-  end
-
-  let tabulate (l_cmd : lbl_t) : t Lbl_map.t =
-    let rec tabulate' { lbl; cmd } tbl =
-      let tbl = Lbl_map.add lbl cmd tbl in
-      match cmd with
-      | Seq (c1, c2) -> tbl |> tabulate' c1 |> tabulate' c2
-      | If (_, c1, c2) -> tbl |> tabulate' c1 |> tabulate' c2
-      | While (_, c) -> tbl |> tabulate' c
-      | _ -> tbl
-    in
-    tabulate' l_cmd Lbl_map.empty
-
-  let relabel (lc : lbl_t) : lbl_t =
-    let rec relabel' lbl { cmd; _ } =
-      let lbl = lbl + 1 in
-      let cmd, lbl' =
-        match cmd with
-        | Seq (c1, c2) ->
-            let c1, lbl = relabel' lbl c1 in
-            let c2, lbl = relabel' lbl c2 in
-            (Seq (c1, c2), lbl)
-        | If (pred, con, alt) ->
-            let con, lbl = relabel' lbl con in
-            let alt, lbl = relabel' lbl alt in
-            (If (pred, con, alt), lbl)
-        | While (pred, c) ->
-            let c, lbl = relabel' lbl c in
-            (While (pred, c), lbl)
-        | cmd -> (cmd, lbl)
-      in
-      ({ lbl; cmd }, lbl')
-    in
-    fst @@ relabel' 0 lc
-
-  let indent (lvl : int) (f : 'a -> string) : 'a -> string =
-   fun x -> String.init (2 * lvl) (fun _ -> ' ') ^ f x
-
-  let string_of_lb : lbl -> string = fun lbl -> string_of_int lbl
-
-  let rec string_of_t ?(lvl : int = 0) : t -> string =
-    indent lvl @@ function
-    | Assign (id, e) -> Printf.sprintf "%s := %s" id (Exp.string_of_t e)
-    | Seq (c1, c2) ->
-        (* let lvl = lvl + 1 in *)
-        Printf.sprintf "\n%s;\n%s" (string_of_lbl_t ~lvl c1)
-          (string_of_lbl_t ~lvl c2)
-    | If (pred, con, alt) ->
-        let lvl = lvl + 1 in
-        Printf.sprintf "if %s then\n%s else\n%s" (Exp.string_of_t pred)
-          (string_of_lbl_t ~lvl con) (string_of_lbl_t ~lvl alt)
-    | While (pred, c) ->
-        Printf.sprintf "while %s\n%s" (Exp.string_of_t pred)
-          (string_of_lbl_t ~lvl:(lvl + 1) c)
-
-  and string_of_lbl_t ?(lvl : int = 0) { lbl; cmd } =
-    Printf.sprintf "%3d: %s" lbl (string_of_t ~lvl cmd)
-
-  let rec string_of_nolabel_t ?(lvl : int = 0) : t -> string =
-    indent lvl @@ function
-    | Assign (id, e) -> Printf.sprintf "%s := %s" id (Exp.string_of_t e)
-    | Seq (c1, c2) ->
-        Printf.sprintf "\n%s;\n%s"
-          (string_of_nolabel_t ~lvl c1.cmd)
-          (string_of_nolabel_t ~lvl c2.cmd)
-    | If (pred, con, alt) ->
-        let lvl = lvl + 1 in
-        Printf.sprintf "if %s then\n%s else\n%s" (Exp.string_of_t pred)
-          (string_of_nolabel_t ~lvl con.cmd)
-          (string_of_nolabel_t ~lvl alt.cmd)
-    | While (pred, c) ->
-        Printf.sprintf "while %s\n%s" (Exp.string_of_t pred)
-          (string_of_nolabel_t ~lvl:(lvl + 1) c.cmd)
+  and string_of_codeblock ?(lvl = 0) stmts =
+    let inner = List.map (string_of_t ~lvl:(lvl + 1)) stmts in
+    match inner with
+    | [] -> "{ }"
+    | _ ->
+        Printf.sprintf "{\n%s\n%s}" (String.concat "\n" inner) (indent lvl)
 end
 
-module Cfg = struct
-  type t = Cmd.lbl -> Cmd.lbl
+type func = {
+  ret_type : Typ.t;
+  name : id;
+  params : binding list;
+  body : Stmt.codeblock;
+}
 
-  exception End_of_cfg
+type program = {
+  main : func;
+}
 
-  let empty : t = fun _ -> raise End_of_cfg
+let string_of_param = string_of_binding
 
-  let bind (cfg : t) (lbl : Cmd.lbl) (next : Cmd.lbl) : t =
-   fun l -> if l = lbl then next else cfg l
+let string_of_func f =
+  let params = String.concat ", " (List.map string_of_param f.params) in
+  Printf.sprintf "%s %s(%s) %s" (Typ.string_of_t f.ret_type) f.name params
+    (Stmt.string_of_codeblock f.body)
 
-  let ( @+ ) cfg (l, next) = bind cfg l next
-
-  type static_flow = { next : t; next_true : t; next_false : t }
-
-  let make (lc : Cmd.lbl_t) (exit : Cmd.lbl) : static_flow =
-    let rec make' Cmd.{ cmd = c; lbl = l } exit
-        ({ next; next_true; next_false } as cfg) =
-      match c with
-      | Assign _ -> { cfg with next = next @+ (l, exit) }
-      | Seq (c1, c2) ->
-          { cfg with next = next @+ (l, c1.lbl) }
-          |> make' c1 c2.lbl |> make' c2 exit
-      | If (_, c1, c2) ->
-          {
-            cfg with
-            next_true = next_true @+ (l, c1.lbl);
-            next_false = next_false @+ (l, c2.lbl);
-          }
-          |> make' c1 exit |> make' c2 exit
-      | While (_, c) ->
-          {
-            cfg with
-            next_true = next_true @+ (l, c.lbl);
-            next_false = next_false @+ (l, exit);
-          }
-          |> make' c l
-    in
-    make' lc exit { next = empty; next_true = empty; next_false = empty }
-end
+let string_of_program { main } = string_of_func main

@@ -1,5 +1,3 @@
-#define x y
-
 int main() {
   int x = 3;
 

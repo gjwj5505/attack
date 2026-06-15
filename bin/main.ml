@@ -16,10 +16,14 @@ let objective_name = ref "top"
 let bound_prog = ref 0
 let bound_proof = ref 0
 *)
+(*
+ * Temporarily disabled until C Big-Step / verbose tree output is restored.
 let opt_verbose = ref false
+*)
 
 let usage =
-  "Usage : " ^ Filename.basename Sys.argv.(0) ^ " [-option] [filename] "
+  "Usage : " ^ Filename.basename Sys.argv.(0)
+  ^ " [-pp] [c-subset-file] "
 
 let fail_usage msg =
   prerr_endline ("Error: " ^ msg);
@@ -42,17 +46,12 @@ let parse_program () =
       Parser.prog Lexer.read lexbuf)
 
 let print_label_table pgm =
-  Syntax.Cmd.tabulate pgm
-  |> Syntax.Cmd.Lbl_map.iter (fun l c ->
-         Syntax.Cmd.string_of_lb l ^ " |-> " ^ Syntax.Cmd.string_of_t c
-         |> print_endline)
+  ignore pgm;
+  print_endline "-tab is temporarily disabled for the C subset AST."
 
 let run_big_step pgm =
-  let tree = Derivator.derive_cmd pgm Environment.empty in
-  Visualizer.print_tree ~verbose:!opt_verbose (CTree tree);
-  match BigStepChecker.check_ctree tree with
-  | Ok -> print_endline "Success: the Big-Step proof tree is valid."
-  | Error msg -> print_endline ("Error: invalid derivation tree: " ^ msg)
+  ignore pgm;
+  print_endline "-big is temporarily disabled until C Big-Step is implemented."
 
 (*
  * Analyzer/synthesis entry points are kept here as disabled reference code.
@@ -143,19 +142,25 @@ let unavailable name =
 *)
 
 let main () =
-  Arg.parse
+  let speclist =
     [
-      ("-pp", Arg.Unit (fun _ -> opt_pp := true), "print a labeled program");
-      ("-tab", Arg.Unit (fun _ -> opt_tab := true), "print a label table");
+      ( "-pp",
+        Arg.Unit (fun _ -> opt_pp := true),
+        "parse and print a C subset program" );
+(*
+      ( "-tab",
+        Arg.Unit (fun _ -> opt_tab := true),
+        "disabled: label tables are not ported to the C subset AST yet" );
       ( "-tintp",
         Arg.Unit (fun _ -> opt_tintp := true),
-        "run the G transitional interpreter" );
+        "disabled: the C transitional interpreter is not implemented yet" );
       ( "-dintp",
         Arg.Unit (fun _ -> opt_dintp := true),
-        "run the G definitional interpreter" );
+        "disabled: the C definitional interpreter is not implemented yet" );
       ( "-big",
         Arg.Unit (fun _ -> opt_big := true),
-        "derive, verify, and print a Big-Step tree" );
+        "disabled: C Big-Step derivation is not implemented yet" );
+*)
 (*
       ( "-sparrow",
         Arg.Unit (fun _ -> opt_sparrow := true),
@@ -180,7 +185,17 @@ let main () =
         "set bounded attack search as <prog_size> <proof_size>" );
 *)
     ]
-    set_src usage;
+  in
+  let speclist =
+    ( "-h",
+      Arg.Unit
+        (fun () ->
+          Arg.usage speclist usage;
+          exit 0),
+      "Display this list of options" )
+    :: speclist
+  in
+  Arg.parse speclist set_src usage;
 
 (*
   if has_attack_bound () && not !opt_attack then
@@ -189,8 +204,7 @@ let main () =
     fail_usage "-attack does not take an input file";
 *)
   if not (has_action ()) then (
-    print_endline
-      "Please provide an option! (-pp, -tab, -tintp, -dintp, -big)";
+    print_endline "Please provide an option. Currently useful: -pp.";
     exit 0);
 
 (*
@@ -213,12 +227,14 @@ let main () =
 *)
 
   let pgm = parse_program () in
-  if !opt_pp then Syntax.Cmd.string_of_lbl_t pgm |> print_endline;
+  if !opt_pp then Syntax.string_of_program pgm |> print_endline;
   if !opt_tab then print_label_table pgm;
   if !opt_tintp then
-    Interpreter.(trans_intp pgm |> Mem.string_of_t |> print_endline);
+    print_endline
+      "-tintp is temporarily disabled until the C interpreter is implemented.";
   if !opt_dintp then
-    Interpreter.(def_intp pgm |> Mem.string_of_t |> print_endline);
+    print_endline
+      "-dintp is temporarily disabled until the C interpreter is implemented.";
   if !opt_big then run_big_step pgm
 
 let () = main ()

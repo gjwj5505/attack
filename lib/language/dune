@@ -2,7 +2,7 @@
 
 (library
  (name language)
- (modules :standard))
+ (modules typ syntax parser lexer))
 
 (ocamllex lexer)
 
