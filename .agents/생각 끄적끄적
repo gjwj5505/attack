@@ -1,5 +1,17 @@
 parser에서 복수 decl 잘 처리?
 parser에서 연산자 우선순위를 위해 nonterminal 방식으로 결합 순서 결정
+overflow 관련 디테일하게 확인하기
+type 일치는 어느 레벨에서 검사해야 하지
+2147483648 literal을 받는 방식에 대해서 생각해보자.
+malloc, free, sizeof()같은 건 함수로 처리? 고유 문법으로 처리?
+a[3][3].grid[2][4] 이런거 memory 처리 방법 생각하기
+*(&x+1)은 당연히 안되는데, &x+2는 그 자체로 안됨
+scope를 함수선언 말고 그냥 codeblock들에도 locallity를 줄까?
++ 같은 연산자 overloading은?
+
+
+
+C 대신 CIL로 하는건 어때?
 
 
 

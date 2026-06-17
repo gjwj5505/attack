@@ -10,7 +10,6 @@ let keywords =
   List.iter add_to_tbl
     [
       ("int", KW_INT);
-      ("main", KW_MAIN);
       ("if", KW_IF);
       ("else", KW_ELSE);
       ("while", KW_WHILE);
@@ -31,7 +30,7 @@ rule read =
   | newline    { new_line lexbuf; read lexbuf }
   | "//"       { line_comment lexbuf; read lexbuf }
   | "/*"       { block_comment lexbuf; read lexbuf }
-  | int as n   { INT_LITERAL (int_of_string n) }
+  | int as n   { INT_LITERAL (Int64.of_string n) }
   | id as s    { match Hashtbl.find_opt keywords s with Some tok -> tok | None -> ID s }
   | "=="       { EQ }
   | "!="       { NE }

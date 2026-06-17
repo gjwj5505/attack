@@ -29,7 +29,7 @@ module Exp = struct
     | Mod
 
   type t =
-    | Int of int
+    | Int of Int64.t
     | Lval of lval
     | Uop of uop * t
     | Bop of bop * t * t
@@ -51,7 +51,7 @@ module Exp = struct
     | Mod -> "%"
 
   let rec string_of_t = function
-    | Int n -> string_of_int n
+    | Int n -> Int64.to_string n
     | Lval lv -> string_of_lval lv
     | Uop (op, e) -> Printf.sprintf "(%s%s)" (string_of_uop op) (string_of_t e)
     | Bop (op, e1, e2) ->

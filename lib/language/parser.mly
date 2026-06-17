@@ -5,9 +5,9 @@ module E = Exp
 module S = Stmt
 %}
 
-%token <int> INT_LITERAL
+%token <int64> INT_LITERAL
 %token <string> ID
-%token KW_INT KW_MAIN
+%token KW_INT
 %token KW_IF KW_ELSE KW_WHILE KW_RETURN
 %token ASSIGN
 %token EQ NE LT LE GT GE
@@ -24,13 +24,14 @@ module S = Stmt
 %%
 
 prog:
-  | KW_INT; KW_MAIN; LPAREN; RPAREN; body = codeblock; EOF
+  | KW_INT; name = ID; LPAREN; RPAREN; body = codeblock; EOF
       {
+        if name <> "main" then raise Parsing.Parse_error;
         {
           main =
             {
               ret_type = Typ.Int;
-              name = "main";
+              name;
               params = [];
               body;
             };
@@ -38,7 +39,7 @@ prog:
       }
 
 codeblock:
-  | LBRACE; ss = nonempty_list(stmt); RBRACE { ss }
+  | LBRACE; ss = list(stmt); RBRACE { ss }
 
 stmt:
   | KW_INT; x = ID; ASSIGN; e = expr; SEMI

@@ -1,0 +1,66 @@
+category,feature,current,future,note
+program,one main function,O,,
+program,global variables,X,O,
+program,multiple functions,X,O,
+program,function declarations,X,O,
+program,function prototypes,X,X,굳이?
+program,function parameters,X,O,
+program,function calls,X,O,
+declaration,initialized int local declaration,O,,
+declaration,uninitialized declarations,X,X,UB
+declaration,multiple declarators,X,O,
+declaration,typedef,X,X,equivalent
+declaration,storage classes,X,X,굳이?
+type,int,O,O,
+type,non-int scalar types,X,O,
+type,pointers,X,O,
+type,arrays,X,O,
+type,structs,X,O,
+type,unions,X,X,그냥 하지 말자
+type,enums,X,X,그냥 하지 말자
+type,type qualifiers,X,X,그냥 하지 말자
+statement,code block body,O,,
+statement,standalone block statement,X,X,
+statement,empty code block,X,X,
+statement,empty statement,X,X,
+statement,assignment statement,O,,
+statement,if else,O,,
+statement,if without else,X,O,
+statement,while,O,,
+statement,return with value,O,,
+statement,bare return,X,X,
+statement,for loop,X,O,
+statement,do while loop,X,O,
+statement,switch/case/default,X,O,
+statement,break/continue,X,O,
+statement,goto/labels,X,O,
+statement,inline asm,X,X,
+expression,integer literal decimal,O,,
+expression,identifier read,O,,
+expression,unary minus,O,,
+expression,logical not,X,O,
+expression,binary plus/minus/times,O,,
+expression,binary divide/modulo,O,,
+expression,comparisons,O,,
+expression,logical and/or,X,O,
+expression,bitwise operators,X,O,
+expression,shift operators,X,O,
+expression,assignment expression,X,O,
+expression,compound assignment,X,X,equivalent
+expression,increment/decrement,X,O,
+expression,function call,X,O,
+expression,array indexing,X,O,
+expression,field access,X,O,
+expression,dereference/address-of,X,O,
+expression,casts,X,X,complicated
+expression,sizeof/alignof,X,X,can calculate
+expression,ternary conditional,X,O,
+expression,comma operator,X,O,                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
+literal,string literal,X,O,
+literal,character literal,X,O,
+literal,floating literal,X,O,
+literal,hex/octal/binary integer literal,X,X,equivalent
+literal,integer suffixes,X,X,어차피 작은 수만 사용
+preprocessor,preprocessor directives,X,X,equivalent
+preprocessor,macros,X,X,equivalent
+preprocessor,include files,X,X,equivalent

@@ -17,6 +17,9 @@ Always follow these rules:
 - Do not delete or overwrite user-written content without explicit approval.
 - Before modifying files, show the planned diff/patch and present options to
   the user; apply changes only after the user confirms.
+- When explaining code or design, be concise and explain one function or concept
+  at a time. Wait for the user to confirm understanding before moving to the
+  next one.
 
 Start by reading `.agents/CONTEXT.md`, `.agents/todo.txt`, then inspect only the files relevant to
 the current request. Prefer concise status updates in Korean.

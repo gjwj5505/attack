@@ -64,15 +64,16 @@ function, `int main()`, and a small statement/expression subset that lowers
 predictably through CIL.
 
 ```ebnf
-program     ::= "int" "main" "(" ")" block EOF
-                (* Strict subset: no global declarations, no multiple functions,
-                   no function parameters, no non-int return type, no old-style
-                   function definition. *)
+program     ::= "int" ident "(" ")" block EOF
+                (* Strict subset: exactly one function definition is accepted,
+                   and its identifier must be main. No global declarations, no
+                   multiple functions, no function parameters, no non-int
+                   return type, no old-style function definition. *)
 
-block       ::= "{" stmt+ "}"
+block       ::= "{" stmt* "}"
                 (* Strict subset: block items are only our stmt grammar.
                    No labels, case/default labels, mixed arbitrary C declarations,
-                   attributes, or empty blocks. *)
+                   or attributes. *)
 
 stmt        ::= decl
               | assign
@@ -152,6 +153,8 @@ Parser notes:
   initialization.
 - `else` is mandatory for `if` in the initial subset. This avoids a dangling
   `else` design choice and matches the existing total command-style language.
+- Empty blocks are accepted by the parser. Synthesis should still avoid
+  generating empty blocks unless a later search policy explicitly wants them.
 - `if` and `while` bodies must be blocks. This keeps the accepted syntax close
   to the printer output and avoids statement-body normalization choices.
 - Standalone block statements are not part of the initial subset. Blocks appear
@@ -178,6 +181,9 @@ Sparrow-CIL core semantics다.
   declarations.
 - Signed overflow, uninitialized read, division by zero, and other C undefined
   behavior are outside the initial language.
+- Division and modulo are syntactically valid, but Big-Step semantics and
+  synthesis must not evaluate or generate `/` or `%` expressions whose divisor
+  evaluates to zero.
 
 ## AST Shape
 
@@ -200,6 +206,7 @@ Identifiers are lexer-validated strings:
 
 ```ocaml
 type id = string
+type integer_literal = Int64.t
 ```
 
 Typed names are represented by a shared binding type. Function parameters,
@@ -230,15 +237,21 @@ module Exp = struct
 
   type bop =
     | Eq | Ne | Lt | Le | Gt | Ge
-    | Plus | Minus | Times
+    | Plus | Minus | Times | Div | Mod
 
   type t =
-    | Int of int
+    | Int of integer_literal
     | Lval of lval
     | Uop of uop * t
     | Bop of bop * t * t
 end
 ```
+
+Integer literals are stored as `Int64.t` in the syntax tree so the parser can
+preserve decimal literals larger than 32-bit `int`, such as the operand in
+`-2147483648`. The initial runtime type is still only signed 32-bit `int`;
+Big-Step semantics converts literals to runtime `Value.Int` values and rejects
+out-of-range literals or arithmetic overflow as undefined behavior.
 
 Statements use the `Stmt` module name, not `Cmd`. This avoids confusion with
 Sparrow CFG commands. A C code block is represented as a statement list alias,
@@ -257,13 +270,13 @@ module Stmt = struct
 end
 ```
 
-Empty code blocks are rejected by parser/generator policy, not by the OCaml
-type. The initial parser should use `stmt+` for code blocks, and synthesis
-should avoid generating empty code blocks.
+Empty code blocks are represented as `[]`. The parser accepts them, but
+synthesis should avoid generating them unless a later search policy explicitly
+wants empty blocks.
 
-Functions store their source-level signature. The initial parser only accepts
-`int main()` and therefore creates `ret_type = Typ.Int`, `name = "main"`, and
-`params = []`.
+Functions store their source-level signature. The initial parser accepts one
+`int ident()` function definition and requires that identifier to be `main`.
+It therefore creates `ret_type = Typ.Int`, `name = "main"`, and `params = []`.
 
 ```ocaml
 type func = {
@@ -366,3 +379,7 @@ When adding a new syntax feature:
 
 The safe default is to reject or not generate any C feature whose CIL lowering
 or Sparrow abstract transfer is not yet understood.
+
+## C Feature Matrix
+
+The current support/addition matrix is tracked in `.agents/c-feature.csv`.
