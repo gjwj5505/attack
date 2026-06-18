@@ -187,6 +187,10 @@ C subset은 나중에 side-effect expression을 자연스럽게 추가할 수 �
 expression semantics를 effect-aware 형태로 둔다.
 Semantics, AST, memory model, derivator 구조를 설계할 때는 항상 future language
 extension을 고려하고, 예상되는 확장을 어렵게 만드는 선택은 피한다.
+현재 언어는 faithful C surface subset이 아니라 CIL/Sparrow-facing structural
+core로 본다. C-like parser/printer는 facade이며, semantics와 synthesis target은
+structural core AST다. 새 feature는 Sparrow CFG command로의 lowering과
+Big-Step concrete meaning이 명확할 때만 추가한다.
 
 - Expression judgment: `<state, expr> ⇓ <state', value>`
 - Statement judgment: `<state, stmt> ⇓ control`
@@ -200,6 +204,31 @@ extension을 고려하고, 예상되는 확장을 어렵게 만드는 선택은 
   operator 등을 추가하기 전에는 Sparrow/CIL lowering이 실제로 어떤 evaluation
   order와 temporary command를 만드는지 작은 예제로 확인한 뒤 Big-Step rule을
   정한다.
+- Structural core와 Sparrow 분석 대상의 기준 대응:
+  - declaration/assignment는 CIL instruction flattening 이후 `IntraCfg.Cmd.Cset`.
+  - `if`는 CFG branch edge에 삽입되는 `Cassume(e)` / `Cassume(!e)`.
+  - `while`은 CFG cycle과 body/exit edge의 condition assume.
+  - `return e`는 `Creturn(Some e)`.
+  - `If`/`Loop` node 자체는 CFG 생성 후 `Cskip`으로 제거된다.
+- Analyzer attack의 soundness 비교는 structural Big-Step execution이
+  CIL/IntraCfg concrete path 하나와 대응되고, Sparrow abstract semantics가 그
+  path의 concrete state를 over-approximate한다는 가정 위에서 한다. 이 가정은
+  Sparrow 논문/문서의 soundness 정의 또는 구현의 command transfer semantics를
+  근거로 확인해야 한다.
+- Sparrow 공식 README/웹페이지는 Sparrow가 abstract interpretation 기반이며
+  “sound in design”이라고 설명한다. PLDI 2012 sparse global analysis 슬라이드는
+  프로그램을 control points와 control-flow relation으로 보고, 각 control point에
+  `assign/alloc/assume/call/return`류 command가 붙는 모델을 사용한다. 이때
+  collecting semantics는 program point별 reachable concrete states 집합이고,
+  baseline abstract semantics는 각 point에서 reachable states를 subsume하는
+  abstract state로 설명된다.
+- 구현상 `SparseAnalysis`는 predecessor outputs를 join해 node input을 만들고
+  `Sem.run`으로 `IntraCfg.Cmd` abstract transfer를 적용한 뒤 widening/narrowing
+  fixpoint를 계산한다. Interval backend의 `ItvSem.run`은 `Cset`, `Cassume`,
+  `Creturn` 등을 각각 `eval/update`, `prune`, return-location update로 처리한다.
+  따라서 현재 공격 비교의 실질 기준은 CIL 이후 생성된 `IntraCfg.Cmd` path의
+  concrete collecting semantics와 `ItvSem` abstract transfer/fixpoint 결과의
+  포함 관계다.
 - Big-Step state 이름은 `environment`가 아니라 `memory`를 사용한다.
 - Runtime value domain은 별도 `Value` 모듈로 두고, 초기에는 `Value.Int`
   서브모듈이 32-bit signed C `int` 연산과 UB 판정을 담당한다.

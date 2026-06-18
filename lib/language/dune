@@ -2,7 +2,7 @@
 
 (library
  (name language)
- (modules typ syntax parser lexer))
+ (modules typ syntax parser lexer value memory bigStep bigStepUtil derivator visualizer textSvg))
 
 (ocamllex lexer)
 

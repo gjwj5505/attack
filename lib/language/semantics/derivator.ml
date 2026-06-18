@@ -14,12 +14,18 @@ type fuel = int
 
 let default_fuel = 100
 
+(* This derivator builds execution trees for a well-typed structural core.
+   Type compatibility checks for declarations, assignments, returns, and
+   operators are intentionally deferred to a future type checker. *)
+
 let ( let* ) = Result.bind
 
+(* Lift Value.Int UB into the derivator-level error type. *)
 let map_int_ub = function
   | Ok value -> Ok value
   | Error ub -> Error (Value_ub (Value.Int_ub ub))
 
+(* Lift Memory API failures into the derivator-level error type. *)
 let map_memory_error = function
   | Ok value -> Ok value
   | Error err -> Error (Memory_error err)
@@ -84,24 +90,37 @@ let consume_fuel fuel =
 let rec derive_exp mem exp =
   match exp with
   | Exp.Int n ->
-      let* value = value_of_int_result (Value.Int.of_int64 n) in
-      Ok (EIntLiteral ((), (mem, exp, mem, value)))
+      if Int64.compare n 0L < 0 then
+        (* Integer literal payloads should be nonnegative. A negative payload
+           means the lexer/parser or direct AST producer violated syntax policy. *)
+        Error (Type_error "negative integer literal payload")
+      else
+        let* value = value_of_int_result (Value.Int.of_int64 n) in
+        Ok (EIntLiteral ((), (mem, exp, mem, value)))
   | Exp.Lval lval ->
       let* value = map_memory_error (Memory.read_lval lval mem) in
       Ok (ELval ((), (mem, exp, mem, value)))
   | Exp.Uop (Exp.Uminus, Exp.Int n) ->
-      let* value = value_of_int_result (Value.Int.of_negated_int64 n) in
-      Ok (ENegIntLiteral ((), (mem, exp, mem, value)))
+      if Int64.compare n 0L < 0 then
+        (* Integer literal payloads should be nonnegative. A negative payload
+           means the lexer/parser or direct AST producer violated syntax policy. *)
+        Error (Type_error "negative integer literal payload")
+      else
+        let* value = value_of_int_result (Value.Int.of_negated_int64 n) in
+        Ok (ENegIntLiteral ((), (mem, exp, mem, value)))
   | Exp.Uop (op, sub_exp) ->
       let* sub_tree = derive_exp mem sub_exp in
-      let _, _, sub_mem, sub_value = BigStepUtil.get_e_concl sub_tree in
+      let sub_mem = BigStepUtil.get_e_output_memory sub_tree in
+      let sub_value = BigStepUtil.get_e_value sub_tree in
       let* value = eval_uop op sub_value in
       Ok (EUop (sub_tree, (mem, exp, sub_mem, value)))
   | Exp.Bop (op, left_exp, right_exp) ->
       let* left_tree = derive_exp mem left_exp in
-      let _, _, left_mem, left_value = BigStepUtil.get_e_concl left_tree in
+      let left_mem = BigStepUtil.get_e_output_memory left_tree in
+      let left_value = BigStepUtil.get_e_value left_tree in
       let* right_tree = derive_exp left_mem right_exp in
-      let _, _, right_mem, right_value = BigStepUtil.get_e_concl right_tree in
+      let right_mem = BigStepUtil.get_e_output_memory right_tree in
+      let right_value = BigStepUtil.get_e_value right_tree in
       let* value = eval_bop op left_value right_value in
       Ok (EBop ((left_tree, right_tree), (mem, exp, right_mem, value)))
 
@@ -110,62 +129,66 @@ and derive_stmt fuel mem stmt =
   match stmt with
   | Stmt.Decl (binding, exp) ->
       let* exp_tree = derive_exp mem exp in
-      let _, _, exp_mem, value = BigStepUtil.get_e_concl exp_tree in
+      let exp_mem = BigStepUtil.get_e_output_memory exp_tree in
+      let value = BigStepUtil.get_e_value exp_tree in
       let* out_mem = map_memory_error (Memory.declare binding value exp_mem) in
       Ok (SDecl (exp_tree, (mem, stmt, out_mem, Normal)), fuel)
   | Stmt.Assign (lval, exp) ->
       let* exp_tree = derive_exp mem exp in
-      let _, _, exp_mem, value = BigStepUtil.get_e_concl exp_tree in
+      let exp_mem = BigStepUtil.get_e_output_memory exp_tree in
+      let value = BigStepUtil.get_e_value exp_tree in
       let* out_mem = map_memory_error (Memory.assign_lval lval value exp_mem) in
       Ok (SAssign (exp_tree, (mem, stmt, out_mem, Normal)), fuel)
   | Stmt.If (cond, then_block, else_block) ->
       let* cond_tree = derive_exp mem cond in
-      let _, _, cond_mem, cond_value = BigStepUtil.get_e_concl cond_tree in
+      let cond_mem = BigStepUtil.get_e_output_memory cond_tree in
+      let cond_value = BigStepUtil.get_e_value cond_tree in
       let* cond_truthy = truthy cond_value in
       if cond_truthy then
-      let* then_tree, fuel = derive_block fuel cond_mem then_block in
-        let b_concl = BigStepUtil.get_b_concl then_tree in
-        let out_mem = BigStepUtil.get_b_concl_output_memory b_concl in
-        let control = BigStepUtil.get_b_concl_control b_concl in
+        let* then_tree, fuel = derive_block fuel cond_mem then_block in
+        let out_mem = BigStepUtil.get_b_output_memory then_tree in
+        let control = BigStepUtil.get_b_control then_tree in
         Ok (SIfTrue ((cond_tree, then_tree), (mem, stmt, out_mem, control)), fuel)
       else
         let* else_tree, fuel = derive_block fuel cond_mem else_block in
-        let b_concl = BigStepUtil.get_b_concl else_tree in
-        let out_mem = BigStepUtil.get_b_concl_output_memory b_concl in
-        let control = BigStepUtil.get_b_concl_control b_concl in
+        let out_mem = BigStepUtil.get_b_output_memory else_tree in
+        let control = BigStepUtil.get_b_control else_tree in
         Ok (SIfFalse ((cond_tree, else_tree), (mem, stmt, out_mem, control)), fuel)
   | Stmt.While (cond, body) ->
       derive_while fuel mem stmt cond body
   | Stmt.Return exp ->
       let* exp_tree = derive_exp mem exp in
-      let _, _, out_mem, value = BigStepUtil.get_e_concl exp_tree in
+      let out_mem = BigStepUtil.get_e_output_memory exp_tree in
+      let value = BigStepUtil.get_e_value exp_tree in
       Ok (SReturn (exp_tree, (mem, stmt, out_mem, Return value)), fuel)
 
 and derive_while fuel mem stmt cond body =
+  let* () =
+    match stmt with
+    | Stmt.While _ -> Ok ()
+    | _ -> Error (Type_error "derive_while expected a while statement")
+  in
   let* cond_tree = derive_exp mem cond in
-  let _, _, cond_mem, cond_value = BigStepUtil.get_e_concl cond_tree in
+  let cond_mem = BigStepUtil.get_e_output_memory cond_tree in
+  let cond_value = BigStepUtil.get_e_value cond_tree in
   let* cond_truthy = truthy cond_value in
   if not cond_truthy then
     Ok (SWhileFalse (cond_tree, (mem, stmt, cond_mem, Normal)), fuel)
   else
+    let derive_next_iteration fuel body_mem make_tree =
+      let* rest_tree, fuel = derive_stmt fuel body_mem stmt in
+      let _, _, out_mem, control = BigStepUtil.get_s_concl rest_tree in
+      Ok (make_tree rest_tree (mem, stmt, out_mem, control), fuel)
+    in
     let* body_tree, fuel = derive_block fuel cond_mem body in
-    let body_concl = BigStepUtil.get_b_concl body_tree in
-    let body_mem = BigStepUtil.get_b_concl_output_memory body_concl in
-    match BigStepUtil.get_b_concl_control body_concl with
+    let body_mem = BigStepUtil.get_b_output_memory body_tree in
+    match BigStepUtil.get_b_control body_tree with
     | Normal ->
-        let* rest_tree, fuel = derive_stmt fuel body_mem stmt in
-        let _, _, out_mem, control = BigStepUtil.get_s_concl rest_tree in
-        Ok
-          ( SWhileTrueNormal
-              ((cond_tree, body_tree, rest_tree), (mem, stmt, out_mem, control)),
-            fuel )
+        derive_next_iteration fuel body_mem
+          (fun rest_tree concl -> SWhileTrueNormal ((cond_tree, body_tree, rest_tree), concl))
     | Continue ->
-        let* rest_tree, fuel = derive_stmt fuel body_mem stmt in
-        let _, _, out_mem, control = BigStepUtil.get_s_concl rest_tree in
-        Ok
-          ( SWhileTrueContinue
-              ((cond_tree, body_tree, rest_tree), (mem, stmt, out_mem, control)),
-            fuel )
+        derive_next_iteration fuel body_mem
+          (fun rest_tree concl -> SWhileTrueContinue ((cond_tree, body_tree, rest_tree), concl))
     | Break ->
         Ok (SWhileTrueBreak ((cond_tree, body_tree), (mem, stmt, body_mem, Normal)), fuel)
     | Return value ->
@@ -179,9 +202,8 @@ and derive_block fuel mem block =
   | [] -> Ok (BEmpty (mem, block, mem, Normal), fuel)
   | stmt :: rest -> (
       let* stmt_tree, fuel = derive_stmt fuel mem stmt in
-      let stmt_concl = BigStepUtil.get_s_concl stmt_tree in
-      let stmt_mem = BigStepUtil.get_s_concl_output_memory stmt_concl in
-      match BigStepUtil.get_s_concl_control stmt_concl with
+      let stmt_mem = BigStepUtil.get_s_output_memory stmt_tree in
+      match BigStepUtil.get_s_control stmt_tree with
       | Normal ->
           let* rest_tree, fuel = derive_block fuel stmt_mem rest in
           let _, _, out_mem, control = BigStepUtil.get_b_concl rest_tree in
@@ -196,12 +218,11 @@ and derive_block fuel mem block =
       | Continue ->
           Ok (BSeqContinue (stmt_tree, (mem, block, stmt_mem, Continue)), fuel) )
 
-let derive_program ?(fuel = default_fuel) ({ main } as program) =
+let derive_program ?(fuel = default_fuel) ({ main } as program : Syntax.program) =
   let mem = Memory.empty |> Memory.enter_function in
   let* body_tree, _fuel = derive_block fuel mem main.body in
-  let body_concl = BigStepUtil.get_b_concl body_tree in
-  let out_mem = BigStepUtil.get_b_concl_output_memory body_concl in
-  match BigStepUtil.get_b_concl_control body_concl with
+  let out_mem = BigStepUtil.get_b_output_memory body_tree in
+  match BigStepUtil.get_b_control body_tree with
   | Return value -> Ok (PMainReturn (body_tree, (program, out_mem, value)))
   | Normal -> Error Missing_return
   | Break -> Error Break_outside_loop

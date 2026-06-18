@@ -1,7 +1,9 @@
 # Language Design
 
 이 프로젝트의 합성 언어는 ISO C 전체가 아니라, Sparrow가 CIL을 거쳐
-분석하기 쉬운 형태로 낮출 수 있는 작은 C subset이다.
+분석하기 쉬운 형태로 낮출 수 있는 structural core language이다. C-like
+surface syntax는 입력/출력 편의를 위한 facade이며, semantics와 synthesis
+target은 이 structural core AST다.
 
 목표는 C 표준의 모든 의미를 모델링하는 것이 아니다. 목표는 우리가 Big-Step
 proof tree로 정의한 concrete execution이 Sparrow의 abstract semantics와
@@ -10,7 +12,8 @@ proof tree로 정의한 concrete execution이 Sparrow의 abstract semantics와
 
 ## Design Principle
 
-- Surface syntax는 C처럼 둔다.
+- Surface syntax는 C처럼 둘 수 있지만, faithful C surface semantics를 목표로
+  하지 않는다.
 - Internal AST와 Big-Step semantics는 Sparrow가 실제로 분석하는 CIL/CFG core에
   가깝게 둔다.
 - Parser/printer는 사람이 읽기 쉬운 C subset을 다룬다.
@@ -18,6 +21,9 @@ proof tree로 정의한 concrete execution이 Sparrow의 abstract semantics와
   전달할 수 있다.
 - `.i`는 합성 언어가 아니라, 필요할 때 Sparrow에 넘기는 preprocessed C 입력
   형식으로만 본다.
+- 새 feature는 C surface syntax를 넓히기 위해 추가하지 않는다. Sparrow CFG
+  command로의 lowering과 Big-Step concrete meaning이 명확하고, analyzer attack
+  목적에 필요할 때만 추가한다.
 
 Sparrow의 흐름은 다음과 같다.
 

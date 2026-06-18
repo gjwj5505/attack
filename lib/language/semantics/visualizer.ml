@@ -1,106 +1,117 @@
 open BigStep
 open Syntax
-open Size
 
-(* --- 데이터 구조 정의 --- *)
-type box = { lines : string list; width : int; height : int }
+type box = {
+  lines : string list;
+  width : int;
+  height : int;
+}
+
 type side = Top | Bottom
 
-(* --- 박스 생성 및 정렬 유틸리티 --- *)
-
 let make_box s =
-  (* 앞뒤에 생기는 불필요한 빈 줄(\n) 제거 로직 *)
   let raw_lines = String.split_on_char '\n' s in
-  let rec trim_empty = function "" :: tl -> trim_empty tl | lines -> lines in
-  let lines =
-    raw_lines |> trim_empty (* 앞쪽 빈 줄 제거 *) |> List.rev
-    |> trim_empty |> List.rev (* 뒤쪽 빈 줄 제거 *)
+  let rec trim_empty = function
+    | "" :: tl -> trim_empty tl
+    | lines -> lines
   in
-  (* 모든 줄이 비어버린 경우 최소 한 줄 유지 *)
+  let lines = raw_lines |> trim_empty |> List.rev |> trim_empty |> List.rev in
   let lines = if lines = [] then [ "" ] else lines in
   let width = List.fold_left (fun acc l -> max acc (String.length l)) 0 lines in
   { lines; width; height = List.length lines }
 
 let empty_box = { lines = []; width = 0; height = 0 }
-let s_env cenv = "{" ^ Environment.string_of_env cenv ^ "}"
-let spaces lvl = String.make (2 * lvl) ' '
-
-let rec string_of_cmd ?(lvl = 0) =
-  let prefix = spaces lvl in
-  Cmd.(
-    function
-    | Assign (id, e) ->
-        Printf.sprintf "%s%s := %s" prefix id (Exp.string_of_t e)
-    | Seq (c1, c2) ->
-        Printf.sprintf "%s;\n%s"
-          (string_of_cmd ~lvl c1.cmd)
-          (string_of_cmd ~lvl c2.cmd)
-    | If (pred, con, alt) ->
-        Printf.sprintf "%sif %s then\n%s\n%selse\n%s" prefix
-          (Exp.string_of_t pred)
-          (string_of_cmd ~lvl:(lvl + 1) con.cmd)
-          prefix
-          (string_of_cmd ~lvl:(lvl + 1) alt.cmd)
-    | While (pred, c) ->
-        Printf.sprintf "%swhile %s\n%s" prefix (Exp.string_of_t pred)
-          (string_of_cmd ~lvl:(lvl + 1) c.cmd))
 
 let pad side b target_h =
   let diff = target_h - b.height in
   if diff <= 0 then b.lines
   else
     let padding = List.init diff (fun _ -> String.make b.width ' ') in
-    match side with Top -> b.lines @ padding | Bottom -> padding @ b.lines
+    match side with
+    | Top -> b.lines @ padding
+    | Bottom -> padding @ b.lines
 
-(* --- 레이아웃 엔진 핵심 --- *)
+let block_summary block = Printf.sprintf "block[%d]" (List.length block)
 
-let make_conclusion cenv cmd_str res_str =
-  let b_env = make_box (s_env cenv) in
-  let b_turn = make_box "|-" in
-  let b_cmd = make_box cmd_str in
-  let b_arrow = make_box "=>" in
-  let b_res = make_box res_str in
+let string_of_stmt_summary = function
+  | Stmt.Decl (binding, exp) ->
+      Printf.sprintf "%s = %s;" (string_of_binding binding) (Exp.string_of_t exp)
+  | Stmt.Assign (lval, exp) ->
+      Printf.sprintf "%s = %s;" (string_of_lval lval) (Exp.string_of_t exp)
+  | Stmt.If (cond, _, _) ->
+      Printf.sprintf "if (%s) {...} else {...}" (Exp.string_of_t cond)
+  | Stmt.While (cond, _) ->
+      Printf.sprintf "while (%s) {...}" (Exp.string_of_t cond)
+  | Stmt.Return exp -> Printf.sprintf "return %s;" (Exp.string_of_t exp)
 
-  let boxes = [ b_env; b_turn; b_cmd; b_arrow; b_res ] in
-  let max_h = List.fold_left (fun acc b -> max acc b.height) 0 boxes in
+let rec string_of_stmt_verbose ?(lvl = 0) stmt =
+  let pad = Stmt.indent lvl in
+  match stmt with
+  | Stmt.Decl (binding, exp) ->
+      Printf.sprintf "%s%s = %s;" pad (string_of_binding binding)
+        (Exp.string_of_t exp)
+  | Stmt.Assign (lval, exp) ->
+      Printf.sprintf "%s%s = %s;" pad (string_of_lval lval)
+        (Exp.string_of_t exp)
+  | Stmt.If (cond, then_block, else_block) ->
+      Printf.sprintf "%sif (%s)\n%s\n%selse\n%s" pad (Exp.string_of_t cond)
+        (string_of_block_verbose ~lvl:(lvl + 1) then_block)
+        pad
+        (string_of_block_verbose ~lvl:(lvl + 1) else_block)
+  | Stmt.While (cond, body) ->
+      Printf.sprintf "%swhile (%s)\n%s" pad (Exp.string_of_t cond)
+        (string_of_block_verbose ~lvl:(lvl + 1) body)
+  | Stmt.Return exp -> Printf.sprintf "%sreturn %s;" pad (Exp.string_of_t exp)
 
-  (* 각 박스를 상단 정렬(Top)하고, 여러 줄일 경우 너비 패딩을 채워 간격을 일정하게 유지 *)
-  let adjusted_boxes =
-    [
-      {
-        b_env with
-        lines =
-          List.map
-            (fun s -> String.make (b_env.width - String.length s) ' ' ^ s)
-            (pad Top b_env max_h);
-      };
-      { b_turn with lines = pad Top b_turn max_h };
-      {
-        b_cmd with
-        lines =
-          List.map
-            (fun s -> s ^ String.make (b_cmd.width - String.length s) ' ')
-            (pad Top b_cmd max_h);
-      };
-      { b_arrow with lines = pad Top b_arrow max_h };
-      { b_res with lines = pad Top b_res max_h };
-    ]
+and string_of_block_verbose ?(lvl = 0) block =
+  match block with
+  | [] -> Stmt.indent lvl ^ "empty"
+  | _ -> String.concat "\n" (List.map (string_of_stmt_verbose ~lvl) block)
+
+let string_of_stmt ?(verbose = false) stmt =
+  if verbose then string_of_stmt_verbose stmt else string_of_stmt_summary stmt
+
+let string_of_block ?(verbose = false) block =
+  if verbose then string_of_block_verbose block else block_summary block
+
+let make_conclusion ?(verbose = false) mem_opt subject result =
+  let boxes =
+    match mem_opt with
+    | Some mem when verbose ->
+        [
+          make_box (Memory.string_of_t mem);
+          make_box "|-";
+          make_box subject;
+          make_box "=>";
+          make_box result;
+        ]
+    | _ -> [ make_box subject; make_box "=>"; make_box result ]
   in
-
-  (* 모든 요소를 한 칸(" ") 간격으로 결합 *)
+  let max_h = List.fold_left (fun acc b -> max acc b.height) 0 boxes in
+  let adjusted_boxes =
+    List.map
+      (fun b ->
+        {
+          b with
+          lines =
+            List.map
+              (fun s -> s ^ String.make (b.width - String.length s) ' ')
+              (pad Top b max_h);
+        })
+      boxes
+  in
   let combined_lines =
     List.init max_h (fun i ->
         String.concat " "
           (List.map (fun b -> List.nth b.lines i) adjusted_boxes))
   in
-
   let total_w =
     List.fold_left (fun acc b -> acc + b.width) 0 adjusted_boxes
-    + (List.length adjusted_boxes - 1)
+    + List.length adjusted_boxes - 1
   in
   { lines = combined_lines; width = total_w; height = max_h }
 
-let build_proof ?(verbose = false) rule_name size premises conclusion_box =
+let build_proof rule_name premises conclusion_box =
   let gap = 3 in
   let premise_box =
     match premises with
@@ -127,24 +138,21 @@ let build_proof ?(verbose = false) rule_name size premises conclusion_box =
             })
           (List.hd padded_ps) (List.tl padded_ps)
   in
-
-  let rule_label =
-    if verbose then
-      Printf.sprintf "[%s | (%d,%d)] " rule_name size.prog_size size.proof_size
-    else ""
+  let label = make_box (Printf.sprintf "[%s] " rule_name) in
+  let full_h = max label.height conclusion_box.height in
+  let conc_lines =
+    List.map2 (fun label concl -> label ^ concl) (pad Top label full_h)
+      (pad Top conclusion_box full_h)
   in
-  let b_label = make_box rule_label in
-  let full_h = max b_label.height conclusion_box.height in
-
-  let l_label = pad Top b_label full_h in
-  let l_conc = pad Top conclusion_box full_h in
-
-  let full_conc_lines = List.map2 (fun s1 s2 -> s1 ^ s2) l_label l_conc in
-  let full_conc_w = b_label.width + conclusion_box.width in
-
-  let max_w = max premise_box.width full_conc_w in
+  let conc_box =
+    {
+      lines = conc_lines;
+      width = label.width + conclusion_box.width;
+      height = full_h;
+    }
+  in
+  let max_w = max premise_box.width conc_box.width in
   let line = String.make max_w '-' in
-
   let center_lines b w =
     if b.width = 0 && b.height = 0 then []
     else
@@ -154,76 +162,164 @@ let build_proof ?(verbose = false) rule_name size premises conclusion_box =
         (fun s -> String.make left_pad ' ' ^ s ^ String.make right_pad ' ')
         b.lines
   in
-
   let p_lines = center_lines premise_box max_w in
-  let c_lines =
-    center_lines
-      { lines = full_conc_lines; width = full_conc_w; height = full_h }
-      max_w
-  in
-
+  let c_lines = center_lines conc_box max_w in
   {
     lines = p_lines @ [ line ] @ c_lines;
     width = max_w;
     height = List.length p_lines + 1 + List.length c_lines;
   }
 
-(* --- 구문 트리 순회 (AST -> Box) --- *)
+let string_of_expr_result ?(verbose = false) out_mem value =
+  if verbose then
+    Printf.sprintf "%s / %s" (Memory.string_of_t out_mem) (Value.string_of_t value)
+  else Value.string_of_t value
 
-let rec box_of_etree ?(verbose = false) t =
-  match t with
-  | EInt (_, (cenv, e, cval)) ->
-      build_proof ~verbose "Int" (sizeof_etree t) []
-        (make_conclusion cenv (Exp.string_of_t e) (string_of_int cval))
-  | EVar (_, (cenv, e, cval)) ->
-      build_proof ~verbose "Var" (sizeof_etree t) []
-        (make_conclusion cenv (Exp.string_of_t e) (string_of_int cval))
-  | EBop ((t1, t2), (cenv, e, cval)) ->
-      build_proof ~verbose "Bop" (sizeof_etree t)
-        [ box_of_etree ~verbose t1; box_of_etree ~verbose t2 ]
-        (make_conclusion cenv (Exp.string_of_t e) (string_of_int cval))
-  | EUop (t1, (cenv, e, cval)) ->
-      build_proof ~verbose "Uop" (sizeof_etree t)
-        [ box_of_etree ~verbose t1 ]
-        (make_conclusion cenv (Exp.string_of_t e) (string_of_int cval))
+let string_of_stmt_result ?(verbose = false) out_mem control =
+  if verbose then
+    Printf.sprintf "%s / %s" (Memory.string_of_t out_mem)
+      (BigStepUtil.string_of_control control)
+  else BigStepUtil.string_of_control control
 
-let rec box_of_ctree ?(verbose = false) t =
-  match t with
-  | CAssign (et, (cenv, c, next_cenv)) ->
-      build_proof ~verbose "Asgn" (sizeof_ctree t)
-        [ box_of_etree ~verbose et ]
-        (make_conclusion cenv (string_of_cmd c) (s_env next_cenv))
-  | CSeq ((t1, t2), (cenv, c, final_cenv)) ->
-      build_proof ~verbose "Seq" (sizeof_ctree t)
-        [ box_of_ctree ~verbose t1; box_of_ctree ~verbose t2 ]
-        (make_conclusion cenv (string_of_cmd c) (s_env final_cenv))
-  | CIfTrue ((et, ct), (cenv, c, branch_cenv)) ->
-      build_proof ~verbose "IfT" (sizeof_ctree t)
-        [ box_of_etree ~verbose et; box_of_ctree ~verbose ct ]
-        (make_conclusion cenv (string_of_cmd c) (s_env branch_cenv))
-  | CIfFalse ((et, ct), (cenv, c, branch_cenv)) ->
-      build_proof ~verbose "IfF" (sizeof_ctree t)
-        [ box_of_etree ~verbose et; box_of_ctree ~verbose ct ]
-        (make_conclusion cenv (string_of_cmd c) (s_env branch_cenv))
-  | CWhileTrue ((et, t_body, t_rest), (cenv, c, final_cenv)) ->
-      build_proof ~verbose "WhlT" (sizeof_ctree t)
+let string_of_program_result ?(verbose = false) out_mem value =
+  if verbose then
+    Printf.sprintf "%s / %s" (Memory.string_of_t out_mem) (Value.string_of_t value)
+  else Value.string_of_t value
+
+let e_conclusion ?(verbose = false) (mem, exp, out_mem, value) =
+  make_conclusion ~verbose (Some mem) (Exp.string_of_t exp)
+    (string_of_expr_result ~verbose out_mem value)
+
+let s_conclusion ?(verbose = false) (mem, stmt, out_mem, control) =
+  make_conclusion ~verbose (Some mem) (string_of_stmt ~verbose stmt)
+    (string_of_stmt_result ~verbose out_mem control)
+
+let b_conclusion ?(verbose = false) (mem, block, out_mem, control) =
+  make_conclusion ~verbose (Some mem) (string_of_block ~verbose block)
+    (string_of_stmt_result ~verbose out_mem control)
+
+let p_conclusion ?(verbose = false) (_, out_mem, value) =
+  make_conclusion ~verbose None "int main()"
+    (string_of_program_result ~verbose out_mem value)
+
+let rec box_of_etree ?(verbose = false) tree =
+  match tree with
+  | EIntLiteral (_, concl) ->
+      build_proof "Int" [] (e_conclusion ~verbose concl)
+  | ENegIntLiteral (_, concl) ->
+      build_proof "NegInt" [] (e_conclusion ~verbose concl)
+  | ELval (_, concl) ->
+      build_proof "Lval" [] (e_conclusion ~verbose concl)
+  | EUop (sub, concl) ->
+      build_proof "Uop" [ box_of_etree ~verbose sub ]
+        (e_conclusion ~verbose concl)
+  | EBop ((left, right), concl) ->
+      build_proof "Bop"
+        [ box_of_etree ~verbose left; box_of_etree ~verbose right ]
+        (e_conclusion ~verbose concl)
+  | ELogicalOrLeftTrue (left, concl) ->
+      build_proof "OrLT" [ box_of_etree ~verbose left ]
+        (e_conclusion ~verbose concl)
+  | ELogicalOrLeftFalse ((left, right), concl) ->
+      build_proof "OrLF"
+        [ box_of_etree ~verbose left; box_of_etree ~verbose right ]
+        (e_conclusion ~verbose concl)
+  | ELogicalAndLeftFalse (left, concl) ->
+      build_proof "AndLF" [ box_of_etree ~verbose left ]
+        (e_conclusion ~verbose concl)
+  | ELogicalAndLeftTrue ((left, right), concl) ->
+      build_proof "AndLT"
+        [ box_of_etree ~verbose left; box_of_etree ~verbose right ]
+        (e_conclusion ~verbose concl)
+
+let rec box_of_stree ?(verbose = false) tree =
+  match tree with
+  | SDecl (exp, concl) ->
+      build_proof "Decl" [ box_of_etree ~verbose exp ]
+        (s_conclusion ~verbose concl)
+  | SAssign (exp, concl) ->
+      build_proof "Asgn" [ box_of_etree ~verbose exp ]
+        (s_conclusion ~verbose concl)
+  | SIfTrue ((cond, body), concl) ->
+      build_proof "IfT"
+        [ box_of_etree ~verbose cond; box_of_btree ~verbose body ]
+        (s_conclusion ~verbose concl)
+  | SIfFalse ((cond, body), concl) ->
+      build_proof "IfF"
+        [ box_of_etree ~verbose cond; box_of_btree ~verbose body ]
+        (s_conclusion ~verbose concl)
+  | SWhileFalse (cond, concl) ->
+      build_proof "WhlF" [ box_of_etree ~verbose cond ]
+        (s_conclusion ~verbose concl)
+  | SWhileTrueNormal ((cond, body, rest), concl) ->
+      build_proof "WhlN"
         [
-          box_of_etree ~verbose et;
-          box_of_ctree ~verbose t_body;
-          box_of_ctree ~verbose t_rest;
+          box_of_etree ~verbose cond;
+          box_of_btree ~verbose body;
+          box_of_stree ~verbose rest;
         ]
-        (make_conclusion cenv (string_of_cmd c) (s_env final_cenv))
-  | CWhileFalse (et, (cenv, c, final_cenv)) ->
-      build_proof ~verbose "WhlF" (sizeof_ctree t)
-        [ box_of_etree ~verbose et ]
-        (make_conclusion cenv (string_of_cmd c) (s_env final_cenv))
+        (s_conclusion ~verbose concl)
+  | SWhileTrueContinue ((cond, body, rest), concl) ->
+      build_proof "WhlC"
+        [
+          box_of_etree ~verbose cond;
+          box_of_btree ~verbose body;
+          box_of_stree ~verbose rest;
+        ]
+        (s_conclusion ~verbose concl)
+  | SWhileTrueBreak ((cond, body), concl) ->
+      build_proof "WhlB"
+        [ box_of_etree ~verbose cond; box_of_btree ~verbose body ]
+        (s_conclusion ~verbose concl)
+  | SWhileTrueReturn ((cond, body), concl) ->
+      build_proof "WhlR"
+        [ box_of_etree ~verbose cond; box_of_btree ~verbose body ]
+        (s_conclusion ~verbose concl)
+  | SReturn (exp, concl) ->
+      build_proof "Ret" [ box_of_etree ~verbose exp ]
+        (s_conclusion ~verbose concl)
+
+and box_of_btree ?(verbose = false) tree =
+  match tree with
+  | BEmpty concl -> build_proof "BEmp" [] (b_conclusion ~verbose concl)
+  | BSeqNormal ((stmt, rest), concl) ->
+      build_proof "BSeqN"
+        [ box_of_stree ~verbose stmt; box_of_btree ~verbose rest ]
+        (b_conclusion ~verbose concl)
+  | BSeqReturn (stmt, concl) ->
+      build_proof "BSeqR" [ box_of_stree ~verbose stmt ]
+        (b_conclusion ~verbose concl)
+  | BSeqBreak (stmt, concl) ->
+      build_proof "BSeqB" [ box_of_stree ~verbose stmt ]
+        (b_conclusion ~verbose concl)
+  | BSeqContinue (stmt, concl) ->
+      build_proof "BSeqC" [ box_of_stree ~verbose stmt ]
+        (b_conclusion ~verbose concl)
+
+let box_of_ptree ?(verbose = false) = function
+  | PMainReturn (body, concl) ->
+      build_proof "Main" [ box_of_btree ~verbose body ]
+        (p_conclusion ~verbose concl)
 
 let print_tree ?(verbose = false) tree =
   let final_box =
     match tree with
     | ETree t -> box_of_etree ~verbose t
-    | CTree t -> box_of_ctree ~verbose t
+    | STree t -> box_of_stree ~verbose t
+    | BTree t -> box_of_btree ~verbose t
+    | PTree t -> box_of_ptree ~verbose t
   in
   List.iter print_endline final_box.lines
 
-(* TODO: 코드가 두 줄 이상일 경우 공백 3칸되는 문제(box)로 관리해서 그런듯, 결과 env가 위로 올라가있는 문제 *)
+let render_tree ?(verbose = false) tree =
+  let final_box =
+    match tree with
+    | ETree t -> box_of_etree ~verbose t
+    | STree t -> box_of_stree ~verbose t
+    | BTree t -> box_of_btree ~verbose t
+    | PTree t -> box_of_ptree ~verbose t
+  in
+  final_box.lines
+
+let write_tree_svg ?(verbose = false) path tree =
+  render_tree ~verbose tree |> TextSvg.write_lines path

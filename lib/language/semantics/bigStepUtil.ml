@@ -20,6 +20,12 @@ let return_value = function
   | Return value -> Some value
   | Normal | Break | Continue -> None
 
+let string_of_control = function
+  | Normal -> "Normal"
+  | Return value -> "Return(" ^ Value.string_of_t value ^ ")"
+  | Break -> "Break"
+  | Continue -> "Continue"
+
 let get_e_concl = function
   | EIntLiteral (_, c)
   | ENegIntLiteral (_, c)
@@ -62,3 +68,10 @@ let get_s_concl_output_memory ((_, _, mem, _) : s_concl) = mem
 let get_s_concl_control ((_, _, _, control) : s_concl) = control
 let get_b_concl_output_memory ((_, _, mem, _) : b_concl) = mem
 let get_b_concl_control ((_, _, _, control) : b_concl) = control
+
+let get_e_output_memory tree = get_e_concl_output_memory (get_e_concl tree)
+let get_e_value tree = get_e_concl_value (get_e_concl tree)
+let get_s_output_memory tree = get_s_concl_output_memory (get_s_concl tree)
+let get_s_control tree = get_s_concl_control (get_s_concl tree)
+let get_b_output_memory tree = get_b_concl_output_memory (get_b_concl tree)
+let get_b_control tree = get_b_concl_control (get_b_concl tree)

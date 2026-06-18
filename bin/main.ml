@@ -16,10 +16,7 @@ let objective_name = ref "top"
 let bound_prog = ref 0
 let bound_proof = ref 0
 *)
-(*
- * Temporarily disabled until C Big-Step / verbose tree output is restored.
 let opt_verbose = ref false
-*)
 
 let usage =
   "Usage : " ^ Filename.basename Sys.argv.(0)
@@ -38,9 +35,10 @@ let has_action () =
   !opt_pp || !opt_tab || !opt_tintp || !opt_dintp || !opt_big
 
 let parse_program () =
-  let channel = if !src = "" then stdin else open_in !src in
+  if !src = "" then fail_usage "input file required";
+  let channel = open_in !src in
   Fun.protect
-    ~finally:(fun () -> if !src <> "" then close_in_noerr channel)
+    ~finally:(fun () -> close_in_noerr channel)
     (fun () ->
       let lexbuf = Lexing.from_channel channel in
       Parser.prog Lexer.read lexbuf)
@@ -49,9 +47,18 @@ let print_label_table pgm =
   ignore pgm;
   print_endline "-tab is temporarily disabled for the C subset AST."
 
+let svg_path_for_src src =
+  (try Filename.chop_extension src with Invalid_argument _ -> src) ^ ".svg"
+
 let run_big_step pgm =
-  ignore pgm;
-  print_endline "-big is temporarily disabled until C Big-Step is implemented."
+  match Derivator.derive_program pgm with
+  | Ok tree ->
+      let path = svg_path_for_src !src in
+      Visualizer.write_tree_svg ~verbose:!opt_verbose path (PTree tree);
+      Printf.printf "Wrote %s\n" path
+  | Error err ->
+      prerr_endline ("Big-Step derivation failed: " ^ Derivator.string_of_error err);
+      exit 1
 
 (*
  * Analyzer/synthesis entry points are kept here as disabled reference code.
@@ -147,20 +154,12 @@ let main () =
       ( "-pp",
         Arg.Unit (fun _ -> opt_pp := true),
         "parse and print a C subset program" );
-(*
-      ( "-tab",
-        Arg.Unit (fun _ -> opt_tab := true),
-        "disabled: label tables are not ported to the C subset AST yet" );
-      ( "-tintp",
-        Arg.Unit (fun _ -> opt_tintp := true),
-        "disabled: the C transitional interpreter is not implemented yet" );
-      ( "-dintp",
-        Arg.Unit (fun _ -> opt_dintp := true),
-        "disabled: the C definitional interpreter is not implemented yet" );
       ( "-big",
         Arg.Unit (fun _ -> opt_big := true),
-        "disabled: C Big-Step derivation is not implemented yet" );
-*)
+        "derive and print a C subset Big-Step tree" );
+      ( "-v",
+        Arg.Unit (fun _ -> opt_verbose := true),
+        "show memory states in Big-Step tree output" );
 (*
       ( "-sparrow",
         Arg.Unit (fun _ -> opt_sparrow := true),
@@ -168,9 +167,8 @@ let main () =
       ( "-sparrow-find",
         Arg.String (fun var -> sparrow_find_var := Some var),
         "run Sparrow and print Analyzer.find for the given variable" );
-      ( "-v",
-        Arg.Unit (fun _ -> opt_verbose := true),
-        "show rule names and sizes in Big-Step tree output" );
+*)
+(*
       ("-analyze", Arg.Unit (fun _ -> unavailable "-analyze"), "disabled");
       ( "-attack",
         Arg.Unit (fun _ -> opt_attack := true),

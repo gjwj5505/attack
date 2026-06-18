@@ -8,6 +8,8 @@ a[3][3].grid[2][4] 이런거 memory 처리 방법 생각하기
 *(&x+1)은 당연히 안되는데, &x+2는 그 자체로 안됨
 scope를 함수선언 말고 그냥 codeblock들에도 locallity를 줄까?
 + 같은 연산자 overloading은?
+CIL은 type이 맞는 프로그램만 CIL에 속하는 것으로 정의함.
+for, while 문 밖에서 break continue하는건 언제 체크하지?
 
 
 

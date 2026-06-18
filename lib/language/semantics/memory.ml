@@ -52,6 +52,8 @@ type error =
   | Invalid_dereference of loc
   | Invalid_object_size of int
 
+let ( let* ) = Result.bind
+
 let empty =
   {
     next_stack_object_id = 0;
@@ -122,10 +124,10 @@ let declare ({ Syntax.typ; name } : Syntax.binding) value mem =
       match IdMap.find_opt name frame.locals with
       | Some _ -> Error (Duplicate_variable name)
       | None ->
-          Result.bind (fresh_object typ mem) (fun (loc, mem) ->
-              let store = LocMap.add loc value mem.store in
-              let frame = { locals = IdMap.add name loc frame.locals } in
-              Ok { mem with frames = frame :: frames; store }) )
+          let* loc, mem = fresh_object typ mem in
+          let store = LocMap.add loc value mem.store in
+          let frame = { locals = IdMap.add name loc frame.locals } in
+          Ok { mem with frames = frame :: frames; store } )
 
 let loc_of_lval lval mem =
   match lval with
@@ -135,20 +137,20 @@ let loc_of_lval lval mem =
       | None -> Error (Unbound_variable name) )
 
 let read_lval lval mem =
-  Result.bind (loc_of_lval lval mem) (fun loc ->
-      Result.bind (is_valid_deref_loc loc mem) (fun () ->
-          match LocMap.find_opt loc mem.store with
-          | Some value -> Ok value
-          | None ->
-              (* 초기 subset에서는 모든 선언이 initializer를 가지므로 정상 memory라면
-                 store lookup이 실패하지 않는다. 여기까지 오면 object bounds는 맞지만
-                 store invariant가 깨진 상태다. *)
-              Error (Invalid_dereference loc)))
+  let* loc = loc_of_lval lval mem in
+  let* () = is_valid_deref_loc loc mem in
+  match LocMap.find_opt loc mem.store with
+  | Some value -> Ok value
+  | None ->
+      (* 초기 subset에서는 모든 선언이 initializer를 가지므로 정상 memory라면
+         store lookup이 실패하지 않는다. 여기까지 오면 object bounds는 맞지만
+         store invariant가 깨진 상태다. *)
+      Error (Invalid_dereference loc)
 
 let assign_lval lval value mem =
-  Result.bind (loc_of_lval lval mem) (fun loc ->
-      Result.bind (is_valid_deref_loc loc mem) (fun () ->
-          Ok { mem with store = LocMap.add loc value mem.store }))
+  let* loc = loc_of_lval lval mem in
+  let* () = is_valid_deref_loc loc mem in
+  Ok { mem with store = LocMap.add loc value mem.store }
 
 let string_of_object_id = function
   | ObjectId.Global id -> Printf.sprintf "global%d" id
@@ -157,6 +159,50 @@ let string_of_object_id = function
 
 let string_of_loc { obj; offset } =
   Printf.sprintf "%s+%d" (string_of_object_id obj) offset
+
+let string_of_bindings locals =
+  let bindings =
+    IdMap.bindings locals
+    |> List.map (fun (name, loc) -> name ^ "=" ^ string_of_loc loc)
+  in
+  "{" ^ String.concat ", " bindings ^ "}"
+
+let string_of_frames frames =
+  let frames =
+    List.mapi
+      (fun idx frame ->
+        Printf.sprintf "frame%d%s" idx (string_of_bindings frame.locals))
+      frames
+  in
+  "[" ^ String.concat "; " frames ^ "]"
+
+let string_of_store store =
+  let entries =
+    LocMap.bindings store
+    |> List.map (fun (loc, value) ->
+           string_of_loc loc ^ "=" ^ Value.string_of_t value)
+  in
+  "{" ^ String.concat ", " entries ^ "}"
+
+let string_of_visible_values mem =
+  match mem.frames with
+  | [] -> "{}"
+  | frame :: _ ->
+      let entries =
+        IdMap.bindings frame.locals
+        |> List.map (fun (name, loc) ->
+               match LocMap.find_opt loc mem.store with
+               | Some value ->
+                   Printf.sprintf "%s |-> %s" name (Value.string_of_t value)
+               | None ->
+                   (* 현재 subset에서는 선언과 동시에 store가 채워진다. 여기까지 오면
+                      memory invariant가 깨진 상태라서 출력에서만 ?로 표시한다. *)
+                   Printf.sprintf "%s |-> ?" name)
+      in
+      "{" ^ String.concat ", " entries ^ "}"
+
+let string_of_t mem =
+  string_of_visible_values mem
 
 let string_of_error = function
   | No_active_frame -> "no active function frame"
