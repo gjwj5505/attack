@@ -1,35 +1,59 @@
-C언어의 부분집합으로 문법/의미 정의하기
-side effect/UB/여러 실행경로 있는 프로그램 big-step으로 어떻게 할 지 고민하기
+# TODO
 
-C subset rewrite
+## Next: CIL-facing core
 
-지금은 sparrow 매번 호출하는데, 나중에 멀티프로세싱으로 호출해놓고 안기다리다가 응답 오면 받아서 쓰는 구조로 바꾸자.
+- Define the structural core AST that should correspond to Sparrow/CIL CFG
+  commands.
+- Decide whether the core should be statement/block based or explicit CFG-edge
+  based.
+- Specify how the current C-like surface syntax maps into the core.
+- Update `syntax.ml`, `bigStep.ml`, and `derivator.ml` around that core.
+- Keep the current C-like parser/printer as a readable facade if it remains
+  useful.
 
+## Semantics
 
-- Keep the project temporarily language-only:
-  - `bin/main.ml` exposes only language commands.
-  - analyzer/config/synthesis/test dune stanzas are disabled.
-- Define initial C subset AST in `lib/language/`.
-- Add C parser/printer for:
-  - `int main() { ... }`
-  - declarations, assignment statements, blocks, if/else, while, return
-  - pure integer expressions
-- Redesign Big-Step semantics around:
-  - expression: state -> state * value
-  - statement: state -> control
-- Port synthesis sizes, prune rules, grow rules, and proof constructors to the C subset.
-- Keep evaluation order deterministic left-to-right for now.
-- Keep side-effect expressions, pointers, arrays, structs, calls, overflow/UB for later.
+- Keep Big-Step tree generation as the concrete semantics oracle.
+- Preserve current no-tree behavior for UB and derivation failures:
+  overflow, division/modulo by zero, missing return, memory errors, out of fuel.
+- Add future features only after checking CIL lowering and Sparrow
+  `IntraCfg.Cmd` representation.
+- When adding `break`/`continue`, connect parser syntax to the existing
+  `control` constructors.
+- When adding side-effect expressions or calls, revisit expression evaluation
+  order and memory effects.
 
-Heuristic / search cleanup
+## Validation
 
-- Keep seed config-only.
-- Keep `choose_n` / `trim` / `choose_for_grow` as the heuristic selection boundary.
-- Remove stale TEMP comments once grow-rule-based selection is stable.
-- Later: add analyzer-facing summaries and diversity-aware trimming.
+- Keep `dune build` green after each small step.
+- Keep success examples:
+  - `examples/small_while.c`
+  - `examples/branch_loop.c`
+- Keep error examples that must not produce a Big-Step tree:
+  - `examples/error_div_zero.c`
+  - `examples/error_overflow.c`
+  - `examples/error_literal_overflow.c`
+  - `examples/error_missing_return.c`
+  - `examples/error_unbound.c`
+  - `examples/error_duplicate.c`
+  - `examples/error_out_of_fuel.c`
+- Add one small validation example for every new semantic feature.
 
-Validation targets
+## Analyzer / Synthesis reconnect
 
-- `dune build`
-- `./attack -pp examples/simple.c` once the C parser exists
-- `./attack -big examples/simple.c` once the C Big-Step semantics exists
+- Re-enable synthesis only after the core AST and Big-Step semantics stabilize.
+- Port size, prune, grow, and component generation rules from the old G
+  baseline to the new core.
+- Re-enable Sparrow analyzer wrapper after printable C/CIL-facing programs are
+  stable.
+- Compare generated concrete executions against Sparrow results at the
+  CIL/IntraCfg command level.
+- Later optimization: avoid blocking on every Sparrow call; run analyzer jobs
+  concurrently and consume results as they finish.
+
+## Cleanup
+
+- Keep `.agents/CONTEXT.md` updated with durable design decisions.
+- Keep `.agents/LANGUAGE.md` as the language/semantics source of truth.
+- Do not update `.agents/c-feature.csv` until we intentionally revisit the
+  feature matrix.

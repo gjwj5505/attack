@@ -10,6 +10,7 @@ scope를 함수선언 말고 그냥 codeblock들에도 locallity를 줄까?
 + 같은 연산자 overloading은?
 CIL은 type이 맞는 프로그램만 CIL에 속하는 것으로 정의함.
 for, while 문 밖에서 break continue하는건 언제 체크하지?
+함수 포인터도 해야지
 
 
 

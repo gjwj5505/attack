@@ -1,391 +1,258 @@
 # Language Design
 
-이 프로젝트의 합성 언어는 ISO C 전체가 아니라, Sparrow가 CIL을 거쳐
-분석하기 쉬운 형태로 낮출 수 있는 structural core language이다. C-like
-surface syntax는 입력/출력 편의를 위한 facade이며, semantics와 synthesis
-target은 이 structural core AST다.
+이 프로젝트의 언어는 ISO C 전체가 아니다. 현재는 readable C-like syntax를 쓰지만,
+장기 목표는 Sparrow가 CIL을 거쳐 분석하는 CFG command와 잘 대응되는 structural
+core language다.
 
-목표는 C 표준의 모든 의미를 모델링하는 것이 아니다. 목표는 우리가 Big-Step
-proof tree로 정의한 concrete execution이 Sparrow의 abstract semantics와
-비교 가능한 형태가 되도록, Sparrow-CIL 변환 이후의 core command와 잘 대응되는
-언어를 정의하는 것이다.
+## Principles
 
-## Design Principle
+- C surface syntax is a facade; CIL/Sparrow-facing semantics is the target.
+- Parser, printer, synthesis, and Big-Step should share one semantic core.
+- Do not add a feature just because C has it.
+- Add a feature only after CIL lowering, Sparrow `IntraCfg.Cmd`, and Big-Step
+  meaning are understood.
+- Compare analyzer behavior at the CIL/CFG command level, not raw `.i` text.
 
-- Surface syntax는 C처럼 둘 수 있지만, faithful C surface semantics를 목표로
-  하지 않는다.
-- Internal AST와 Big-Step semantics는 Sparrow가 실제로 분석하는 CIL/CFG core에
-  가깝게 둔다.
-- Parser/printer는 사람이 읽기 쉬운 C subset을 다룬다.
-- Analyzer wrapper는 이 C subset을 `.c` 또는 `.i` 파일로 출력해 Sparrow에
-  전달할 수 있다.
-- `.i`는 합성 언어가 아니라, 필요할 때 Sparrow에 넘기는 preprocessed C 입력
-  형식으로만 본다.
-- 새 feature는 C surface syntax를 넓히기 위해 추가하지 않는다. Sparrow CFG
-  command로의 lowering과 Big-Step concrete meaning이 명확하고, analyzer attack
-  목적에 필요할 때만 추가한다.
-
-Sparrow의 흐름은 다음과 같다.
+Relevant pipeline:
 
 ```text
-C source or .i
-  -> CIL Frontc.parse
-  -> CIL AST
-  -> Sparrow CFG commands
-  -> abstract interpretation
+C source or .i -> CIL AST -> Sparrow CFG / IntraCfg.Cmd -> abstract interpretation
 ```
 
-따라서 우리가 맞춰야 하는 대상은 `.i` 텍스트 자체가 아니라, CIL 변환 이후
-Sparrow가 해석하는 command 구조다.
+## Current Surface Syntax
 
-## Initial Subset
-
-초기 언어는 `int main() { ... }` 하나만 지원한다.
-
-Statements:
-
-- code block: `{ stmt+ }`, used only as `main`, `if`, and `while` body
-- initialized local declaration: `int x = expr;`
-- assignment: `x = expr;`
-- conditional: `if (expr) block else block`
-- loop: `while (expr) block`
-- return: `return expr;`
-
-Expressions:
-
-- integer literal
-- variable
-- unary minus: `-expr`
-- arithmetic binary operators: `+`, `-`, `*`, `/`, `%`
-- comparisons: `==`, `!=`, `<`, `<=`, `>`, `>=`
-
-초기에는 `!`, `&&`, `||`, casts, calls, arrays, pointers, structs,
-assignment expressions, increment/decrement, compound assignment는 제외한다.
-필요할 때 Sparrow 대응을 확인한 뒤 한 기능씩 추가한다.
-
-## Concrete Syntax
-
-Initial parser syntax is intentionally smaller than C. It accepts only one
-function, `int main()`, and a small statement/expression subset that lowers
-predictably through CIL.
-
-```ebnf
-program     ::= "int" ident "(" ")" block EOF
-                (* Strict subset: exactly one function definition is accepted,
-                   and its identifier must be main. No global declarations, no
-                   multiple functions, no function parameters, no non-int
-                   return type, no old-style function definition. *)
-
-block       ::= "{" stmt* "}"
-                (* Strict subset: block items are only our stmt grammar.
-                   No labels, case/default labels, mixed arbitrary C declarations,
-                   or attributes. *)
-
-stmt        ::= decl
-              | assign
-              | if_stmt
-              | while_stmt
-              | return_stmt
-                (* Strict subset: no expression statement except assignment,
-                   no empty statement, no for/do-while/switch/goto/break/continue,
-                   no standalone block statement, no labels, no asm. *)
-
-decl        ::= "int" ident "=" expr ";"
-                (* Strict subset: int locals only. No pointers, arrays, structs,
-                   unions, enums, typedef names, storage classes, qualifiers,
-                   multiple declarators, complex declarators, or uninitialized
-                   declarations. *)
-assign      ::= ident "=" expr ";"
-                (* Strict subset: simple variable assignment only. No lvalue
-                   forms with dereference, field, array index, compound assignment,
-                   or assignment expression. *)
-if_stmt     ::= "if" "(" expr ")" block "else" block
-                (* Strict subset: else is mandatory. No dangling-else ambiguity
-                   and no if-without-else form. Branch bodies must be blocks. *)
-while_stmt  ::= "while" "(" expr ")" block
-                (* Strict subset: while only. No for, do-while, break, or
-                   continue. Loop body must be a block. *)
-return_stmt ::= "return" expr ";"
-                (* Strict subset: return value required. No bare return and no
-                   function-specific return type variation. Return may appear
-                   anywhere a statement may appear. *)
-
-expr        ::= equality
-                (* Strict subset: pure integer expressions only. No side effects,
-                   calls, casts, sizeof, address-of, dereference, array access,
-                   field access, conditional operator, comma operator. *)
-
-equality    ::= relational (("==" | "!=") relational)*
-                (* Strict subset: equality over integer expressions only.
-                   Chaining is parsed in a C-like left-associative way. *)
-relational  ::= additive (("<" | "<=" | ">" | ">=") additive)*
-                (* Strict subset: relational operators over integer expressions
-                   only. Chaining is parsed in a C-like left-associative way. *)
-additive    ::= multiplicative (("+" | "-") multiplicative)*
-                (* Strict subset: integer + and - only. No pointer arithmetic. *)
-multiplicative
-            ::= unary (("*" | "/" | "%") unary)*
-                (* Strict subset: arithmetic multiplicative operators only.
-                   Bitwise and shift operators are excluded initially. *)
-unary       ::= "-" unary
-              | primary
-                (* Strict subset: unary minus only. No !, ~, *, &, ++, --,
-                   sizeof, alignof, or casts. *)
-primary     ::= integer
-              | ident
-              | "(" expr ")"
-                (* Strict subset: no string/char/float constants, compound
-                   literals, statement expressions, or function calls. *)
-
-ident       ::= /[A-Za-z_][A-Za-z0-9_]*/
-                (* Strict subset: lexer-level identifier only. No typedef-name
-                   distinction is needed because typedef is excluded. *)
-integer     ::= /[0-9]+/
-                (* Strict subset: decimal integer literals only. No suffixes,
-                   signs, hex/octal/binary literals, character constants, or
-                   floats. Negative constants are parsed as unary minus applied
-                   to a nonnegative integer literal, matching C syntax. *)
-
-line_comment
-            ::= "//" [^\n\r]* ("\n" | "\r" | "\r\n" | EOF)
-block_comment
-            ::= "/*" .* "*/"
-                (* Comments are lexical trivia. They do not appear in the AST. *)
-```
-
-Parser notes:
-
-- Declarations are syntactically statements and must have explicit
-  initialization.
-- `else` is mandatory for `if` in the initial subset. This avoids a dangling
-  `else` design choice and matches the existing total command-style language.
-- Empty blocks are accepted by the parser. Synthesis should still avoid
-  generating empty blocks unless a later search policy explicitly wants them.
-- `if` and `while` bodies must be blocks. This keeps the accepted syntax close
-  to the printer output and avoids statement-body normalization choices.
-- Standalone block statements are not part of the initial subset. Blocks appear
-  only as the body of `main`, `if`, and `while`.
-- Chained comparisons such as `a < b < c` are accepted with C-like parsing:
-  `(a < b) < c`.
-- `//` and `/* ... */` comments are accepted as lexer trivia.
-- No preprocessor directives, typedefs, storage classes, type qualifiers, or
-  function parameters are part of the initial grammar.
-
-## Concrete Semantics
-
-이 언어의 concrete semantics는 ISO C semantics가 아니라 이 프로젝트의
-Sparrow-CIL core semantics다.
-
-- Variables hold mathematical integers in the initial model.
-- Conditions use C/Sparrow truthiness: `0` is false, nonzero is true.
-- Expressions are pure.
-- Expression evaluation order is deterministic left-to-right.
-- Blocks initially do not introduce complex C scope behavior; generated
-  variable names should be unique enough to avoid shadowing ambiguity.
-- All declarations in the supported language must have explicit initializers.
-  This policy applies to both local declarations now and future global
-  declarations.
-- Signed overflow, uninitialized read, division by zero, and other C undefined
-  behavior are outside the initial language.
-- Division and modulo are syntactically valid, but Big-Step semantics and
-  synthesis must not evaluate or generate `/` or `%` expressions whose divisor
-  evaluates to zero.
-
-## AST Shape
-
-The parser and synthesis should use the same AST type. The parser should build
-the core AST directly instead of producing a separate parsed syntax tree.
-
-Types are kept in a separate `Typ` module, implemented by `lib/language/typ.ml`.
-The initial type language contains only `int`, but the module is separate
-because pointer, array, struct, and function types will be added later.
-
-Initial type shape:
-
-```ocaml
-(* typ.ml *)
-type t =
-  | Int
-```
-
-Identifiers are lexer-validated strings:
-
-```ocaml
-type id = string
-type integer_literal = Int64.t
-```
-
-Typed names are represented by a shared binding type. Function parameters,
-local declarations, and future global declarations should all use this shape.
-
-```ocaml
-type binding = {
-  typ : Typ.t;
-  name : id;
-}
-```
-
-Assignment targets are lvalues. The initial subset only has variable lvalues,
-but this type is intentionally separate so pointer, array, and struct lvalues
-can be added later.
-
-```ocaml
-type lval =
-  | LVar of id
-```
-
-Expressions stay in the existing `Exp` module style. Identifier expressions are
-represented as `Lval (LVar x)`, not as a separate `Var x` constructor.
-
-```ocaml
-module Exp = struct
-  type uop = Uminus
-
-  type bop =
-    | Eq | Ne | Lt | Le | Gt | Ge
-    | Plus | Minus | Times | Div | Mod
-
-  type t =
-    | Int of integer_literal
-    | Lval of lval
-    | Uop of uop * t
-    | Bop of bop * t * t
-end
-```
-
-Integer literals are stored as `Int64.t` in the syntax tree so the parser can
-preserve decimal literals larger than 32-bit `int`, such as the operand in
-`-2147483648`. The initial runtime type is still only signed 32-bit `int`;
-Big-Step semantics converts literals to runtime `Value.Int` values and rejects
-out-of-range literals or arithmetic overflow as undefined behavior.
-
-Statements use the `Stmt` module name, not `Cmd`. This avoids confusion with
-Sparrow CFG commands. A C code block is represented as a statement list alias,
-not as a record wrapper.
-
-```ocaml
-module Stmt = struct
-  type t =
-    | Decl of binding * Exp.t
-    | Assign of lval * Exp.t
-    | If of Exp.t * codeblock * codeblock
-    | While of Exp.t * codeblock
-    | Return of Exp.t
-
-  and codeblock = t list
-end
-```
-
-Empty code blocks are represented as `[]`. The parser accepts them, but
-synthesis should avoid generating them unless a later search policy explicitly
-wants empty blocks.
-
-Functions store their source-level signature. The initial parser accepts one
-`int ident()` function definition and requires that identifier to be `main`.
-It therefore creates `ret_type = Typ.Int`, `name = "main"`, and `params = []`.
-
-```ocaml
-type func = {
-  ret_type : Typ.t;
-  name : id;
-  params : binding list;
-  body : Stmt.codeblock;
-}
-
-type program = {
-  main : func;
-}
-```
-
-There are no labels and no source locations in the core AST. Labels may be
-added later by a separate labeling pass if pretty-printing, tables, or
-visualization need them. Source locations are intentionally omitted because
-synthesis creates AST values directly and dummy locations would pollute
-comparison, hashing, and proof construction.
-
-String/printer helpers should keep the existing project style:
-
-```ocaml
-Exp.string_of_t
-Stmt.string_of_t
-Stmt.string_of_codeblock
-string_of_program
-```
-
-## Expected Sparrow Mapping
-
-The intended correspondence is:
+Accepted grammar, summarized:
 
 ```text
-int x = e;      -> Cset(x, e)
-x = e;          -> Cset(x, e)
-if (e) S else T -> Cassume(e) on true branch, Cassume(!e) on false branch
-while (e) S     -> loop CFG with Cassume(e) body edge and Cassume(!e) exit edge
-return e;       -> Creturn(e)
+program  ::= int main() block
+block    ::= { stmt* }
+stmt     ::= int x = expr;
+           | x = expr;
+           | if (expr) block else block
+           | while (expr) block
+           | return expr;
+expr     ::= decimal integer | identifier | -expr | (expr)
+           | expr (+|-|*|/|%) expr
+           | expr (==|!=|<|<=|>|>=) expr
 ```
 
-This matches Sparrow's current structure:
+Notes:
 
-- C input is parsed by CIL `Frontc.parse`.
-- CIL `Instr` nodes are flattened into `Cset` or `Ccall`.
-- CIL `If` nodes get branch assumptions inserted.
-- CIL `Loop` nodes are removed as commands after their CFG edges and assumptions
-  are generated.
-- CIL `Return` nodes become `Creturn`.
+- `main` is parsed as an identifier and checked by the parser action.
+- Only one parameterless `int main()` function is accepted.
+- Declarations must be initialized.
+- `else` is mandatory.
+- `if`/`while` bodies must be blocks.
+- Empty blocks are accepted and represented as `[]`.
+- Comments are lexical trivia.
+- No preprocessor, typedef, storage class, qualifier, function parameter, or
+  standalone block statement is supported.
 
-## Why Not Use `.i` As The Language
+## Current AST
 
-`.i` is not a semantic core language. It is preprocessed C text.
+The current AST lives in `lib/language/syntax.ml`.
 
-Using `.i` as the synthesis language would pull in textual preprocessing
-artifacts such as line directives, macro expansion results, include output, and
-compiler-specific details. Those details are not the level where Sparrow's
-abstract semantics is defined.
+- `Typ.t`: currently only `Int`.
+- `id`: string.
+- `binding`: `{ typ; name }`.
+- `lval`: currently only `LVar`.
+- `Exp.t`: `Int of Int64.t`, `Lval`, unary minus, and binary operators.
+- `Stmt.t`: declaration, assignment, if/else, while, return.
+- `Stmt.codeblock`: `Stmt.t list`.
+- `program`: one `main` function record.
 
-For our purpose, a preprocessor-free C subset is better:
+Integer literals are stored as `Int64.t` only to parse and reject runtime
+`int` overflow cleanly. Runtime integers are signed 32-bit `int`, not
+`long long`.
 
-- It can be printed as `.c`.
-- It can also be saved with `.i` extension if Sparrow wrapper needs that.
-- It keeps proof trees readable.
-- It keeps the concrete semantics under our control.
-- It still lowers predictably to Sparrow's CIL/CFG core.
+There are no source locations or labels in the AST. Add them later through a
+separate pass if CFG output or analyzer integration needs them.
 
-## Known Risks
+## Current Semantics
 
-- CIL may rewrite expressions by adding casts or temporaries. The initial subset
-  should avoid constructs that trigger non-obvious lowering.
-- Local `int x;` in C has uninitialized value semantics, while our proof system
-  needs a definite concrete state. Prefer explicit initialization.
-- Sparrow's interval semantics uses abstract transfer functions over CIL
-  expressions, not a separately documented concrete semantics. We infer the
-  intended concrete correspondence from the implementation.
-- C integer overflow is not modeled initially. Attacks must not rely on
-  overflow behavior until a policy is chosen.
-- Division and modulo are included in the syntax, but their concrete semantics
-  and undefined-behavior policy, especially division by zero, must be fixed
-  before Big-Step support uses them.
-- Short-circuit operators `&&` and `||` are excluded initially because they are
-  expression-level control flow and can complicate the proof tree.
-- Side-effect expressions such as `x++`, `x += 1`, and `(x = e)` are excluded
-  because they require expression judgments with state changes.
-- Scope and shadowing should be restricted. Generated variables should avoid
-  reusing names in nested blocks.
-- Function calls are excluded initially. Sparrow has library and user-function
-  models, but they introduce interprocedural semantics.
+Judgments:
+
+- Expression: `<memory, expr> ⇓ <memory', value>`
+- Statement: `<memory, stmt> ⇓ <memory', control>`
+- Block: `<memory, block> ⇓ <memory', control>`
+- Program starts from `main` and returns a value.
+
+Current expressions are pure, but memory is threaded so future calls or
+side-effect expressions can fit the same judgment shape.
+
+Runtime model:
+
+- `Value.t` currently contains signed 32-bit `int`.
+- Memory separates name binding from storage: local name -> location -> value.
+- Proof output shows visible locals as `{x |-> 1}`.
+- Current local scope is flat. Block scope/shadowing is outside the subset.
+- Future function calls should push/pop frames.
+
+Control:
+
+```ocaml
+Normal | Return of Value.t | Break | Continue
+```
+
+`Break` and `Continue` are reserved in Big-Step types but parser syntax is not
+implemented yet.
+
+Evaluation policy:
+
+- deterministic left-to-right evaluation
+- C/Sparrow truthiness: `0` false, nonzero true
+- block execution stops after `Return`, `Break`, or `Continue`
+- derivator uses statement-level fuel for nontermination
+
+No-tree cases:
+
+- signed integer overflow
+- division/modulo by zero
+- `INT_MIN / -1`, `INT_MIN % -1`
+- runtime `int` literal overflow
+- unbound variable or duplicate declaration
+- missing `main` return
+- out of fuel
+
+These return a `Derivator` error instead of producing a proof tree.
+
+## Proof Trees
+
+- `etree`: expression proof.
+- `stree`: statement proof.
+- `btree`: block proof.
+- `ptree`: program proof.
+
+`BEmpty` represents an empty block and is visualized as `empty`.
+
+Short-circuit tree constructors exist for future `&&`/`||`. They avoid making a
+fake subtree for an unevaluated right operand; a future checker must verify the
+left-operand side condition.
+
+## CIL / Sparrow Mapping
+
+Intended current mapping:
+
+```text
+int x = e;       -> Cset(x, e)
+x = e;           -> Cset(x, e)
+if (e) S else T  -> Cassume(e) / Cassume(!e) branch edges
+while (e) S      -> CFG cycle with assume edges
+return e;        -> Creturn(e)
+```
+
+Observed Sparrow/CIL facts:
+
+- CIL instructions are flattened into commands such as `Cset`/`Ccall`.
+- CIL `If` and `Loop` become CFG structure plus assumptions.
+- CIL `Return` becomes `Creturn`.
+- Sparrow sparse analysis runs abstract transfer over `IntraCfg.Cmd`.
+
+The bridge for soundness discussion is:
+
+```text
+our Big-Step concrete execution
+  -> corresponding CIL/IntraCfg path
+  -> Sparrow abstract result
+```
+
+## CIL and CIL'
+
+The project uses two related representations:
+
+- CIL: the external OCaml CIL library representation, used for parsing,
+  pretty-printing, type utilities, and other library support.
+- CIL': the internal supported subset, used as the source of truth for
+  synthesis, Big-Step semantics, proof trees, and attack objectives.
+
+CIL' should follow CIL's type shape and constructor names where useful, but it
+only contains constructors whose semantics are intentionally supported by this
+project.
+
+Conversions:
+
+- CIL' -> CIL must be total for well-formed CIL' programs.
+- CIL -> CIL' accepts only the supported subset and otherwise returns an
+  explicit unsupported-feature error.
+
+When a CIL library function is useful, convert CIL' to CIL and call the library
+function there. When a project-specific semantic, synthesis, or proof operation
+is needed, implement it on CIL'.
+
+Sparrow inputs are produced by converting synthesized CIL' to CIL, pretty
+printing it as C, and giving that file to Sparrow. Sparrow may parse the printed
+C using its own CIL version; the comparison target remains the CIL' Big-Step
+final memory.
+
+CIL' semantics is not justified by the newest CIL library alone. For
+soundness/completeness attacks, CIL' must denote the same concrete behavior as
+the subset accepted and lowered by Sparrow's CIL 1.7.3 frontend. The newest CIL
+library is only a utility layer unless this compatibility condition is checked.
+
+The supported CIL' subset should stay inside the conservative common subset of
+newest CIL and Sparrow CIL 1.7.3. Features whose lowering or concrete meaning
+may differ between the two CIL versions remain unsupported until tested against
+Sparrow's frontend.
+
+Before relying on a feature for attacks, check for execution-meaning differences
+between CIL' Big-Step and the C code as parsed/lowered by Sparrow CIL 1.7.3.
+The bridge that justifies an attack is:
+
+```text
+CIL' Big-Step concrete execution
+  = concrete behavior of exported C under Sparrow CIL 1.7.3 lowering
+  -> Sparrow abstract result
+```
+
+## Examples Policy
+
+Example files use the `.c` extension because CIL is an OCaml AST, not a source
+file syntax. However, examples should be written as CIL-compatible C: C code
+whose parsed/lowered CIL belongs to the supported CIL' subset.
+
+Do not use source-level C constructs whose C semantics may differ from CIL
+lowering, such as unsequenced side effects (`a++ + a++`), side-effect
+expressions, calls, pointer/array/struct operations, or other unsupported
+features. If such a feature is intentionally studied, put it in a clearly named
+error or compatibility example and record the expected unsupported behavior.
+
+## Attack Observables
+
+For CIL-core synthesis, source locals and CIL temporary variables are not
+distinguished. Both are local memory bindings.
+
+A concrete run is considered normally completed only when `main` returns `0`.
+The return value itself is not an attack observable.
+
+Soundness/completeness comparison uses all live local memory bindings at the end
+of normal `main` execution:
+
+- soundness failure: concrete value is not included in the analyzer result
+- completeness/precision failure: analyzer result is wider than the singleton
+  abstraction of the concrete value
+
+## Restrictions
+
+Excluded until designed against CIL/Sparrow:
+
+- uninitialized declarations
+- block scope and shadowing
+- calls
+- arrays, pointers, structs
+- casts and non-int scalar types
+- `&&`, `||`, `!`
+- side-effect expressions
+- `break`/`continue` parser syntax
 
 ## Development Policy
 
-When adding a new syntax feature:
+For each new feature:
 
-1. Check how CIL lowers it.
-2. Check how Sparrow represents it in `IntraCfg.Cmd`.
-3. Define its Big-Step rule in our language.
-4. Add printer output that lowers predictably through CIL.
-5. Add a small example and compare the expected Sparrow command behavior.
+1. inspect CIL lowering,
+2. inspect Sparrow `IntraCfg.Cmd`,
+3. define Big-Step rules and no-tree cases,
+4. add parser/printer only if surface syntax is useful,
+5. add success/error examples.
 
-The safe default is to reject or not generate any C feature whose CIL lowering
-or Sparrow abstract transfer is not yet understood.
-
-## C Feature Matrix
-
-The current support/addition matrix is tracked in `.agents/c-feature.csv`.
+The feature matrix stays in `.agents/c-feature.csv`; do not update it unless
+we intentionally revisit feature support.

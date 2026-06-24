@@ -1,125 +1,199 @@
 (*
- * Syntax for the Sparrow-facing C subset.
+ * Syntax for the Sparrow-facing CIL subset.
  *)
 
 type id = string
 
-type binding = {
-  typ : Typ.t;
-  name : id;
+type varinfo = {
+  vname : id;
+  vtype : Typ.t;
+  vglob : bool;
+  vtemp : bool;
+  vid : int;
 }
 
 type lval =
-  | LVar of id
+  | Var of varinfo
 
 module Exp = struct
-  type uop = Uminus
+  type constant =
+    | CInt64 of Int64.t
 
-  type bop =
-    | Eq
-    | Ne
-    | Lt
-    | Le
-    | Gt
-    | Ge
-    | Plus
-    | Minus
-    | Times
+  type unop =
+    | Neg
+    | BNot
+    | LNot
+
+  type binop =
+    | PlusA
+    | MinusA
+    | Mult
     | Div
     | Mod
+    | Lt
+    | Gt
+    | Le
+    | Ge
+    | Eq
+    | Ne
+    | BAnd
+    | BXor
+    | BOr
+    | LAnd
+    | LOr
+    | Shiftlt
+    | Shiftrt
 
   type t =
-    | Int of Int64.t
+    | Const of constant
     | Lval of lval
-    | Uop of uop * t
-    | Bop of bop * t * t
+    | UnOp of unop * t * Typ.t
+    | BinOp of binop * t * t * Typ.t
+    | CastE of Typ.t * t
 
-  let string_of_uop = function
-    | Uminus -> "-"
+  let string_of_constant = function
+    | CInt64 n -> Int64.to_string n
 
-  let string_of_bop = function
-    | Eq -> "=="
-    | Ne -> "!="
-    | Lt -> "<"
-    | Le -> "<="
-    | Gt -> ">"
-    | Ge -> ">="
-    | Plus -> "+"
-    | Minus -> "-"
-    | Times -> "*"
+  let string_of_unop = function
+    | Neg -> "-"
+    | BNot -> "~"
+    | LNot -> "!"
+
+  let string_of_binop = function
+    | PlusA -> "+"
+    | MinusA -> "-"
+    | Mult -> "*"
     | Div -> "/"
     | Mod -> "%"
+    | Lt -> "<"
+    | Gt -> ">"
+    | Le -> "<="
+    | Ge -> ">="
+    | Eq -> "=="
+    | Ne -> "!="
+    | BAnd -> "&"
+    | BXor -> "^"
+    | BOr -> "|"
+    | LAnd -> "&&"
+    | LOr -> "||"
+    | Shiftlt -> "<<"
+    | Shiftrt -> ">>"
 
   let rec string_of_t = function
-    | Int n -> Int64.to_string n
+    | Const c -> string_of_constant c
     | Lval lv -> string_of_lval lv
-    | Uop (op, e) -> Printf.sprintf "(%s%s)" (string_of_uop op) (string_of_t e)
-    | Bop (op, e1, e2) ->
-        Printf.sprintf "(%s %s %s)" (string_of_t e1) (string_of_bop op)
+    | UnOp (op, e, _) ->
+        Printf.sprintf "(%s%s)" (string_of_unop op) (string_of_t e)
+    | BinOp (op, e1, e2, _) ->
+        Printf.sprintf "(%s %s %s)" (string_of_t e1) (string_of_binop op)
           (string_of_t e2)
+    | CastE (typ, e) ->
+        Printf.sprintf "((%s)%s)" (Typ.string_of_t typ) (string_of_t e)
 
   and string_of_lval = function
-    | LVar id -> id
+    | Var v -> v.vname
 end
 
 let string_of_lval = Exp.string_of_lval
 
-let string_of_binding { typ; name } =
-  Printf.sprintf "%s %s" (Typ.string_of_t typ) name
+type instr =
+  | Set of lval * Exp.t
 
-module Stmt = struct
-  type t =
-    | Decl of binding * Exp.t
-    | Assign of lval * Exp.t
-    | If of Exp.t * codeblock * codeblock
-    | While of Exp.t * codeblock
-    | Return of Exp.t
+type label =
+  | Label of string
 
-  and codeblock = t list
+type block = {
+  bstmts : stmt list;
+}
 
-  let indent lvl = String.make (2 * lvl) ' '
+and stmt = {
+  labels : label list;
+  skind : stmtkind;
+  sid : int option;
+}
 
-  let rec string_of_t ?(lvl = 0) stmt =
-    let pad = indent lvl in
-    match stmt with
-    | Decl (binding, e) ->
-        Printf.sprintf "%s%s = %s;" pad (string_of_binding binding)
-          (Exp.string_of_t e)
-    | Assign (lv, e) ->
-        Printf.sprintf "%s%s = %s;" pad (string_of_lval lv) (Exp.string_of_t e)
-    | If (cond, tb, fb) ->
-        Printf.sprintf "%sif (%s) %s else %s" pad (Exp.string_of_t cond)
-          (string_of_codeblock ~lvl tb)
-          (string_of_codeblock ~lvl fb)
-    | While (cond, body) ->
-        Printf.sprintf "%swhile (%s) %s" pad (Exp.string_of_t cond)
-          (string_of_codeblock ~lvl body)
-    | Return e -> Printf.sprintf "%sreturn %s;" pad (Exp.string_of_t e)
+and stmtkind =
+  | Instr of instr list
+  | Return of Exp.t option
+  | If of Exp.t * block * block
+  | Loop of block
+  | Break
+  | Continue
+  | Block of block
 
-  and string_of_codeblock ?(lvl = 0) stmts =
-    let inner = List.map (string_of_t ~lvl:(lvl + 1)) stmts in
-    match inner with
-    | [] -> "{ }"
-    | _ ->
-        Printf.sprintf "{\n%s\n%s}" (String.concat "\n" inner) (indent lvl)
-end
+type fundec = {
+  svar : varinfo;
+  sformals : varinfo list;
+  slocals : varinfo list;
+  sbody : block;
+}
 
-type func = {
-  ret_type : Typ.t;
-  name : id;
-  params : binding list;
-  body : Stmt.codeblock;
+type global =
+  | GFun of fundec
+  | GVarDecl of varinfo
+
+type file = {
+  fileName : string;
+  globals : global list;
 }
 
 type program = {
-  main : func;
+  main : fundec;
 }
 
-let string_of_param = string_of_binding
+let indent lvl = String.make (2 * lvl) ' '
 
-let string_of_func f =
-  let params = String.concat ", " (List.map string_of_param f.params) in
-  Printf.sprintf "%s %s(%s) %s" (Typ.string_of_t f.ret_type) f.name params
-    (Stmt.string_of_codeblock f.body)
+let string_of_varinfo v =
+  Printf.sprintf "%s %s" (Typ.string_of_t v.vtype) v.vname
 
-let string_of_program { main } = string_of_func main
+let string_of_instr = function
+  | Set (lv, e) ->
+      Printf.sprintf "%s = %s;" (string_of_lval lv) (Exp.string_of_t e)
+
+let string_of_label = function
+  | Label name -> name ^ ":"
+
+let rec string_of_stmt ?(lvl = 0) stmt =
+  let pad = indent lvl in
+  let labels =
+    List.map (fun label -> pad ^ string_of_label label) stmt.labels
+  in
+  let body =
+    match stmt.skind with
+    | Instr instrs ->
+        List.map (fun instr -> pad ^ string_of_instr instr) instrs
+    | Return None -> [ pad ^ "return;" ]
+    | Return (Some e) -> [ pad ^ "return " ^ Exp.string_of_t e ^ ";" ]
+    | If (cond, tb, fb) ->
+        [
+          Printf.sprintf "%sif (%s) %s else %s" pad (Exp.string_of_t cond)
+            (string_of_block ~lvl tb)
+            (string_of_block ~lvl fb);
+        ]
+    | Loop body ->
+        [ Printf.sprintf "%sloop %s" pad (string_of_block ~lvl body) ]
+    | Break -> [ pad ^ "break;" ]
+    | Continue -> [ pad ^ "continue;" ]
+    | Block block -> [ pad ^ string_of_block ~lvl block ]
+  in
+  String.concat "\n" (labels @ body)
+
+and string_of_block ?(lvl = 0) block =
+  let inner = List.map (string_of_stmt ~lvl:(lvl + 1)) block.bstmts in
+  match inner with
+  | [] -> "{ }"
+  | _ -> Printf.sprintf "{\n%s\n%s}" (String.concat "\n" inner) (indent lvl)
+
+let string_of_fundec f =
+  let params = String.concat ", " (List.map string_of_varinfo f.sformals) in
+  Printf.sprintf "%s %s(%s) %s" (Typ.string_of_t f.svar.vtype) f.svar.vname
+    params (string_of_block f.sbody)
+
+let string_of_global = function
+  | GFun f -> string_of_fundec f
+  | GVarDecl v -> string_of_varinfo v ^ ";"
+
+let string_of_file file =
+  file.globals |> List.map string_of_global |> String.concat "\n\n"
+
+let string_of_program { main } = string_of_fundec main

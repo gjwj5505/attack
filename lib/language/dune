@@ -2,9 +2,5 @@
 
 (library
  (name language)
- (modules typ syntax parser lexer value memory bigStep bigStepUtil derivator visualizer textSvg))
-
-(ocamllex lexer)
-
-(menhir
-  (modules parser))
+ (modules typ syntax cilBridge)
+ (libraries goblint-cil))

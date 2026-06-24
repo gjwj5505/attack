@@ -21,7 +21,7 @@ Always follow these rules:
   at a time. Wait for the user to confirm understanding before moving to the
   next one.
 
-Start by reading `.agents/CONTEXT.md`, `.agents/todo.txt`, then inspect only the files relevant to
+Start by reading `.agents/CONTEXT.md`, then inspect only the files relevant to
 the current request. Prefer concise status updates in Korean.
 
 Attack workflow:
