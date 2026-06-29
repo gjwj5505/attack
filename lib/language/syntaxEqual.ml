@@ -41,12 +41,9 @@ let rec equal_exp_t x y =
       && equal_exp_t left_x left_y
       && equal_exp_t right_x right_y
       && equal_typ typ_x typ_y
-  | S.Exp.CastE (typ_x, e_x), S.Exp.CastE (typ_y, e_y) ->
-      equal_typ typ_x typ_y && equal_exp_t e_x e_y
   | S.Exp.AddrOf x, S.Exp.AddrOf y -> equal_lval x y
   | S.Exp.StartOf x, S.Exp.StartOf y -> equal_lval x y
-  | (Const _ | Lval _ | UnOp _ | BinOp _ | CastE _ | AddrOf _ | StartOf _), _
-    ->
+  | (Const _ | Lval _ | UnOp _ | BinOp _ | AddrOf _ | StartOf _), _ ->
       false
 
 and equal_lval (host_x, offset_x) (host_y, offset_y) =

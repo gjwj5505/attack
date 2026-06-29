@@ -31,7 +31,7 @@ let parse_file () =
       exit 1
 
 let print_file file =
-  match CilBridge.check_roundtrip_file file with
+  match Check.check_file file with
   | Ok () -> (
       match CilBridge.write_file stdout file with
       | Ok () -> ()
@@ -39,7 +39,7 @@ let print_file file =
           prerr_endline (CilBridge.string_of_error err);
           exit 1 )
   | Error err ->
-      prerr_endline (CilBridge.string_of_error err);
+      prerr_endline (Check.string_of_error err);
       exit 1
 
 (*

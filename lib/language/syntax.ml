@@ -92,7 +92,7 @@ and exp =
   | UnOp of unop * exp * Typ.t
   | BinOp of binop * exp * exp * Typ.t
   (* | Question of exp * exp * exp * Typ.t *)
-  | CastE of Typ.t * exp
+  (* | CastE of Typ.t * exp *)
   | AddrOf of lval
   (* | AddrOfLabel of stmt ref *)
   | StartOf of lval
@@ -146,7 +146,7 @@ module Exp = struct
     | Lval of lval
     | UnOp of unop * exp * Typ.t
     | BinOp of binop * exp * exp * Typ.t
-    | CastE of Typ.t * exp
+    (* | CastE of Typ.t * exp *)
     | AddrOf of lval
     | StartOf of lval
 end

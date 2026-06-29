@@ -117,6 +117,14 @@ let varinfo_to_cil v =
   vi.Cil.vid <- v.vid;
   vi
 
+let find_or_add_varinfo var_tbl v =
+  match Hashtbl.find_opt var_tbl v.S.vid with
+  | Some vi -> vi
+  | None ->
+      let vi = varinfo_to_cil v in
+      Hashtbl.add var_tbl v.S.vid vi;
+      vi
+
 let fundec_svar_to_cil f =
   let formals =
     List.map
@@ -127,6 +135,14 @@ let fundec_svar_to_cil f =
   let vi = Cil.makeGlobalVar f.S.svar.S.vname typ in
   vi.Cil.vid <- f.S.svar.S.vid;
   vi
+
+let find_or_add_fundec_svar var_tbl f =
+  match Hashtbl.find_opt var_tbl f.S.svar.S.vid with
+  | Some vi -> vi
+  | None ->
+      let vi = fundec_svar_to_cil f in
+      Hashtbl.add var_tbl f.S.svar.S.vid vi;
+      vi
 
 let varinfo_of_cil vi =
   let* vtype = typ_of_cil vi.Cil.vtype in
@@ -285,9 +301,6 @@ and exp_to_cil var_tbl = function
       let* e1 = exp_to_cil var_tbl e1 in
       let* e2 = exp_to_cil var_tbl e2 in
       Ok (Cil.BinOp (binop_to_cil op, e1, e2, typ_to_cil typ))
-  | S.Exp.CastE (typ, e) ->
-      let* e = exp_to_cil var_tbl e in
-      Ok (Cil.CastE (typ_to_cil typ, e))
   | S.Exp.AddrOf lv ->
       let* lv = lval_to_cil var_tbl lv in
       Ok (Cil.AddrOf lv)
@@ -313,10 +326,7 @@ and exp_of_cil = function
       let* e2 = exp_of_cil e2 in
       let* typ = typ_of_cil typ in
       Ok (S.Exp.BinOp (op, e1, e2, typ))
-  | Cil.CastE (typ, e) ->
-      let* typ = typ_of_cil typ in
-      let* e = exp_of_cil e in
-      Ok (S.Exp.CastE (typ, e))
+  | Cil.CastE _ -> unsupported "cast expression"
   | Cil.AddrOf lv ->
       let* lv = lval_of_cil lv in
       Ok (S.Exp.AddrOf lv)
@@ -455,12 +465,11 @@ and stmtkind_of_cil = function
   | Cil.ComputedGoto _ -> unsupported "computed goto statement"
   | Cil.Switch _ -> unsupported "switch statement"
 
-let fundec_to_cil f =
-  let var_tbl = Hashtbl.create 16 in
-  let svar = fundec_svar_to_cil f in
-  Hashtbl.add var_tbl f.S.svar.S.vid svar;
-  let sformals = List.map varinfo_to_cil f.S.sformals in
-  let slocals = List.map varinfo_to_cil f.S.slocals in
+let fundec_to_cil var_tbl f =
+  let svar = find_or_add_fundec_svar var_tbl f in
+  Hashtbl.replace var_tbl f.S.svar.S.vid svar;
+  let sformals = List.map (find_or_add_varinfo var_tbl) f.S.sformals in
+  let slocals = List.map (find_or_add_varinfo var_tbl) f.S.slocals in
   List.iter (fun vi -> Hashtbl.replace var_tbl vi.Cil.vid vi) sformals;
   List.iter (fun vi -> Hashtbl.replace var_tbl vi.Cil.vid vi) slocals;
   let* sbody = block_to_cil var_tbl f.S.sbody in
@@ -529,18 +538,21 @@ let initinfo_of_cil initinfo =
   in
   Ok { S.init }
 
-let global_to_cil = function
+let register_global_varinfo var_tbl = function
+  | S.GFun f -> ignore (find_or_add_fundec_svar var_tbl f)
+  | S.GVarDecl v | S.GVar (v, _) -> ignore (find_or_add_varinfo var_tbl v)
+
+let global_to_cil var_tbl = function
   | S.GFun f ->
-      let* f = fundec_to_cil f in
+      let* f = fundec_to_cil var_tbl f in
       Ok (Cil.GFun (f, Cil.locUnknown))
   | S.GVarDecl v ->
-      Ok (Cil.GVarDecl (varinfo_to_cil v, Cil.locUnknown))
+      Ok (Cil.GVarDecl (find_or_add_varinfo var_tbl v, Cil.locUnknown))
   | S.GVar (v, initinfo) ->
-      let var_tbl = Hashtbl.create 1 in
-      let vi = varinfo_to_cil v in
-      Hashtbl.add var_tbl v.S.vid vi;
+      let vi = find_or_add_varinfo var_tbl v in
       let* initinfo = initinfo_to_cil var_tbl initinfo in
-      Ok (Cil.GVar (vi, initinfo, Cil.locUnknown))
+      vi.Cil.vinit.Cil.init <- initinfo.Cil.init;
+      Ok (Cil.GVar (vi, vi.Cil.vinit, Cil.locUnknown))
 
 let global_of_cil = function
   | Cil.GFun (fd, _) ->
@@ -563,7 +575,9 @@ let global_of_cil = function
   | Cil.GText _ -> unsupported "global text"
 
 let file_to_cil file =
-  let* globals = list_map_result global_to_cil file.S.globals in
+  let var_tbl = Hashtbl.create 32 in
+  List.iter (register_global_varinfo var_tbl) file.S.globals;
+  let* globals = list_map_result (global_to_cil var_tbl) file.S.globals in
   Ok { Cil.dummyFile with Cil.fileName = file.S.fileName; globals }
 
 let is_implicit_builtin_global = function

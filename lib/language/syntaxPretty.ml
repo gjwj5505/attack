@@ -47,8 +47,6 @@ module Exp = struct
     | S.Exp.BinOp (op, e1, e2, _) ->
         Printf.sprintf "(%s %s %s)" (string_of_t e1) (string_of_binop op)
           (string_of_t e2)
-    | S.Exp.CastE (typ, e) ->
-        Printf.sprintf "((%s)%s)" (Typ.string_of_t typ) (string_of_t e)
     | S.Exp.AddrOf lv -> "&" ^ string_of_lval lv
     | S.Exp.StartOf lv -> string_of_lval lv
 

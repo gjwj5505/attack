@@ -3,3 +3,7 @@
 ;  (name synthesis_test)
 ;  (enabled_if false)
 ;  (libraries language attack_config synthesis))
+
+(test
+ (name check_test)
+ (libraries language))
