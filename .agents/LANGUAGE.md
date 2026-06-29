@@ -169,6 +169,11 @@ CIL' should follow CIL's type shape and constructor names where useful, but it
 only contains constructors whose semantics are intentionally supported by this
 project.
 
+CIL' records are immutable for now because synthesis and Big-Step treat ASTs as
+values. If later passes need to attach labels, statement ids, CFG metadata,
+analysis results, or proof annotations after construction, make the relevant
+fields mutable in the CIL style at that point.
+
 Conversions:
 
 - CIL' -> CIL must be total for well-formed CIL' programs.

@@ -22,23 +22,28 @@ let set_src x =
 
 let has_action () = !opt_pp
 
-let parse_program () =
+let parse_file () =
   if !src = "" then fail_usage "input file required";
-  match CilBridge.parse_c_file_as_program !src with
-  | Ok program -> program
+  match CilBridge.parse_c_file_as_file !src with
+  | Ok file -> file
   | Error err ->
       prerr_endline (CilBridge.string_of_error err);
       exit 1
 
-let print_program program =
-  match CilBridge.write_program stdout program with
-  | Ok () -> ()
+let print_file file =
+  match CilBridge.check_roundtrip_file file with
+  | Ok () -> (
+      match CilBridge.write_file stdout file with
+      | Ok () -> ()
+      | Error err ->
+          prerr_endline (CilBridge.string_of_error err);
+          exit 1 )
   | Error err ->
       prerr_endline (CilBridge.string_of_error err);
       exit 1
 
 (*
-let run_big_step _program =
+let run_big_step _file =
   prerr_endline "-big is temporarily disabled until Big-Step is ported to CIL'.";
   exit 2
 *)
@@ -70,10 +75,10 @@ let main () =
     print_endline "Please provide an option. Currently useful: -pp.";
     exit 0);
 
-  let program = parse_program () in
-  if !opt_pp then print_program program
+  let file = parse_file () in
+  if !opt_pp then print_file file
 (*
-  if !opt_big then run_big_step program
+  if !opt_big then run_big_step file
 *)
 
 let () = main ()

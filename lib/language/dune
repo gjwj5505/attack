@@ -2,5 +2,5 @@
 
 (library
  (name language)
- (modules typ syntax cilBridge)
+ (modules typ syntax syntaxPretty syntaxEqual cilBridge)
  (libraries goblint-cil))
