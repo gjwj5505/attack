@@ -1,76 +1,118 @@
 # Context
 
-정적 분석기, 특히 Sparrow 계열 interval analyzer가 false alarm 또는 unsound
-result를 내는 프로그램을 합성하고 검증하는 프로젝트다. G 언어 baseline에서
-C-like Big-Step layer로 옮겼고, 다음 목표는 이를 Sparrow/CIL에 더 직접 대응되는
-structural core로 정리하는 것이다.
+This project synthesizes and validates programs that can expose false alarms or
+unsound results in Sparrow-style interval analysis.
+
+The current implementation is in a language-only CIL' transition phase. Old
+C-like parser and Big-Step code is preserved where useful, but the active
+language pipeline is now CIL-based.
 
 ## Current State
 
-- Entry: `bin/main.ml`, executable: `./attack`.
-- 현재 입력 예제는 `.c`를 사용한다. G 예제는 `examples/deprecated/`에 보존.
-- Analyzer/config/synthesis/test 쪽은 임시 비활성화되어 있고, 현재는
-  language-only 중심으로 빌드한다.
-- Analyzer wrapper와 vendored Sparrow source는 보존되어 있다.
-- 주요 명령:
-  - `dune build`
-  - `./attack -pp examples/branch_loop.c`
-  - `./attack -big examples/branch_loop.c`
-  - `./attack -big -v examples/branch_loop.c`
-- `-big`은 Big-Step proof tree를 derive해서 같은 basename의 `.svg`로 저장한다.
-- `-v`는 proof conclusion에 memory를 `{x |-> 1}` 형태로 표시한다.
+- Entry: `bin/main.ml`
+- Executable: `./attack`
+- Active CLI option: `-pp`
+- Disabled for now: old `-big` proof-tree mode
+- Active language library: `lib/language`
+- Analyzer/config/synthesis/test libraries are mostly disabled in their dune
+  files until the CIL' semantics is ready.
 
-## Implemented Language Layer
+Current `-pp` pipeline:
 
-현재 구현은 C-like parser, Big-Step derivator, SVG visualizer까지 연결된 상태다.
-언어 문법과 semantics 세부사항은 `.agents/LANGUAGE.md`가 source of truth다.
+```text
+C source
+  -> GoblintCil parser
+  -> GoblintCil.Cil.file
+  -> CIL'
+  -> Check.check_file
+  -> CIL
+  -> GoblintCil pretty printer
+```
 
-핵심 파일:
+## Key Files
 
-- `lib/language/syntax.ml`, `lexer.mll`, `parser.mly`: C-like syntax layer.
-- `lib/language/semantics/value.ml`: signed 32-bit `int` value와 UB 판정.
-- `lib/language/semantics/memory.ml`: frame, location, store 기반 memory.
-- `lib/language/semantics/bigStep.ml`: proof tree type.
-- `lib/language/semantics/derivator.ml`: deterministic proof builder.
-- `lib/language/semantics/visualizer.ml`, `textSvg.ml`: SVG proof output.
+- `lib/language/syntax.ml`: CIL' AST.
+- `lib/language/typ.ml`: CIL' type subset.
+- `lib/language/cilBridge.ml`: GoblintCil CIL <-> CIL' conversion.
+- `lib/language/check.ml`: thin CIL' checker.
+- `lib/language/syntaxEqual.ml`: CIL' structural equality.
+- `lib/language/syntaxPretty.ml`: debug string rendering.
+- `lib/test/check_test.ml`: direct CIL' checker tests.
+- `lib/language/semantics/`: old Big-Step implementation, preserved as
+  reference for the CIL' port.
 
-Big-Step derivation now handles both successful examples and no-tree error
-cases. Error policy details are in `.agents/LANGUAGE.md`.
+Removed old files:
 
-## Validation
+- `lib/language/lexer.mll`
+- `lib/language/parser.mly`
 
-Success examples:
+## Current Commands
 
-- `examples/small_while.c`
-- `examples/branch_loop.c`: expected and observed final result is `15`.
+```bash
+dune build
+dune runtest
+./attack -pp examples/cil_small_while.c
+./attack -pp examples/cil_branch_loop.c
+./attack -pp examples/cil_pointer_array_call.c
+./attack -pp examples/unsupported_cast_implicit.c
+```
 
-Error examples:
+Expected behavior:
 
-- `examples/error_div_zero.c`
-- `examples/error_overflow.c`
-- `examples/error_literal_overflow.c`
-- `examples/error_missing_return.c`
-- `examples/error_unbound.c`
-- `examples/error_duplicate.c`
-- `examples/error_out_of_fuel.c`
+- the first three `-pp` examples succeed,
+- `unsupported_cast_implicit.c` fails with `unsupported CIL feature: cast expression`,
+- `dune runtest` runs direct CIL' checker fixtures.
 
-All error examples should fail with `Big-Step derivation failed: ...` and not
-create an SVG.
+## Important Design Decisions
 
-## CIL / Sparrow Direction
+Detailed language design lives in `.agents/LANGUAGE.md`.
 
-Next target: stop expanding faithful C surface syntax and define a
-CIL/Sparrow-facing structural core.
+Current highlights:
 
-Detailed CIL/Sparrow correspondence belongs in `.agents/LANGUAGE.md`. The
-context-level point is that future synthesis/semantics work should target that
-core, not a broader faithful-C surface language.
+- CIL' is the internal source of truth.
+- GoblintCil 2.0.9 is used for parsing, pretty-printing, and CIL checks.
+- Sparrow uses CIL 1.7.3, so exported C must later be checked for frontend
+  compatibility before attack claims rely on it.
+- CIL' is cast-free.
+- CIL' currently supports `int`, `unsigned int`, pointers, arrays, function
+  definitions/calls, globals, conditionals, loops, break/continue, and returns.
+- Unsupported features include structs/unions, field offsets, floats, strings,
+  enums, typedefs, varargs, switch, goto, and casts.
+- The checker is intentionally thin. Runtime definedness belongs in Big-Step.
+
+Big-Step proof-tree direction:
+
+- The CIL' Big-Step semantics must eventually be complete for the supported
+  CIL' language: every well-defined CIL' program that terminates in finite time
+  should have a representable proof tree.
+- Runtime errors and nontermination are not represented as successful proof
+  trees. They should be reported as derivation errors or fuel exhaustion.
+- Fuel is an implementation cutoff for derivation/search, not part of the
+  mathematical semantics.
+- Start with a minimal executable subset, but keep the proof-tree layers aligned
+  with CIL' structure: expression, lvalue, instruction, statement, block,
+  function, and file.
+- The current implementation target is to restore `-big` for CIL'. The `-pp`
+  pipeline remains useful as parser/bridge validation, but Big-Step proof-tree
+  generation is now the primary milestone.
+- Function execution should be represented separately from call-instruction
+  execution. A call instruction tree describes the caller-side effect of a
+  `Call`, while a function tree describes callee frame setup, body execution,
+  and return.
+- Callee resolution should eventually become its own small proof component
+  (`callee_tree` or equivalent), because CIL' represents the callee of `Call` as
+  an expression. The first implementation may support only direct calls and
+  postpone this tree until calls are implemented.
+- Do not put unsupported calls in successful proof trees. Until call semantics
+  is implemented, `Call` should be a derivation error. After the first minimal
+  CIL' `-big` path works, add function call semantics next.
 
 ## Next Actions
 
-1. Define the CIL-facing core AST.
-2. Decide statement/block core vs explicit CFG-edge core.
-3. Specify mapping from current C-like surface syntax to the core.
-4. Move `bigStep.ml` and `derivator.ml` to use that core as source of truth.
-5. Reconnect synthesis after core semantics stabilizes.
-6. Reconnect Sparrow analyzer wrapper and compare against Sparrow results.
+1. Port Big-Step semantics to CIL'.
+2. Define values, addresses, memory, and environments.
+3. Implement expression/lvalue evaluation.
+4. Implement instruction/statement/block/function evaluation.
+5. Reintroduce proof trees for CIL'.
+6. Reconnect synthesis once the evaluator stabilizes.
+7. Reconnect Sparrow comparison after exported C compatibility is tested.

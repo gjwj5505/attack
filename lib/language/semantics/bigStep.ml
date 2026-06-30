@@ -1,4 +1,15 @@
-open Syntax
+module S = Syntax
+
+(* CIL' calls have a callee expression:
+
+     Call of lval option * Exp.t * Exp.t list
+
+   When function calls are implemented, callee resolution should become an
+   explicit proof component, e.g. a callee_tree, so direct calls and later
+   function-pointer calls are handled in one place. The call instruction tree
+   should describe the caller-side effect of the instruction; the function tree
+   should describe callee frame setup, body execution, and return.
+*)
 
 type memory = Memory.t
 type value = Value.t
@@ -9,50 +20,75 @@ type control =
   | Break
   | Continue
 
-type e_concl = memory * Exp.t * memory * value
-type s_concl = memory * Stmt.t * memory * control
-type b_concl = memory * Stmt.codeblock * memory * control
-type p_concl = program * memory * value
+type loc = Memory.loc
+
+(* expression *)
+type e_concl = memory * S.Exp.t * value
+(* lval *)
+type l_concl = memory * S.lval * loc
+(* single instruction : Set, Call *)
+type i_concl = memory * S.instr * memory
+(* statement : instruction, return, break, continue, if, loop, ... *)
+type s_concl = memory * S.stmt * memory * control
+(* block *)
+type b_concl = memory * S.block * memory * control
+(* function *)
+type f_concl = memory * S.fundec * value list * memory * control
+(* total program : execute main function *)
+type p_concl = S.file * memory * value
 
 type tree =
   | ETree of etree
+  | LTree of ltree
+  | ITree of itree
   | STree of stree
   | BTree of btree
+  | FTree of ftree
   | PTree of ptree
 
 and etree =
-  | EIntLiteral of unit * e_concl
-  | ENegIntLiteral of unit * e_concl
-  | ELval of unit * e_concl
-  | EBop of (etree * etree) * e_concl
-  | EUop of etree * e_concl
-  (* Future short-circuit logical operators need separate rules. Reusing EBop
-     would force a fake right-hand subtree even when C would not evaluate it.
-     The constructor names describe the left operand's truthiness, not the whole
-     expression result. Checker code must verify that left-result condition. *)
-  | ELogicalOrLeftTrue of etree * e_concl
-  | ELogicalOrLeftFalse of (etree * etree) * e_concl
-  | ELogicalAndLeftFalse of etree * e_concl
-  | ELogicalAndLeftTrue of (etree * etree) * e_concl
+  | EConst of e_concl
+  | ELval of ltree * e_concl
+  | EUnOp of etree * e_concl
+  | EBinOp of etree * etree * e_concl
+  | EAddrOf of ltree * e_concl
+  | EStartOf of ltree * e_concl
+
+and ltree =
+  | LVar of l_concl
+  | LMem of etree * l_concl
+  | LIndex of ltree * etree * l_concl
+
+and itree =
+  | ISet of ltree * etree * i_concl
+  (* After the first CIL' -big path succeeds, add successful call rules with
+     callee resolution plus an ftree premise. Unsupported calls should be
+     derivation errors, not proof-tree nodes. *)
 
 and stree =
-  | SDecl of etree * s_concl
-  | SAssign of etree * s_concl
-  | SIfTrue of (etree * btree) * s_concl
-  | SIfFalse of (etree * btree) * s_concl
-  | SWhileFalse of etree * s_concl
-  | SWhileTrueNormal of (etree * btree * stree) * s_concl
-  | SWhileTrueContinue of (etree * btree * stree) * s_concl
-  | SWhileTrueBreak of (etree * btree) * s_concl
-  | SWhileTrueReturn of (etree * btree) * s_concl
-  | SReturn of etree * s_concl
+  | SInstr of itree list * s_concl
+  | SReturnNone of s_concl
+  | SReturnSome of etree * s_concl
+  | SBreak of s_concl
+  | SContinue of s_concl
+  | SIfTrue of etree * btree * s_concl
+  | SIfFalse of etree * btree * s_concl
+  | SLoopRepeat of btree * stree * s_concl
+  | SLoopContinue of btree * stree * s_concl
+  | SLoopBreak of btree * s_concl
+  | SLoopReturn of btree * s_concl
+  | SBlock of btree * s_concl
 
 and btree =
   | BEmpty of b_concl
-  | BSeqNormal of (stree * btree) * b_concl
+  | BSeqNormal of stree * btree * b_concl
   | BSeqReturn of stree * b_concl
   | BSeqBreak of stree * b_concl
   | BSeqContinue of stree * b_concl
 
+and ftree =
+  | FReturn of btree * f_concl
+  | FNoReturn of btree * f_concl
+
 and ptree =
-  | PMainReturn of btree * p_concl
+  | PMainReturn of ftree * p_concl

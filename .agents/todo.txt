@@ -1,59 +1,54 @@
 # TODO
 
-## Next: CIL-facing core
+## Next: CIL' Big-Step
 
-- Define the structural core AST that should correspond to Sparrow/CIL CFG
-  commands.
-- Decide whether the core should be statement/block based or explicit CFG-edge
-  based.
-- Specify how the current C-like surface syntax maps into the core.
-- Update `syntax.ml`, `bigStep.ml`, and `derivator.ml` around that core.
-- Keep the current C-like parser/printer as a readable facade if it remains
-  useful.
+- Define CIL' runtime values.
+- Define addresses, memory blocks, and variable allocation.
+- Define global/function environments.
+- Implement lvalue evaluation.
+- Implement expression evaluation.
+- Implement instruction evaluation for `Set` and `Call`.
+- Implement statement/block evaluation for `Return`, `If`, `Loop`,
+  `Break`, `Continue`, and `Block`.
+- Reintroduce proof tree types for CIL'.
+- Add runtime-error/no-tree cases.
 
-## Semantics
+## Runtime Errors To Model
 
-- Keep Big-Step tree generation as the concrete semantics oracle.
-- Preserve current no-tree behavior for UB and derivation failures:
-  overflow, division/modulo by zero, missing return, memory errors, out of fuel.
-- Add future features only after checking CIL lowering and Sparrow
-  `IntraCfg.Cmd` representation.
-- When adding `break`/`continue`, connect parser syntax to the existing
-  `control` constructors.
-- When adding side-effect expressions or calls, revisit expression evaluation
-  order and memory effects.
+- Uninitialized read.
+- Division or modulo by zero.
+- Invalid pointer dereference.
+- Out-of-bounds array access.
+- Missing function body.
+- Nonzero `main` return for normal-completion comparisons.
+- Fuel exhaustion.
 
 ## Validation
 
 - Keep `dune build` green after each small step.
-- Keep success examples:
-  - `examples/small_while.c`
-  - `examples/branch_loop.c`
-- Keep error examples that must not produce a Big-Step tree:
-  - `examples/error_div_zero.c`
-  - `examples/error_overflow.c`
-  - `examples/error_literal_overflow.c`
-  - `examples/error_missing_return.c`
-  - `examples/error_unbound.c`
-  - `examples/error_duplicate.c`
-  - `examples/error_out_of_fuel.c`
-- Add one small validation example for every new semantic feature.
+- Keep `dune runtest` green.
+- Keep supported examples passing:
+  - `examples/cil_small_while.c`
+  - `examples/cil_branch_loop.c`
+  - `examples/cil_pointer_array_call.c`
+- Keep unsupported examples rejecting as expected:
+  - `examples/unsupported_cast_implicit.c`
+- Add one direct CIL' unit test for every new checker or semantic invariant
+  that cannot be expressed as valid C source.
 
-## Analyzer / Synthesis reconnect
+## Analyzer / Synthesis Reconnect
 
-- Re-enable synthesis only after the core AST and Big-Step semantics stabilize.
-- Port size, prune, grow, and component generation rules from the old G
-  baseline to the new core.
-- Re-enable Sparrow analyzer wrapper after printable C/CIL-facing programs are
-  stable.
-- Compare generated concrete executions against Sparrow results at the
-  CIL/IntraCfg command level.
-- Later optimization: avoid blocking on every Sparrow call; run analyzer jobs
-  concurrently and consume results as they finish.
+- Re-enable synthesis only after CIL' Big-Step stabilizes.
+- Make synthesis generate well-formed CIL' directly.
+- Use `Check.check_file` as an optional debug guard, not necessarily on the
+  final fast synthesis path.
+- Re-enable Sparrow wrapper after printable CIL' programs are stable.
+- Check exported C against Sparrow's CIL 1.7.3 frontend before relying on an
+  attack result.
 
 ## Cleanup
 
-- Keep `.agents/CONTEXT.md` updated with durable design decisions.
+- Keep `.agents/CONTEXT.md` updated with current implementation state.
 - Keep `.agents/LANGUAGE.md` as the language/semantics source of truth.
-- Do not update `.agents/c-feature.csv` until we intentionally revisit the
-  feature matrix.
+- Do not update `.agents/c-feature.csv` until the feature matrix is
+  intentionally revisited.

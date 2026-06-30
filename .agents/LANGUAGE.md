@@ -1,263 +1,287 @@
 # Language Design
 
-이 프로젝트의 언어는 ISO C 전체가 아니다. 현재는 readable C-like syntax를 쓰지만,
-장기 목표는 Sparrow가 CIL을 거쳐 분석하는 CFG command와 잘 대응되는 structural
-core language다.
+This project no longer treats a hand-written C-like parser as the language
+source of truth. The current language target is a Sparrow-facing, CIL-shaped
+subset called CIL'.
 
-## Principles
+## Goal
 
-- C surface syntax is a facade; CIL/Sparrow-facing semantics is the target.
-- Parser, printer, synthesis, and Big-Step should share one semantic core.
-- Do not add a feature just because C has it.
-- Add a feature only after CIL lowering, Sparrow `IntraCfg.Cmd`, and Big-Step
-  meaning are understood.
-- Compare analyzer behavior at the CIL/CFG command level, not raw `.i` text.
+The purpose of CIL' is to synthesize and execute small deterministic programs
+whose concrete final memory can be compared against Sparrow's abstract result.
 
-Relevant pipeline:
+The intended pipeline is:
 
 ```text
-C source or .i -> CIL AST -> Sparrow CFG / IntraCfg.Cmd -> abstract interpretation
+C source
+  -> GoblintCil parser
+  -> GoblintCil.Cil.file
+  -> CIL'
+  -> Check.check_file
+  -> Big-Step / synthesis / objective
 ```
 
-## Current Surface Syntax
-
-Accepted grammar, summarized:
+For generated attacks:
 
 ```text
-program  ::= int main() block
-block    ::= { stmt* }
-stmt     ::= int x = expr;
-           | x = expr;
-           | if (expr) block else block
-           | while (expr) block
-           | return expr;
-expr     ::= decimal integer | identifier | -expr | (expr)
-           | expr (+|-|*|/|%) expr
-           | expr (==|!=|<|<=|>|>=) expr
-```
-
-Notes:
-
-- `main` is parsed as an identifier and checked by the parser action.
-- Only one parameterless `int main()` function is accepted.
-- Declarations must be initialized.
-- `else` is mandatory.
-- `if`/`while` bodies must be blocks.
-- Empty blocks are accepted and represented as `[]`.
-- Comments are lexical trivia.
-- No preprocessor, typedef, storage class, qualifier, function parameter, or
-  standalone block statement is supported.
-
-## Current AST
-
-The current AST lives in `lib/language/syntax.ml`.
-
-- `Typ.t`: currently only `Int`.
-- `id`: string.
-- `binding`: `{ typ; name }`.
-- `lval`: currently only `LVar`.
-- `Exp.t`: `Int of Int64.t`, `Lval`, unary minus, and binary operators.
-- `Stmt.t`: declaration, assignment, if/else, while, return.
-- `Stmt.codeblock`: `Stmt.t list`.
-- `program`: one `main` function record.
-
-Integer literals are stored as `Int64.t` only to parse and reject runtime
-`int` overflow cleanly. Runtime integers are signed 32-bit `int`, not
-`long long`.
-
-There are no source locations or labels in the AST. Add them later through a
-separate pass if CFG output or analyzer integration needs them.
-
-## Current Semantics
-
-Judgments:
-
-- Expression: `<memory, expr> ⇓ <memory', value>`
-- Statement: `<memory, stmt> ⇓ <memory', control>`
-- Block: `<memory, block> ⇓ <memory', control>`
-- Program starts from `main` and returns a value.
-
-Current expressions are pure, but memory is threaded so future calls or
-side-effect expressions can fit the same judgment shape.
-
-Runtime model:
-
-- `Value.t` currently contains signed 32-bit `int`.
-- Memory separates name binding from storage: local name -> location -> value.
-- Proof output shows visible locals as `{x |-> 1}`.
-- Current local scope is flat. Block scope/shadowing is outside the subset.
-- Future function calls should push/pop frames.
-
-Control:
-
-```ocaml
-Normal | Return of Value.t | Break | Continue
-```
-
-`Break` and `Continue` are reserved in Big-Step types but parser syntax is not
-implemented yet.
-
-Evaluation policy:
-
-- deterministic left-to-right evaluation
-- C/Sparrow truthiness: `0` false, nonzero true
-- block execution stops after `Return`, `Break`, or `Continue`
-- derivator uses statement-level fuel for nontermination
-
-No-tree cases:
-
-- signed integer overflow
-- division/modulo by zero
-- `INT_MIN / -1`, `INT_MIN % -1`
-- runtime `int` literal overflow
-- unbound variable or duplicate declaration
-- missing `main` return
-- out of fuel
-
-These return a `Derivator` error instead of producing a proof tree.
-
-## Proof Trees
-
-- `etree`: expression proof.
-- `stree`: statement proof.
-- `btree`: block proof.
-- `ptree`: program proof.
-
-`BEmpty` represents an empty block and is visualized as `empty`.
-
-Short-circuit tree constructors exist for future `&&`/`||`. They avoid making a
-fake subtree for an unevaluated right operand; a future checker must verify the
-left-operand side condition.
-
-## CIL / Sparrow Mapping
-
-Intended current mapping:
-
-```text
-int x = e;       -> Cset(x, e)
-x = e;           -> Cset(x, e)
-if (e) S else T  -> Cassume(e) / Cassume(!e) branch edges
-while (e) S      -> CFG cycle with assume edges
-return e;        -> Creturn(e)
-```
-
-Observed Sparrow/CIL facts:
-
-- CIL instructions are flattened into commands such as `Cset`/`Ccall`.
-- CIL `If` and `Loop` become CFG structure plus assumptions.
-- CIL `Return` becomes `Creturn`.
-- Sparrow sparse analysis runs abstract transfer over `IntraCfg.Cmd`.
-
-The bridge for soundness discussion is:
-
-```text
-our Big-Step concrete execution
-  -> corresponding CIL/IntraCfg path
-  -> Sparrow abstract result
+Synthesized CIL'
+  -> optional Check.check_file
+  -> Big-Step concrete execution
+  -> CIL
+  -> pretty-printed C
+  -> Sparrow input
 ```
 
 ## CIL and CIL'
 
-The project uses two related representations:
+- CIL means the external OCaml CIL representation from `goblint-cil`.
+- CIL' means the internal supported subset in `lib/language/syntax.ml`.
 
-- CIL: the external OCaml CIL library representation, used for parsing,
-  pretty-printing, type utilities, and other library support.
-- CIL': the internal supported subset, used as the source of truth for
-  synthesis, Big-Step semantics, proof trees, and attack objectives.
+CIL is used for parsing, pretty-printing, library utilities, and sanity checks.
+CIL' is the source of truth for synthesis, Big-Step semantics, proof trees, and
+attack objectives.
 
-CIL' should follow CIL's type shape and constructor names where useful, but it
-only contains constructors whose semantics are intentionally supported by this
-project.
+CIL' follows CIL constructor shapes where useful:
 
-CIL' records are immutable for now because synthesis and Big-Step treat ASTs as
-values. If later passes need to attach labels, statement ids, CFG metadata,
-analysis results, or proof annotations after construction, make the relevant
-fields mutable in the CIL style at that point.
+- `file -> global list`
+- `GFun -> fundec`
+- `fundec -> svar, sformals, slocals, sbody`
+- `block -> stmt list`
+- `stmt -> stmtkind`
+- `instr` for control-flow-free actions
+- `lval = lhost * offset`
+- `lhost = Var | Mem`
+- `offset = NoOffset | Field | Index`
+- `exp` is side-effect-free
 
-Conversions:
+CIL' records are immutable for now. If later passes need labels, statement ids,
+CFG metadata, analysis annotations, or proof annotations attached after
+construction, make the relevant fields mutable in the CIL style at that point.
 
-- CIL' -> CIL must be total for well-formed CIL' programs.
-- CIL -> CIL' accepts only the supported subset and otherwise returns an
-  explicit unsupported-feature error.
+## Current Active Subset
 
-When a CIL library function is useful, convert CIL' to CIL and call the library
-function there. When a project-specific semantic, synthesis, or proof operation
-is needed, implement it on CIL'.
+Types:
 
-Sparrow inputs are produced by converting synthesized CIL' to CIL, pretty
-printing it as C, and giving that file to Sparrow. Sparrow may parse the printed
-C using its own CIL version; the comparison target remains the CIL' Big-Step
-final memory.
+- `void`
+- `int`
+- `unsigned int`
+- pointers
+- arrays with constant integer length or unknown length
+- non-vararg function types
 
-CIL' semantics is not justified by the newest CIL library alone. For
-soundness/completeness attacks, CIL' must denote the same concrete behavior as
-the subset accepted and lowered by Sparrow's CIL 1.7.3 frontend. The newest CIL
-library is only a utility layer unless this compatibility condition is checked.
+Globals:
 
-The supported CIL' subset should stay inside the conservative common subset of
-newest CIL and Sparrow CIL 1.7.3. Features whose lowering or concrete meaning
-may differ between the two CIL versions remain unsupported until tested against
-Sparrow's frontend.
+- function definitions
+- global variable declarations
+- global variable definitions with initializers
 
-Before relying on a feature for attacks, check for execution-meaning differences
-between CIL' Big-Step and the C code as parsed/lowered by Sparrow CIL 1.7.3.
-The bridge that justifies an attack is:
+Statements and instructions:
+
+- instruction statements
+- assignment
+- function call
+- return
+- if
+- loop
+- break
+- continue
+- block
+
+Expressions and lvalues:
+
+- integer constants
+- lvalue reads
+- unary operators
+- binary operators, including pointer arithmetic operators
+- address-of
+- array start
+- variable lvalues
+- memory lvalues
+- array index offsets
+
+## Excluded Features
+
+These features are outside CIL' until explicitly designed:
+
+- casts
+- all integer kinds except `int` and `unsigned int`
+- floating-point types and constants
+- string and character constants
+- structs and unions
+- field offsets
+- enums
+- typedefs
+- varargs
+- inline assembly
+- goto and computed goto
+- switch/case/default
+- source locations as active semantic data
+
+Some excluded CIL constructors remain as comments beside the corresponding
+active definitions in `syntax.ml`. That is intentional: the file records the
+relationship to GoblintCil while keeping the active AST small.
+
+## Cast-Free Policy
+
+CIL' is a cast-free lowered CIL subset. There is no active `CastE` constructor.
+
+This avoids having to distinguish source-level explicit casts from C front-end
+implicit conversions. If GoblintCil lowers a C source program into CIL containing
+`CastE`, the CIL -> CIL' bridge rejects it.
+
+Consequences:
+
+- CIL' contains no implicit casts.
+- CIL' contains no explicit casts.
+- Binary operations must already have matching operand/result types.
+- Assignments and calls must be type-consistent without relying on conversion.
+- Mixed signedness examples such as `int + unsigned int` are rejected because
+  GoblintCil inserts casts.
+
+If casts are needed later, add them one narrow case at a time with a precise
+Big-Step rule and Sparrow CIL 1.7.3 compatibility check.
+
+## Bridge Policy
+
+`lib/language/cilBridge.ml` implements conversion between GoblintCil CIL and
+CIL'.
+
+- CIL' -> CIL should be total for checked CIL' programs.
+- CIL -> CIL' accepts only the supported subset.
+- Unsupported CIL features return explicit errors.
+- Builtin declarations inserted by GoblintCil, such as `__builtin_*`,
+  `__sync_*`, `__atomic_*`, and `__builtin_va_list`, are filtered from external
+  input before conversion.
+
+The bridge also provides roundtrip checking:
+
+```text
+CIL' -> CIL -> CIL'
+```
+
+Roundtrip equality is structural CIL' equality. Statement ids are ignored.
+
+## Checker Policy
+
+`lib/language/check.ml` is a thin structural checker, not a full C typechecker.
+
+It currently checks:
+
+- exactly one `main`
+- `main` has return type `int`
+- `main` has no parameters
+- duplicate global names
+- `break` outside loops
+- `continue` outside loops
+- CIL' roundtrip stability
+- GoblintCil `Check.checkFile` on the converted CIL
+
+GoblintCil's checker is used for CIL internal consistency, type consistency,
+varinfo sharing, initializer consistency, call consistency, and related CIL
+invariants.
+
+The CIL' checker exists because some invariants are enforced by the C parser,
+not by GoblintCil's CIL checker. For example, C source cannot contain a
+top-level loop-free `break`, but a synthesizer can directly construct such a
+CIL' AST.
+
+The checker is useful for CLI input validation and synthesis debugging. The
+final synthesis hot path may skip it if the generator itself maintains these
+invariants.
+
+## Runtime Errors
+
+The checker does not try to prove runtime definedness. These are Big-Step
+runtime errors or no-tree cases:
+
+- uninitialized read
+- division or modulo by zero
+- invalid pointer dereference
+- null pointer dereference, if null is later introduced
+- out-of-bounds array access
+- missing function body at call time
+- nonzero `main` return for normal-completion comparisons
+- fuel exhaustion / nontermination cutoff
+
+This separation matches C practice: parser/type checking handles syntax and
+type correctness, while runtime undefinedness is not fully rejected by the
+front-end.
+
+## Sparrow Compatibility
+
+Sparrow reportedly uses CIL 1.7.3. GoblintCil 2.0.9 is only a utility layer for
+this project.
+
+For soundness/completeness attacks, CIL' Big-Step behavior must match the
+concrete behavior of the exported C program as parsed and lowered by Sparrow's
+CIL 1.7.3 frontend.
+
+Before relying on a feature for attacks, check that:
 
 ```text
 CIL' Big-Step concrete execution
   = concrete behavior of exported C under Sparrow CIL 1.7.3 lowering
-  -> Sparrow abstract result
 ```
+
+Only then can the result be compared against Sparrow's abstract analysis.
 
 ## Examples Policy
 
-Example files use the `.c` extension because CIL is an OCaml AST, not a source
-file syntax. However, examples should be written as CIL-compatible C: C code
-whose parsed/lowered CIL belongs to the supported CIL' subset.
+Example files use `.c` because CIL is an OCaml AST, not a source-file syntax.
+Examples should be C source programs whose GoblintCil-lowered CIL belongs to
+the supported CIL' subset.
 
-Do not use source-level C constructs whose C semantics may differ from CIL
-lowering, such as unsequenced side effects (`a++ + a++`), side-effect
-expressions, calls, pointer/array/struct operations, or other unsupported
-features. If such a feature is intentionally studied, put it in a clearly named
-error or compatibility example and record the expected unsupported behavior.
+Success examples should avoid features outside CIL'. Unsupported examples
+should be named clearly, such as `unsupported_cast_implicit.c`, and should have
+an expected rejection reason.
+
+Current examples include:
+
+- `examples/cil_small_while.c`
+- `examples/cil_branch_loop.c`
+- `examples/cil_pointer_array_call.c`
+- `examples/unsupported_cast_implicit.c`
+
+Control-flow cases that cannot be represented as valid C source, such as
+loop-free `break`, should be tested by constructing CIL' ASTs directly in OCaml
+unit tests.
 
 ## Attack Observables
 
-For CIL-core synthesis, source locals and CIL temporary variables are not
-distinguished. Both are local memory bindings.
+Source locals and CIL temporary variables are not distinguished. Both are local
+memory bindings.
 
 A concrete run is considered normally completed only when `main` returns `0`.
 The return value itself is not an attack observable.
 
-Soundness/completeness comparison uses all live local memory bindings at the end
-of normal `main` execution:
+Soundness/completeness comparison uses all live local memory bindings at normal
+`main` exit:
 
-- soundness failure: concrete value is not included in the analyzer result
-- completeness/precision failure: analyzer result is wider than the singleton
-  abstraction of the concrete value
+- soundness failure: the concrete value is not included in the analyzer result
+- completeness/precision failure: the analyzer result is wider than the
+  singleton abstraction of the concrete value
 
-## Restrictions
+## Next Semantics Work
 
-Excluded until designed against CIL/Sparrow:
+The next implementation step is to port Big-Step semantics to CIL'.
 
-- uninitialized declarations
-- block scope and shadowing
-- calls
-- arrays, pointers, structs
-- casts and non-int scalar types
-- `&&`, `||`, `!`
-- side-effect expressions
-- `break`/`continue` parser syntax
+Suggested order:
 
-## Development Policy
+1. define CIL' values,
+2. define memory and addresses,
+3. define environments and function tables,
+4. implement expression and lvalue evaluation,
+5. implement instruction, statement, block, and function evaluation,
+6. produce proof trees alongside evaluation results,
+7. add runtime-error tests.
 
-For each new feature:
+Start with a minimal executable subset:
 
-1. inspect CIL lowering,
-2. inspect Sparrow `IntraCfg.Cmd`,
-3. define Big-Step rules and no-tree cases,
-4. add parser/printer only if surface syntax is useful,
-5. add success/error examples.
+```c
+int main(void) {
+  int x;
+  x = 3;
+  return 0;
+}
+```
 
-The feature matrix stays in `.agents/c-feature.csv`; do not update it unless
-we intentionally revisit feature support.
+Then extend in this order: conditionals, loops, arrays/pointers, calls.
