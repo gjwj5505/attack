@@ -79,6 +79,40 @@ let reject_continue_outside_loop =
   file
     [ S.GFun (main_fun [ stmt S.Continue; stmt (S.Return (Some (int_const 0))) ]) ]
 
+let reject_return_value_in_void_function =
+  (* Expected: Error Return_value_in_void_function. Return expression presence
+     must match the enclosing function return type. *)
+  let f =
+    {
+      S.svar = var ~vglob:true "f" void_t 20;
+      sformals = [];
+      slocals = [];
+      sbody = block [ stmt (S.Return (Some (int_const 1))) ];
+    }
+  in
+  file
+    [
+      S.GFun f;
+      S.GFun (main_fun [ stmt (S.Return (Some (int_const 0))) ]);
+    ]
+
+let reject_return_without_value_in_nonvoid_function =
+  (* Expected: Error (Return_without_value_in_nonvoid_function int). Return
+     expression presence must match the enclosing function return type. *)
+  let f =
+    {
+      S.svar = var ~vglob:true "f" int_t 21;
+      sformals = [];
+      slocals = [];
+      sbody = block [ stmt (S.Return None) ];
+    }
+  in
+  file
+    [
+      S.GFun f;
+      S.GFun (main_fun [ stmt (S.Return (Some (int_const 0))) ]);
+    ]
+
 let accept_break_continue_inside_loop =
   (* Expected: Ok. Break and continue are valid inside Loop. *)
   file
@@ -137,6 +171,14 @@ let () =
       ("reject_continue_outside_loop", fun () ->
         expect_error "reject_continue_outside_loop" Check.Continue_outside_loop
           reject_continue_outside_loop);
+      ("reject_return_value_in_void_function", fun () ->
+        expect_error "reject_return_value_in_void_function"
+          Check.Return_value_in_void_function
+          reject_return_value_in_void_function);
+      ("reject_return_without_value_in_nonvoid_function", fun () ->
+        expect_error "reject_return_without_value_in_nonvoid_function"
+          (Check.Return_without_value_in_nonvoid_function int_t)
+          reject_return_without_value_in_nonvoid_function);
       ("accept_break_continue_inside_loop", fun () ->
         expect_ok "accept_break_continue_inside_loop"
           accept_break_continue_inside_loop);

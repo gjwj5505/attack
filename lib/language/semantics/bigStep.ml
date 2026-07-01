@@ -16,6 +16,7 @@ type value = Value.t
 
 type control =
   | Normal
+  | ReturnVoid
   | Return of value
   | Break
   | Continue
@@ -50,7 +51,11 @@ and etree =
   | EConst of e_concl
   | ELval of ltree * e_concl
   | EUnOp of etree * e_concl
-  | EBinOp of etree * etree * e_concl
+  | ELogicalOrLeftTrue of etree * e_concl
+  | ELogicalOrLeftFalse of etree * etree * e_concl
+  | ELogicalAndLeftFalse of etree * e_concl
+  | ELogicalAndLeftTrue of etree * etree * e_concl
+  | EBinOp of etree * etree * e_concl (* logical 제외 *)
   | EAddrOf of ltree * e_concl
   | EStartOf of ltree * e_concl
 
@@ -61,9 +66,11 @@ and ltree =
 
 and itree =
   | ISet of ltree * etree * i_concl
-  (* After the first CIL' -big path succeeds, add successful call rules with
-     callee resolution plus an ftree premise. Unsupported calls should be
-     derivation errors, not proof-tree nodes. *)
+  | ICallVoid of callee_tree * etree list * ftree * i_concl
+  | ICallAssign of ltree * callee_tree * etree list * ftree * i_concl
+
+and callee_tree =
+  | DirectCallee of S.Exp.t * S.varinfo * S.fundec
 
 and stree =
   | SInstr of itree list * s_concl

@@ -172,6 +172,8 @@ It currently checks:
 - duplicate global names
 - `break` outside loops
 - `continue` outside loops
+- return statement expression presence matches the enclosing function return
+  type
 - CIL' roundtrip stability
 - GoblintCil `Check.checkFile` on the converted CIL
 

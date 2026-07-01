@@ -103,9 +103,37 @@ Big-Step proof-tree direction:
   (`callee_tree` or equivalent), because CIL' represents the callee of `Call` as
   an expression. The first implementation may support only direct calls and
   postpone this tree until calls are implemented.
-- Do not put unsupported calls in successful proof trees. Until call semantics
-  is implemented, `Call` should be a derivation error. After the first minimal
-  CIL' `-big` path works, add function call semantics next.
+- The first CIL' derivator should include direct function calls. The supported
+  callee form is initially `Lval (Var f, NoOffset)` resolving to a known
+  `GFun`; indirect/function-pointer calls remain unsupported until later.
+  Call-instruction proof trees should include callee resolution, argument
+  expression proofs, and an `ftree` premise.
+- The user-facing `-big` path should always run `Check.check_file` before
+  derivation. The derivator itself should not call the checker, so later
+  synthesis/direct callers can choose whether to skip full checking when their
+  generator maintains the required invariants.
+- Logical `LAnd` and `LOr` must use dedicated short-circuit expression proof
+  rules. Do not encode them as ordinary `EBinOp`, because that would force a
+  right-hand proof even when C would not evaluate the right operand.
+- The first CIL' derivator should include `Loop`. Loop execution is bounded by
+  fuel, with default fuel 100. `Break` is consumed as normal loop exit,
+  `Continue` starts the next iteration, `Return` propagates, and fuel exhaustion
+  is a derivation error rather than a proof tree.
+- The first CIL' derivator should postpone pointer and array execution. It only
+  needs variable lvalues with `NoOffset`; `AddrOf`, `StartOf`, `Mem`, `Index`,
+  and pointer arithmetic should return unsupported derivation errors until the
+  minimal `-big` path is working.
+- Big-Step control distinguishes `ReturnVoid` from `Return value`. `return;`
+  produces `ReturnVoid`; `return exp;` produces `Return value`. Non-void
+  functions, including `main`, should reject `ReturnVoid` during derivation.
+- Statement and block derivation should not need to know the enclosing function
+  return type. `derive_function` is responsible for checking final control
+  against the function return type. `Check.check_file` should also statically
+  reject return statements whose expression presence does not match the
+  enclosing function return type.
+- The first CIL' `-big` milestone only needs to construct a `BigStep.ptree`.
+  Proof-tree visualization/pretty-printing should be implemented after the
+  derivator is working.
 
 ## Next Actions
 

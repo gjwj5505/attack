@@ -13,5 +13,6 @@
   value
   memory
   bigStep
+  derivator
   textSvg)
  (libraries goblint-cil))

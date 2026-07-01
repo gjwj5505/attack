@@ -2,14 +2,10 @@ open Language
 
 let src = ref ""
 let opt_pp = ref false
-(*
- * Big-Step CLI is sealed while Big-Step is ported from the old C-like AST to
- * CIL'. Keep this code here so the option can be restored deliberately later.
 let opt_big = ref false
-*)
 
 let usage =
-  "Usage : " ^ Filename.basename Sys.argv.(0) ^ " [-pp] [c-file] "
+  "Usage : " ^ Filename.basename Sys.argv.(0) ^ " [-pp|-big] [c-file] "
 
 let fail_usage msg =
   prerr_endline ("Error: " ^ msg);
@@ -20,7 +16,7 @@ let set_src x =
   if !src <> "" then fail_usage ("unexpected extra input file: " ^ x)
   else src := x
 
-let has_action () = !opt_pp
+let has_action () = !opt_pp || !opt_big
 
 let parse_file () =
   if !src = "" then fail_usage "input file required";
@@ -42,11 +38,20 @@ let print_file file =
       prerr_endline (Check.string_of_error err);
       exit 1
 
-(*
-let run_big_step _file =
-  prerr_endline "-big is temporarily disabled until Big-Step is ported to CIL'.";
-  exit 2
-*)
+let run_big_step file =
+  match Check.check_file file with
+  | Error err ->
+      prerr_endline (Check.string_of_error err);
+      exit 1
+  | Ok () -> (
+      match Derivator.derive_file file with
+      | Ok tree ->
+          let BigStep.PMainReturn (_, (_, _, value)) = tree in
+          Printf.printf "Big-Step tree constructed. main returned %s\n"
+            (Value.string_of_t value)
+      | Error err ->
+          prerr_endline (Derivator.string_of_error err);
+          exit 1 )
 
 let main () =
   let speclist =
@@ -54,11 +59,9 @@ let main () =
       ( "-pp",
         Arg.Unit (fun _ -> opt_pp := true),
         "parse C with GoblintCil, lower to CIL', convert back to CIL, and print" );
-(*
       ( "-big",
         Arg.Unit (fun _ -> opt_big := true),
         "derive and print a CIL' Big-Step tree" );
-*)
     ]
   in
   let speclist =
@@ -72,13 +75,11 @@ let main () =
   in
   Arg.parse speclist set_src usage;
   if not (has_action ()) then (
-    print_endline "Please provide an option. Currently useful: -pp.";
+    print_endline "Please provide an option. Currently useful: -pp or -big.";
     exit 0);
 
   let file = parse_file () in
-  if !opt_pp then print_file file
-(*
+  if !opt_pp then print_file file;
   if !opt_big then run_big_step file
-*)
 
 let () = main ()
