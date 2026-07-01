@@ -1,31 +1,12 @@
-module IdMap = Map.Make (String)
+module VarId = struct
+  type t = int
 
-module ObjectId = struct
-  type t =
-    | Global of int
-    | Stack of int
-    | Heap of int
-
-  let compare = compare
+  let compare = Int.compare
 end
 
-module ObjectMap = Map.Make (ObjectId)
+module VarMap = Map.Make (VarId)
 
-type object_id = ObjectId.t
-type offset = int
-
-type loc = {
-  obj : object_id;
-  offset : offset;
-}
-
-module Loc = struct
-  type t = loc
-
-  let compare = compare
-end
-
-module LocMap = Map.Make (Loc)
+type loc = Location.t
 
 type object_info = {
   typ : Typ.t;
@@ -33,137 +14,171 @@ type object_info = {
 }
 
 type frame = {
-  locals : loc IdMap.t;
+  locals : loc VarMap.t;
 }
 
 type t = {
+  next_global_object_id : int;
   next_stack_object_id : int;
   next_heap_object_id : int;
-  frames : frame list; (* 함수 호출 프레임 스택. 각 프레임은 변수 이름을 location에 연결한다. *)
-  objects : object_info ObjectMap.t; (* 할당된 object의 타입과 크기 정보. location의 obj가 여기서 해석된다. *)
-  store : Value.t LocMap.t; (* 실제 값 저장소. location이 가리키는 runtime value를 담는다. *)
+  globals : loc VarMap.t;
+  frames : frame list;
+  objects : object_info Location.ObjectMap.t;
+  store : Value.t Location.LocMap.t;
 }
 
 type error =
   | No_active_frame
-  | Duplicate_variable of Syntax.id
-  | Unbound_variable of Syntax.id
-  | Unknown_object of object_id
-  | Invalid_dereference of loc
+  | Duplicate_variable of Syntax.varinfo
+  | Unbound_variable of Syntax.varinfo
+  | Unknown_object of Location.object_id
+  | Invalid_location of loc
+  | Uninitialized_read of loc
   | Invalid_object_size of int
+  | Object_size_overflow of Typ.t
+  | Unsupported_object_type of Typ.t
+  | Unsupported_array_length of Typ.t
 
 let ( let* ) = Result.bind
 
 let empty =
   {
+    next_global_object_id = 0;
     next_stack_object_id = 0;
     next_heap_object_id = 0;
+    globals = VarMap.empty;
     frames = [];
-    objects = ObjectMap.empty;
-    store = LocMap.empty;
+    objects = Location.ObjectMap.empty;
+    store = Location.LocMap.empty;
   }
 
+(* Push an empty local-variable frame for a function call. *)
 let enter_function mem =
-  { mem with frames = { locals = IdMap.empty } :: mem.frames }
+  { mem with frames = { locals = VarMap.empty } :: mem.frames }
 
-(* 현재 Typ.Int는 항상 size 1이다. 이 검사는 future array/struct layout 계산이
-   잘못된 object size를 만들 때 잡기 위한 방어용이다. *)
 let valid_object_size size = size > 0
 
-let object_size_of_type = function
-  | Typ.Int -> 1
+(* Compute the number of linear memory slots occupied by a CIL' type. *)
+let rec object_size_of_type = function
+  | Typ.TInt _ -> Ok 1
+  | Typ.TPtr _ -> Ok 1
+  | Typ.TArray (typ, Some len) ->
+      let array_typ = Typ.TArray (typ, Some len) in
+      if Int64.compare len 0L <= 0 then Error (Invalid_object_size 0)
+      else
+        let* elem_size = object_size_of_type typ in
+        if Int64.compare len (Int64.of_int max_int) > 0 then
+          Error (Object_size_overflow array_typ)
+        else
+          let len = Int64.to_int len in
+          if elem_size > max_int / len then
+            Error (Object_size_overflow array_typ)
+          else Ok (elem_size * len)
+  | Typ.TArray _ as typ -> Error (Unsupported_array_length typ)
+  | (Typ.TVoid | Typ.TFun _) as typ -> Error (Unsupported_object_type typ)
 
-let fresh_object typ mem =
-  let size = object_size_of_type typ in
+(* Allocate a fresh stack object and return its base location. *)
+let fresh_stack_object typ mem =
+  let* size = object_size_of_type typ in
   if not (valid_object_size size) then Error (Invalid_object_size size)
   else
-    let obj = ObjectId.Stack mem.next_stack_object_id in
+    let obj = Location.Stack mem.next_stack_object_id in
+    let loc = { Location.obj; offset = 0 } in
     let info = { typ; size } in
-    let loc = { obj; offset = 0 } in
     Ok
       ( loc,
         {
           mem with
           next_stack_object_id = mem.next_stack_object_id + 1;
-          objects = ObjectMap.add obj info mem.objects;
+          objects = Location.ObjectMap.add obj info mem.objects;
         } )
 
+(* Remove an object, its metadata, and every stored value inside it. *)
 let remove_object obj mem =
   let store =
-    LocMap.filter (fun loc _ -> loc.obj <> obj) mem.store
+    Location.LocMap.filter (fun loc _ -> loc.Location.obj <> obj) mem.store
   in
-  { mem with objects = ObjectMap.remove obj mem.objects; store }
+  { mem with objects = Location.ObjectMap.remove obj mem.objects; store }
 
+(* Pop the current frame and deallocate all stack objects owned by it. *)
 let leave_function mem =
   match mem.frames with
   | [] -> Error No_active_frame
   | frame :: frames ->
       let mem =
-        IdMap.fold
-          (fun _ loc mem -> remove_object loc.obj mem)
+        VarMap.fold (fun _ loc mem -> remove_object loc.Location.obj mem)
           frame.locals mem
       in
       Ok { mem with frames }
 
-let find_local name = function
-  (* C local lookup은 현재 함수 scope만 본다. Caller frame의 locals는 보이지 않는다. *)
-  | frame :: _ -> IdMap.find_opt name frame.locals
+(* Look up a varinfo binding in the current local frame only. *)
+let find_local var = function
+  | frame :: _ -> VarMap.find_opt var.Syntax.vid frame.locals
   | [] -> None
 
-let is_valid_deref_loc loc mem =
-  match ObjectMap.find_opt loc.obj mem.objects with
-  | None -> Error (Unknown_object loc.obj)
-  | Some info ->
-      if 0 <= loc.offset && loc.offset < info.size then Ok ()
-      else Error (Invalid_dereference loc)
+(* Look up a varinfo binding in the global-variable table. *)
+let find_global var mem =
+  VarMap.find_opt var.Syntax.vid mem.globals
 
-let declare ({ Syntax.typ; name } : Syntax.binding) value mem =
+(* Add a varinfo-to-location binding to a local frame. *)
+let add_local_binding var loc frame =
+  { locals = VarMap.add var.Syntax.vid loc frame.locals }
+
+(* Bind a local varinfo to a fresh uninitialized stack object. *)
+let allocate_local var mem =
   match mem.frames with
   | [] -> Error No_active_frame
   | frame :: frames -> (
-      match IdMap.find_opt name frame.locals with
-      | Some _ -> Error (Duplicate_variable name)
+      match VarMap.find_opt var.Syntax.vid frame.locals with
+      | Some _ -> Error (Duplicate_variable var)
       | None ->
-          let* loc, mem = fresh_object typ mem in
-          let store = LocMap.add loc value mem.store in
-          let frame = { locals = IdMap.add name loc frame.locals } in
-          Ok { mem with frames = frame :: frames; store } )
+          let* loc, mem = fresh_stack_object var.Syntax.vtype mem in
+          let frame = add_local_binding var loc frame in
+          Ok (loc, { mem with frames = frame :: frames }) )
 
-let loc_of_lval lval mem =
-  match lval with
-  | Syntax.LVar name -> (
-      match find_local name mem.frames with
-      | Some loc -> Ok loc
-      | None -> Error (Unbound_variable name) )
+(* Bind a local varinfo to a fresh stack object initialized with value. *)
+let bind_local var value mem =
+  let* loc, mem = allocate_local var mem in
+  Ok (loc, { mem with store = Location.LocMap.add loc value mem.store })
 
-let read_lval lval mem =
-  let* loc = loc_of_lval lval mem in
-  let* () = is_valid_deref_loc loc mem in
-  match LocMap.find_opt loc mem.store with
+(* Resolve a varinfo through globals or the current frame according to vglob. *)
+let loc_of_var var mem =
+  let loc =
+    if var.Syntax.vglob then find_global var mem
+    else find_local var mem.frames
+  in
+  match loc with
+  | Some loc -> Ok loc
+  | None -> Error (Unbound_variable var)
+
+(* Check that a location points inside an allocated object. *)
+let check_location loc mem =
+  match Location.ObjectMap.find_opt loc.Location.obj mem.objects with
+  | None -> Error (Unknown_object loc.Location.obj)
+  | Some info ->
+      if 0 <= loc.Location.offset && loc.Location.offset < info.size then Ok ()
+      else Error (Invalid_location loc)
+
+(* Read the initialized value stored at a valid location. *)
+let read loc mem =
+  let* () = check_location loc mem in
+  match Location.LocMap.find_opt loc mem.store with
   | Some value -> Ok value
-  | None ->
-      (* 초기 subset에서는 모든 선언이 initializer를 가지므로 정상 memory라면
-         store lookup이 실패하지 않는다. 여기까지 오면 object bounds는 맞지만
-         store invariant가 깨진 상태다. *)
-      Error (Invalid_dereference loc)
+  | None -> Error (Uninitialized_read loc)
 
-let assign_lval lval value mem =
-  let* loc = loc_of_lval lval mem in
-  let* () = is_valid_deref_loc loc mem in
-  Ok { mem with store = LocMap.add loc value mem.store }
+(* Store a value at a valid location. *)
+let write loc value mem =
+  let* () = check_location loc mem in
+  Ok { mem with store = Location.LocMap.add loc value mem.store }
 
-let string_of_object_id = function
-  | ObjectId.Global id -> Printf.sprintf "global%d" id
-  | ObjectId.Stack id -> Printf.sprintf "stack%d" id
-  | ObjectId.Heap id -> Printf.sprintf "heap%d" id
-
-let string_of_loc { obj; offset } =
-  Printf.sprintf "%s+%d" (string_of_object_id obj) offset
+let string_of_var var =
+  Printf.sprintf "%s#%d" var.Syntax.vname var.Syntax.vid
 
 let string_of_bindings locals =
   let bindings =
-    IdMap.bindings locals
-    |> List.map (fun (name, loc) -> name ^ "=" ^ string_of_loc loc)
+    VarMap.bindings locals
+    |> List.map (fun (vid, loc) ->
+           Printf.sprintf "#%d=%s" vid (Location.string_of_t loc))
   in
   "{" ^ String.concat ", " bindings ^ "}"
 
@@ -178,9 +193,9 @@ let string_of_frames frames =
 
 let string_of_store store =
   let entries =
-    LocMap.bindings store
+    Location.LocMap.bindings store
     |> List.map (fun (loc, value) ->
-           string_of_loc loc ^ "=" ^ Value.string_of_t value)
+           Location.string_of_t loc ^ "=" ^ Value.string_of_t value)
   in
   "{" ^ String.concat ", " entries ^ "}"
 
@@ -189,15 +204,12 @@ let string_of_visible_values mem =
   | [] -> "{}"
   | frame :: _ ->
       let entries =
-        IdMap.bindings frame.locals
-        |> List.map (fun (name, loc) ->
-               match LocMap.find_opt loc mem.store with
+        VarMap.bindings frame.locals
+        |> List.map (fun (vid, loc) ->
+               match Location.LocMap.find_opt loc mem.store with
                | Some value ->
-                   Printf.sprintf "%s |-> %s" name (Value.string_of_t value)
-               | None ->
-                   (* 현재 subset에서는 선언과 동시에 store가 채워진다. 여기까지 오면
-                      memory invariant가 깨진 상태라서 출력에서만 ?로 표시한다. *)
-                   Printf.sprintf "%s |-> ?" name)
+                   Printf.sprintf "#%d |-> %s" vid (Value.string_of_t value)
+               | None -> Printf.sprintf "#%d |-> ?" vid)
       in
       "{" ^ String.concat ", " entries ^ "}"
 
@@ -206,11 +218,19 @@ let string_of_t mem =
 
 let string_of_error = function
   | No_active_frame -> "no active function frame"
-  | Duplicate_variable name -> "duplicate variable: " ^ name
-  | Unbound_variable name -> "unbound variable: " ^ name
+  | Duplicate_variable var -> "duplicate variable: " ^ string_of_var var
+  | Unbound_variable var -> "unbound variable: " ^ string_of_var var
   | Unknown_object obj ->
-      Printf.sprintf "unknown memory object: %s" (string_of_object_id obj)
-  | Invalid_dereference loc ->
-      "invalid memory dereference: " ^ string_of_loc loc
+      "unknown memory object: " ^ Location.string_of_object_id obj
+  | Invalid_location loc ->
+      "invalid memory location: " ^ Location.string_of_t loc
+  | Uninitialized_read loc ->
+      "uninitialized read: " ^ Location.string_of_t loc
   | Invalid_object_size size ->
       Printf.sprintf "invalid object size: %d" size
+  | Object_size_overflow typ ->
+      "object size overflow: " ^ Typ.string_of_t typ
+  | Unsupported_object_type typ ->
+      "unsupported object type: " ^ Typ.string_of_t typ
+  | Unsupported_array_length typ ->
+      "unsupported array length: " ^ Typ.string_of_t typ

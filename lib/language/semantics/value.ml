@@ -191,9 +191,12 @@ module Int32 = struct
         | Typ.IUInt -> f_unsigned a b )
 
   let binary_pred f_signed f_unsigned a b =
-    match binary f_signed f_unsigned a b with
-    | Ok result -> Ok (of_ocaml_bool result)
+    match ensure_same_kind a b with
     | Error err -> Error err
+    | Ok () -> (
+        match a.ikind with
+        | Typ.IInt -> Ok (of_ocaml_bool (f_signed a b))
+        | Typ.IUInt -> Ok (of_ocaml_bool (f_unsigned a b)) )
 
   let neg = unary Signed.neg Unsigned.neg
   let add = binary Signed.add Unsigned.add
