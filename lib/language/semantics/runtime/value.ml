@@ -14,7 +14,7 @@ module Int32 = struct
      conversion truncates/wraps instead of reporting overflow. *)
   type t = int_value
 
-  type operation =
+  type ub_cause =
     | Literal of int64
     | Negated_literal of int64
     | Neg of t
@@ -25,8 +25,8 @@ module Int32 = struct
     | Rem of t * t
 
   type ub =
-    | Overflow of operation
-    | Division_by_zero of operation
+    | Overflow of ub_cause
+    | Division_by_zero of ub_cause
 
   type error =
     | Undefined_behavior of ub
@@ -83,12 +83,12 @@ module Int32 = struct
         if signed_in_range negated then Ok (make_iint (Int64.to_int32 negated))
         else undefined_behavior (Overflow (Negated_literal n))
 
-    let checked_binary (operation : t -> t -> operation)
+    let checked_binary (ub_cause_of : t -> t -> ub_cause)
         (op : int64 -> int64 -> int64) (a : t) (b : t) :
         (t, error) result =
       let r = op (signed_to_int64 a) (signed_to_int64 b) in
       if signed_in_range r then Ok (make_iint (Int64.to_int32 r))
-      else undefined_behavior (Overflow (operation a b))
+      else undefined_behavior (Overflow (ub_cause_of a b))
 
     let neg (n : t) : (t, error) result =
       if I.equal (bits n) min_value then undefined_behavior (Overflow (Neg n))
@@ -224,9 +224,29 @@ type t =
 type error =
   | Int32_error of Int32.error
 
+let lift_int32_result = function
+  | Ok value -> Ok value
+  | Error err -> Error (Int32_error err)
+
 let int n = Int n
 let ptr loc = Ptr loc
 let of_bool b = Int (Int32.of_ocaml_bool b)
+
+let of_int32_result result =
+  let ( let* ) = Result.bind in
+  let* n = lift_int32_result result in
+  Ok (Int n)
+
+let of_int64 ikind n = of_int32_result (Int32.of_int64 ikind n)
+
+let of_negated_int64 ikind n =
+  of_int32_result (Int32.of_negated_int64 ikind n)
+
+let of_constant = function
+  | Syntax.CInt (n, ikind) -> of_int64 ikind n
+
+let of_negated_constant = function
+  | Syntax.CInt (n, ikind) -> of_negated_int64 ikind n
 
 let truthy = function
   | Int n -> Ok (Int32.truthy n)
@@ -236,7 +256,7 @@ let string_of_t = function
   | Int n -> Int32.to_string n
   | Ptr loc -> "&" ^ Location.string_of_t loc
 
-let string_of_int_operation = function
+let string_of_int_ub_cause = function
   | Int32.Literal n -> Int64.to_string n
   | Int32.Negated_literal n -> "-" ^ Int64.to_string n
   | Int32.Neg n -> "-" ^ Int32.to_string n
@@ -252,10 +272,10 @@ let string_of_int_operation = function
       Printf.sprintf "%s %% %s" (Int32.to_string a) (Int32.to_string b)
 
 let string_of_int_ub = function
-  | Int32.Overflow operation ->
-      "signed integer overflow: " ^ string_of_int_operation operation
-  | Int32.Division_by_zero operation ->
-      "division by zero: " ^ string_of_int_operation operation
+  | Int32.Overflow cause ->
+      "signed integer overflow: " ^ string_of_int_ub_cause cause
+  | Int32.Division_by_zero cause ->
+      "division by zero: " ^ string_of_int_ub_cause cause
 
 let string_of_int32_error = function
   | Int32.Undefined_behavior ub -> "undefined behavior: " ^ string_of_int_ub ub

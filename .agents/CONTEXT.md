@@ -11,8 +11,7 @@ language pipeline is now CIL-based.
 
 - Entry: `bin/main.ml`
 - Executable: `./attack`
-- Active CLI option: `-pp`
-- Disabled for now: old `-big` proof-tree mode
+- Active CLI options: `-pp`, `-big`
 - Active language library: `lib/language`
 - Analyzer/config/synthesis/test libraries are mostly disabled in their dune
   files until the CIL' semantics is ready.
@@ -29,6 +28,18 @@ C source
   -> GoblintCil pretty printer
 ```
 
+Current `-big` pipeline:
+
+```text
+C source
+  -> GoblintCil parser
+  -> GoblintCil.Cil.file
+  -> CIL'
+  -> Check.check_file
+  -> Derivator.derive_file
+  -> BigStep.ptree
+```
+
 ## Key Files
 
 - `lib/language/syntax.ml`: CIL' AST.
@@ -38,8 +49,13 @@ C source
 - `lib/language/syntaxEqual.ml`: CIL' structural equality.
 - `lib/language/syntaxPretty.ml`: debug string rendering.
 - `lib/test/check_test.ml`: direct CIL' checker tests.
-- `lib/language/semantics/`: old Big-Step implementation, preserved as
-  reference for the CIL' port.
+- `lib/language/semantics/runtime/`: locations, values, value operations, and
+  memory.
+- `lib/language/semantics/proof/`: CIL' Big-Step proof trees, proof-tree
+  accessors, and derivator.
+- `lib/language/semantics/proof/render/`: proof rendering helpers.
+- `lib/language/semantics/legacy/`: old Big-Step/reference files not in the
+  active build.
 
 Removed old files:
 
@@ -51,16 +67,21 @@ Removed old files:
 ```bash
 dune build
 dune runtest
-./attack -pp examples/cil_small_while.c
-./attack -pp examples/cil_branch_loop.c
-./attack -pp examples/cil_pointer_array_call.c
+./attack -pp examples/small_while.c
+./attack -pp examples/branch_loop.c
+./attack -pp examples/pointer_array_call.c
 ./attack -pp examples/unsupported_cast_implicit.c
+./attack -big examples/small_while.c
+./attack -big examples/branch_loop.c
+./attack -big examples/call.c
 ```
 
 Expected behavior:
 
 - the first three `-pp` examples succeed,
 - `unsupported_cast_implicit.c` fails with `unsupported CIL feature: cast expression`,
+- the listed `-big` examples construct a `BigStep.ptree` and print the main
+  return value,
 - `dune runtest` runs direct CIL' checker fixtures.
 
 ## Important Design Decisions
@@ -89,21 +110,17 @@ Big-Step proof-tree direction:
   trees. They should be reported as derivation errors or fuel exhaustion.
 - Fuel is an implementation cutoff for derivation/search, not part of the
   mathematical semantics.
-- Start with a minimal executable subset, but keep the proof-tree layers aligned
-  with CIL' structure: expression, lvalue, instruction, statement, block,
-  function, and file.
-- The current implementation target is to restore `-big` for CIL'. The `-pp`
-  pipeline remains useful as parser/bridge validation, but Big-Step proof-tree
-  generation is now the primary milestone.
+- The proof-tree layers remain aligned with CIL' structure: expression, lvalue,
+  instruction, statement, block, function, and file.
+- `-big` is restored for the current executable subset. The `-pp` pipeline
+  remains useful as parser/bridge validation, while Big-Step proof-tree
+  generation is the primary semantics milestone.
 - Function execution should be represented separately from call-instruction
   execution. A call instruction tree describes the caller-side effect of a
   `Call`, while a function tree describes callee frame setup, body execution,
   and return.
-- Callee resolution should eventually become its own small proof component
-  (`callee_tree` or equivalent), because CIL' represents the callee of `Call` as
-  an expression. The first implementation may support only direct calls and
-  postpone this tree until calls are implemented.
-- The first CIL' derivator should include direct function calls. The supported
+- Callee resolution is represented by a small proof component (`callee_tree`),
+  because CIL' represents the callee of `Call` as an expression. The supported
   callee form is initially `Lval (Var f, NoOffset)` resolving to a known
   `GFun`; indirect/function-pointer calls remain unsupported until later.
   Call-instruction proof trees should include callee resolution, argument
@@ -115,14 +132,17 @@ Big-Step proof-tree direction:
 - Logical `LAnd` and `LOr` must use dedicated short-circuit expression proof
   rules. Do not encode them as ordinary `EBinOp`, because that would force a
   right-hand proof even when C would not evaluate the right operand.
-- The first CIL' derivator should include `Loop`. Loop execution is bounded by
-  fuel, with default fuel 100. `Break` is consumed as normal loop exit,
-  `Continue` starts the next iteration, `Return` propagates, and fuel exhaustion
-  is a derivation error rather than a proof tree.
-- The first CIL' derivator should postpone pointer and array execution. It only
-  needs variable lvalues with `NoOffset`; `AddrOf`, `StartOf`, `Mem`, `Index`,
-  and pointer arithmetic should return unsupported derivation errors until the
-  minimal `-big` path is working.
+- The CIL' derivator includes `Loop`. Loop execution is bounded by fuel, with
+  default fuel 100. `Break` is consumed as normal loop exit, `Continue` starts
+  the next iteration, `Return` propagates, and fuel exhaustion is a derivation
+  error rather than a proof tree.
+- Fuel policy: `Instr` statements do not consume statement fuel; each
+  instruction consumes fuel in `derive_instr`. Non-instruction statements
+  consume fuel in `derive_stmt`.
+- Pointer and array execution is still partial. Variable lvalues with
+  `NoOffset`, `AddrOf`, and `StartOf` are implemented. `Mem`, `Index`, field
+  offsets, pointer arithmetic, shift, and bitwise operators are still
+  unsupported in the current derivator.
 - Big-Step control distinguishes `ReturnVoid` from `Return value`. `return;`
   produces `ReturnVoid`; `return exp;` produces `Return value`. Non-void
   functions, including `main`, should reject `ReturnVoid` during derivation.
@@ -131,16 +151,28 @@ Big-Step proof-tree direction:
   against the function return type. `Check.check_file` should also statically
   reject return statements whose expression presence does not match the
   enclosing function return type.
-- The first CIL' `-big` milestone only needs to construct a `BigStep.ptree`.
-  Proof-tree visualization/pretty-printing should be implemented after the
-  derivator is working.
+- The current `-big` milestone constructs a `BigStep.ptree`; proof-tree
+  visualization/pretty-printing remains separate follow-up work.
+- Proof-tree constructors use layer-prefixed names such as `ETreeConst`,
+  `LTreeVar`, `ITreeSet`, `STreeInstr`, `BTreeSeq`, `FTreeReturn`, and
+  `PTreeMainReturn`.
+- Block proof trees are flat sequences: `BTreeSeq` stores the list of statement
+  proof trees that actually executed. Control and final memory are stored only
+  in the block conclusion.
+- `ValueOp` is the interface that lowers CIL' operators to primitive
+  value-domain operations. `Value` owns runtime value representation and
+  primitive integer construction/operations.
+- CIL' expressions are pure. Expression proof conclusions do not carry output
+  memory; all side effects belong to instructions.
 
 ## Next Actions
 
-1. Port Big-Step semantics to CIL'.
-2. Define values, addresses, memory, and environments.
-3. Implement expression/lvalue evaluation.
-4. Implement instruction/statement/block/function evaluation.
-5. Reintroduce proof trees for CIL'.
+1. Implement pretty-printing / visualization for the generated CIL' Big-Step
+   proof tree.
+2. Add global variable allocation and initializer semantics.
+3. Add array index lvalue evaluation.
+4. Add pointer dereference and pointer arithmetic.
+5. Add runtime-error tests for uninitialized reads, division by zero, invalid
+   locations, and fuel exhaustion.
 6. Reconnect synthesis once the evaluator stabilizes.
 7. Reconnect Sparrow comparison after exported C compatibility is tested.

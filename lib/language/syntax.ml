@@ -4,6 +4,12 @@
 
 type id = string
 
+module VarId = struct
+  type t = int
+
+  let compare = Int.compare
+end
+
 type varinfo = {
   (* mutable *) vname : id;
   (* mutable *) vtype : Typ.t; (* CIL: typ *)

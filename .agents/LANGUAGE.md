@@ -177,6 +177,10 @@ It currently checks:
 - CIL' roundtrip stability
 - GoblintCil `Check.checkFile` on the converted CIL
 
+Big-Step program entry intentionally supports only `int main(void)`. `argc` /
+`argv` forms are not supported until an initial-memory layout for argument
+strings and pointer arrays is designed.
+
 GoblintCil's checker is used for CIL internal consistency, type consistency,
 varinfo sharing, initializer consistency, call consistency, and related CIL
 invariants.
@@ -208,6 +212,58 @@ This separation matches C practice: parser/type checking handles syntax and
 type correctness, while runtime undefinedness is not fully rejected by the
 front-end.
 
+## Big-Step Semantics
+
+The active Big-Step implementation constructs proof trees for CIL' programs.
+
+Layering:
+
+- expression proof trees evaluate pure expressions to values
+- lvalue proof trees evaluate lvalues to locations
+- instruction proof trees perform side effects
+- statement proof trees produce memory and control
+- block proof trees sequence executed statements
+- function proof trees enter/leave call frames and validate return control
+- file proof trees execute `main()`
+
+CIL' expressions are pure. Expression conclusions therefore have no output
+memory:
+
+```ocaml
+type e_concl = memory * Exp.t * value
+```
+
+All side effects are represented by instructions:
+
+```ocaml
+type i_concl = memory * instr * memory
+```
+
+`Call (None, ...)` means that the call instruction does not assign the return
+value to a caller lvalue. It is not restricted to calls of `void` functions; a
+non-void return value may be discarded.
+
+`AddrOf` and `StartOf` are separate proof constructors. The current runtime
+value representation maps both to a location pointer, but C semantics
+distinguishes them by pointer type: `&a` points to the whole array object, while
+`StartOf a` / array decay points to the first element. Exact pointer arithmetic
+will likely require pointer values to carry pointee-type metadata.
+
+Block proof trees use a flat sequence:
+
+```ocaml
+BTreeSeq of stree list * b_concl
+```
+
+The list contains only statements that actually executed. If a statement
+returns, breaks, or continues, later source statements in the block are not
+included. The final memory and control are stored in the block conclusion.
+
+Fuel is an implementation cutoff, not part of the mathematical semantics.
+`Instr` statements do not consume statement fuel; each instruction consumes fuel
+in instruction derivation. Other statements consume fuel at statement
+derivation.
+
 ## Sparrow Compatibility
 
 Sparrow reportedly uses CIL 1.7.3. GoblintCil 2.0.9 is only a utility layer for
@@ -238,9 +294,9 @@ an expected rejection reason.
 
 Current examples include:
 
-- `examples/cil_small_while.c`
-- `examples/cil_branch_loop.c`
-- `examples/cil_pointer_array_call.c`
+- `examples/small_while.c`
+- `examples/branch_loop.c`
+- `examples/pointer_array_call.c`
 - `examples/unsupported_cast_implicit.c`
 
 Control-flow cases that cannot be represented as valid C source, such as
@@ -264,26 +320,14 @@ Soundness/completeness comparison uses all live local memory bindings at normal
 
 ## Next Semantics Work
 
-The next implementation step is to port Big-Step semantics to CIL'.
+The minimal `-big` path now constructs a `BigStep.ptree` for scalar integer
+programs with direct calls, conditionals, and loops.
 
-Suggested order:
+Likely next extensions:
 
-1. define CIL' values,
-2. define memory and addresses,
-3. define environments and function tables,
-4. implement expression and lvalue evaluation,
-5. implement instruction, statement, block, and function evaluation,
-6. produce proof trees alongside evaluation results,
-7. add runtime-error tests.
-
-Start with a minimal executable subset:
-
-```c
-int main(void) {
-  int x;
-  x = 3;
-  return 0;
-}
-```
-
-Then extend in this order: conditionals, loops, arrays/pointers, calls.
+1. proof-tree visualization / pretty printing,
+2. global variable allocation and initializers,
+3. array index lvalue evaluation,
+4. pointer dereference and pointer arithmetic,
+5. runtime-error tests for uninitialized reads, division by zero, invalid
+   locations, and fuel exhaustion.

@@ -4,7 +4,9 @@ Always follow these rules:
 - Modify only one file at a time
 - Explain briefly before coding
 - Wait for user confirmation before continuing
-- Do NOT run any shell commands (bash, dune, git, etc.) unless I explicitly ask for it
+- Do NOT run shell commands unless the user explicitly asks for that specific
+  action. This includes `dune build`, tests, example runs, `git`, and other
+  verification commands.
 - You may freely read and explore files to understand the project
 - Modify files only with `apply_patch`; do not use Python, shell redirection,
   heredocs, `cat > file`, or similar write methods for edits.
@@ -33,3 +35,18 @@ Attack workflow:
   using the format: date - name - metadata including git version and analyzer
   engine when available - attack program - analyzer weakness - strengthening
   method.
+
+Design/implementation workflow:
+- For semantics-heavy work, discuss the design before coding.
+- Present concrete options and tradeoffs when a design choice is open; let the
+  user make the final decision.
+- Record durable decisions in `.agents/CONTEXT.md` or `.agents/LANGUAGE.md`
+  before or alongside implementation.
+- Implement the chosen design in small patches.
+- After implementation, walk through the code with the user one function or
+  concept at a time.
+- When the walkthrough reveals unclear naming, duplicated responsibility, or an
+  awkward proof/semantic structure, refactor it before moving to the next major
+  feature.
+- Treat proof-tree shape, runtime semantics, checker policy, and CLI wiring as
+  separate design concerns unless the user explicitly asks to combine them.

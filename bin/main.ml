@@ -46,7 +46,7 @@ let run_big_step file =
   | Ok () -> (
       match Derivator.derive_file file with
       | Ok tree ->
-          let BigStep.PMainReturn (_, (_, _, value)) = tree in
+          let BigStep.PTreeMainReturn (_, (_, _, value)) = tree in
           Printf.printf "Big-Step tree constructed. main returned %s\n"
             (Value.string_of_t value)
       | Error err ->

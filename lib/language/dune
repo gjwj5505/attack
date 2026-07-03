@@ -5,14 +5,17 @@
  (modules
   typ
   syntax
+  syntaxUtil
   syntaxPretty
   syntaxEqual
   cilBridge
   check
   location
   value
+  valueOp
   memory
   bigStep
+  bigStepUtil
   derivator
   textSvg)
  (libraries goblint-cil))

@@ -48,54 +48,50 @@ type tree =
   | PTree of ptree
 
 and etree =
-  | EConst of e_concl
-  | ELval of ltree * e_concl
-  | EUnOp of etree * e_concl
-  | ELogicalOrLeftTrue of etree * e_concl
-  | ELogicalOrLeftFalse of etree * etree * e_concl
-  | ELogicalAndLeftFalse of etree * e_concl
-  | ELogicalAndLeftTrue of etree * etree * e_concl
-  | EBinOp of etree * etree * e_concl (* logical 제외 *)
-  | EAddrOf of ltree * e_concl
-  | EStartOf of ltree * e_concl
+  | ETreeConst of e_concl
+  | ETreeLval of ltree * e_concl
+  | ETreeUnOp of etree * e_concl
+  | ETreeLogicalOrLeftTrue of etree * e_concl
+  | ETreeLogicalOrLeftFalse of etree * etree * e_concl
+  | ETreeLogicalAndLeftFalse of etree * e_concl
+  | ETreeLogicalAndLeftTrue of etree * etree * e_concl
+  | ETreeBinOp of etree * etree * e_concl (* logical 제외 *)
+  | ETreeAddrOf of ltree * e_concl
+  | ETreeStartOf of ltree * e_concl
 
 and ltree =
-  | LVar of l_concl
-  | LMem of etree * l_concl
-  | LIndex of ltree * etree * l_concl
+  | LTreeVar of l_concl
+  | LTreeMem of etree * l_concl
+  | LTreeIndex of ltree * etree * l_concl
 
 and itree =
-  | ISet of ltree * etree * i_concl
-  | ICallVoid of callee_tree * etree list * ftree * i_concl
-  | ICallAssign of ltree * callee_tree * etree list * ftree * i_concl
+  | ITreeSet of ltree * etree * i_concl
+  | ITreeCallVoid of callee_tree * etree list * ftree * i_concl
+  | ITreeCallAssign of ltree * callee_tree * etree list * ftree * i_concl
 
 and callee_tree =
-  | DirectCallee of S.Exp.t * S.varinfo * S.fundec
+  | CalleeTreeDirect of S.Exp.t * S.varinfo * S.fundec
 
 and stree =
-  | SInstr of itree list * s_concl
-  | SReturnNone of s_concl
-  | SReturnSome of etree * s_concl
-  | SBreak of s_concl
-  | SContinue of s_concl
-  | SIfTrue of etree * btree * s_concl
-  | SIfFalse of etree * btree * s_concl
-  | SLoopRepeat of btree * stree * s_concl
-  | SLoopContinue of btree * stree * s_concl
-  | SLoopBreak of btree * s_concl
-  | SLoopReturn of btree * s_concl
-  | SBlock of btree * s_concl
+  | STreeInstr of itree list * s_concl
+  | STreeReturnNone of s_concl
+  | STreeReturnSome of etree * s_concl
+  | STreeBreak of s_concl
+  | STreeContinue of s_concl
+  | STreeIfTrue of etree * btree * s_concl
+  | STreeIfFalse of etree * btree * s_concl
+  | STreeLoopRepeat of btree * stree * s_concl
+  | STreeLoopContinue of btree * stree * s_concl
+  | STreeLoopBreak of btree * s_concl
+  | STreeLoopReturn of btree * s_concl
+  | STreeBlock of btree * s_concl
 
 and btree =
-  | BEmpty of b_concl
-  | BSeqNormal of stree * btree * b_concl
-  | BSeqReturn of stree * b_concl
-  | BSeqBreak of stree * b_concl
-  | BSeqContinue of stree * b_concl
+  | BTreeSeq of stree list * b_concl
 
 and ftree =
-  | FReturn of btree * f_concl
-  | FNoReturn of btree * f_concl
+  | FTreeReturn of btree * f_concl
+  | FTreeNoReturn of btree * f_concl
 
 and ptree =
-  | PMainReturn of ftree * p_concl
+  | PTreeMainReturn of ftree * p_concl

@@ -1,10 +1,4 @@
-module VarId = struct
-  type t = int
-
-  let compare = Int.compare
-end
-
-module VarMap = Map.Make (VarId)
+module VarMap = Map.Make (Syntax.VarId)
 
 type loc = Location.t
 
@@ -171,9 +165,6 @@ let write loc value mem =
   let* () = check_location loc mem in
   Ok { mem with store = Location.LocMap.add loc value mem.store }
 
-let string_of_var var =
-  Printf.sprintf "%s#%d" var.Syntax.vname var.Syntax.vid
-
 let string_of_bindings locals =
   let bindings =
     VarMap.bindings locals
@@ -218,8 +209,10 @@ let string_of_t mem =
 
 let string_of_error = function
   | No_active_frame -> "no active function frame"
-  | Duplicate_variable var -> "duplicate variable: " ^ string_of_var var
-  | Unbound_variable var -> "unbound variable: " ^ string_of_var var
+  | Duplicate_variable var ->
+      "duplicate variable: " ^ SyntaxUtil.string_of_var var
+  | Unbound_variable var ->
+      "unbound variable: " ^ SyntaxUtil.string_of_var var
   | Unknown_object obj ->
       "unknown memory object: " ^ Location.string_of_object_id obj
   | Invalid_location loc ->
