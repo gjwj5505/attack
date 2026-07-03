@@ -17,5 +17,6 @@
   bigStep
   bigStepUtil
   derivator
-  textSvg)
+  textSvg
+  visualizer)
  (libraries goblint-cil))

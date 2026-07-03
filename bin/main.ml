@@ -38,6 +38,10 @@ let print_file file =
       prerr_endline (Check.string_of_error err);
       exit 1
 
+let ensure_dir path =
+  if Sys.file_exists path then ()
+  else Sys.mkdir path 0o755
+
 let run_big_step file =
   match Check.check_file file with
   | Error err ->
@@ -47,8 +51,15 @@ let run_big_step file =
       match Derivator.derive_file file with
       | Ok tree ->
           let BigStep.PTreeMainReturn (_, (_, _, value)) = tree in
-          Printf.printf "Big-Step tree constructed. main returned %s\n"
-            (Value.string_of_t value)
+          let out_dir = "dist/proofs" in
+          ensure_dir "dist";
+          ensure_dir out_dir;
+          let base = Filename.basename !src |> Filename.remove_extension in
+          let svg_path = Filename.concat out_dir (base ^ ".svg") in
+          Visualizer.write_tree_svg svg_path (BigStep.PTree tree);
+          Printf.printf
+            "Big-Step tree constructed. main returned %s\nSVG written to %s\n"
+            (Value.string_of_t value) svg_path
       | Error err ->
           prerr_endline (Derivator.string_of_error err);
           exit 1 )

@@ -145,6 +145,11 @@ Big-Step rule and Sparrow CIL 1.7.3 compatibility check.
 `lib/language/cilBridge.ml` implements conversion between GoblintCil CIL and
 CIL'.
 
+- Input acceptance is based on the GoblintCil-lowered CIL form, not the surface
+  C source shape. For example, a source expression such as `return f(-1);` may
+  be accepted if GoblintCil lowers it into CIL instructions and expressions that
+  belong to CIL'. The project does not currently enforce a stricter
+  source-syntax-only CIL' policy.
 - CIL' -> CIL should be total for checked CIL' programs.
 - CIL -> CIL' accepts only the supported subset.
 - Unsupported CIL features return explicit errors.
