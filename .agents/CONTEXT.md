@@ -165,6 +165,40 @@ Big-Step proof-tree direction:
 - CIL' expressions are pure. Expression proof conclusions do not carry output
   memory; all side effects belong to instructions.
 
+Synthesis size policy:
+
+- Synthesis size is two-dimensional: `(program size, proof size)`.
+- The core requirement is coverage: if synthesis grows components in increasing
+  two-dimensional size, every supported program and every finite terminating
+  execution proof should eventually become reachable.
+- Both dimensions are necessary.
+- `program size` bounds the syntax in proof conclusions. Looking only at
+  `proof size` can miss programs whose executed proof is small but whose
+  unexecuted syntax is large, such as an `if` whose false branch contains a
+  large block.
+- `proof size` bounds execution/proof expansion. Looking only at `program size`
+  can miss small programs with large finite executions, such as loops with many
+  iterations or recursive calls with many unfolded calls.
+- Raw syntax components have proof size `0`.
+- Proof components have positive program size and positive proof size.
+- For a proof tree, `program size` is the size of the program fragment in the
+  conclusion, while `proof size` is the size of the proof tree itself.
+- Program size follows CIL' AST structure mechanically. Active AST constructors
+  and syntax records count as `1`; list and option wrappers count as `0`; type
+  annotations, source locations, statement ids, labels, and other administrative
+  metadata count as `0` unless they later become synthesis targets.
+- Types are not currently synthesized as independent components. Instead,
+  synthesis rules should generate only type-correct combinations by checking
+  type side conditions when constructing expressions, lvalues, instructions,
+  statements, functions, and files.
+- If synthesis later starts generating variable declarations, function
+  signatures, pointer depth, array shapes, or other type-driven structure more
+  directly, revisit whether type structure should contribute to `program size`.
+- Synthesis implementation and `lib/language/semantics/proof/size.ml` must stay
+  aligned. Whenever a synthesis rule adds, removes, or reinterprets an AST or
+  proof constructor, update or re-audit the corresponding size definition at
+  the same time.
+
 ## Next Actions
 
 1. Implement pretty-printing / visualization for the generated CIL' Big-Step

@@ -3,9 +3,10 @@ open Language
 let src = ref ""
 let opt_pp = ref false
 let opt_big = ref false
+let opt_ast = ref false
 
 let usage =
-  "Usage : " ^ Filename.basename Sys.argv.(0) ^ " [-pp|-big] [c-file] "
+  "Usage : " ^ Filename.basename Sys.argv.(0) ^ " [-pp|-big|-ast] [c-file] "
 
 let fail_usage msg =
   prerr_endline ("Error: " ^ msg);
@@ -16,7 +17,7 @@ let set_src x =
   if !src <> "" then fail_usage ("unexpected extra input file: " ^ x)
   else src := x
 
-let has_action () = !opt_pp || !opt_big
+let has_action () = !opt_pp || !opt_big || !opt_ast
 
 let parse_file () =
   if !src = "" then fail_usage "input file required";
@@ -42,6 +43,22 @@ let ensure_dir path =
   if Sys.file_exists path then ()
   else Sys.mkdir path 0o755
 
+let print_ast file =
+  match Check.check_file file with
+  | Ok () ->
+      let out_dir = "dist/asts" in
+      ensure_dir "dist";
+      ensure_dir out_dir;
+      let base = Filename.basename !src |> Filename.remove_extension in
+      let svg_path = Filename.concat out_dir (base ^ ".svg") in
+      SyntaxTree.write_file_svg svg_path file;
+      let size = Size.make (Size.sizeof_file file) 0 in
+      Printf.printf "CIL' AST size %s\nSVG written to %s\n"
+        (Size.to_string size) svg_path
+  | Error err ->
+      prerr_endline (Check.string_of_error err);
+      exit 1
+
 let run_big_step file =
   match Check.check_file file with
   | Error err ->
@@ -51,6 +68,7 @@ let run_big_step file =
       match Derivator.derive_file file with
       | Ok tree ->
           let BigStep.PTreeMainReturn (_, (_, _, value)) = tree in
+          let size = Size.sizeof_tree (BigStep.PTree tree) in
           let out_dir = "dist/proofs" in
           ensure_dir "dist";
           ensure_dir out_dir;
@@ -58,8 +76,8 @@ let run_big_step file =
           let svg_path = Filename.concat out_dir (base ^ ".svg") in
           Visualizer.write_tree_svg svg_path (BigStep.PTree tree);
           Printf.printf
-            "Big-Step tree constructed. main returned %s\nSVG written to %s\n"
-            (Value.string_of_t value) svg_path
+            "Big-Step tree constructed. main returned %s\nSize %s\nSVG written to %s\n"
+            (Value.string_of_t value) (Size.to_string size) svg_path
       | Error err ->
           prerr_endline (Derivator.string_of_error err);
           exit 1 )
@@ -73,6 +91,9 @@ let main () =
       ( "-big",
         Arg.Unit (fun _ -> opt_big := true),
         "derive and print a CIL' Big-Step tree" );
+      ( "-ast",
+        Arg.Unit (fun _ -> opt_ast := true),
+        "parse C with GoblintCil, lower to CIL', check, and print the CIL' AST" );
     ]
   in
   let speclist =
@@ -90,6 +111,7 @@ let main () =
     exit 0);
 
   let file = parse_file () in
+  if !opt_ast then print_ast file;
   if !opt_pp then print_file file;
   if !opt_big then run_big_step file
 

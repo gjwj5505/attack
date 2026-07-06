@@ -7,6 +7,7 @@
   syntax
   syntaxUtil
   syntaxPretty
+  syntaxTree
   syntaxEqual
   cilBridge
   check
@@ -16,7 +17,9 @@
   memory
   bigStep
   bigStepUtil
+  bigStepChecker
   derivator
+  size
   textSvg
   visualizer)
  (libraries goblint-cil))
