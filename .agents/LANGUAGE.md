@@ -269,6 +269,64 @@ Fuel is an implementation cutoff, not part of the mathematical semantics.
 in instruction derivation. Other statements consume fuel at statement
 derivation.
 
+## Big-Step Checker
+
+`lib/language/semantics/proof/bigStepChecker.ml` validates that a Big-Step proof
+tree is consistent with its conclusion and with the CIL' program structure.
+
+There are two useful checking levels:
+
+- subtree checks validate expression, lvalue, instruction, statement, block, and
+  function proof fragments;
+- `check_ptree` validates whole-program proof trees, including the file/main
+  structure.
+
+Whole-program checking verifies:
+
+- optionally, `Check.check_file file`;
+- exactly one `main` exists in the file;
+- the proof's function is that `main`;
+- `main` is called with no arguments;
+- the function proof checks;
+- the program conclusion memory and return value match the function proof.
+
+`check_ptree` defaults to `check_file:true`. The CLI `-big` path already runs
+`Check.check_file` before derivation, so it calls
+`check_ptree ~check_file:false` after constructing the proof tree.
+
+Function return types are context-sensitive. Standalone statement/block checks
+can omit a return type, but function checking passes the enclosing function
+return type down to return statement checks. This keeps subtree checking useful
+while still making complete function/file proof checking strict.
+
+`lib/language/semantics/typeUtil.ml` owns the scalar type side conditions used
+by the proof checker. Current policy:
+
+- no casts;
+- no implicit conversions;
+- exact type equality for assignments, call arguments, call return targets, and
+  returns;
+- unary `-` requires an integer operand and returns the same integer type;
+- unary `!` requires an integer operand and returns `int`;
+- arithmetic binary operators require matching integer operands and return that
+  same integer type;
+- comparison and logical binary operators require matching integer operands and
+  return `int`;
+- `BNot`, bitwise operators, shifts, pointer arithmetic, pointer/array/struct
+  lvalues, `AddrOf`, and `StartOf` are unsupported until explicitly designed.
+
+Two checker invariants are easy to break and should be preserved:
+
+- `ETreeConst` must check the expression shape and the concrete value. A proof
+  such as `1 ⇓ 2` is invalid.
+- Function output memory is `Memory.leave_function body_out`, not `body_out`
+  itself.
+
+Regression tests live in `lib/test/bigstepcheck_test.ml`. They run the current
+success examples and construct invalid proof trees to check representative
+error messages across the expression, lvalue, instruction, call/type,
+statement, block, function, and program layers.
+
 ## Sparrow Compatibility
 
 Sparrow reportedly uses CIL 1.7.3. GoblintCil 2.0.9 is only a utility layer for
@@ -299,10 +357,9 @@ an expected rejection reason.
 
 Current examples include:
 
-- `examples/small_while.c`
-- `examples/branch_loop.c`
-- `examples/pointer_array_call.c`
-- `examples/unsupported_cast_implicit.c`
+- `examples/simple.c`
+- `examples/function_call.c`
+- `examples/fibonacci.c`
 
 Control-flow cases that cannot be represented as valid C source, such as
 loop-free `break`, should be tested by constructing CIL' ASTs directly in OCaml
@@ -325,14 +382,18 @@ Soundness/completeness comparison uses all live local memory bindings at normal
 
 ## Next Semantics Work
 
-The minimal `-big` path now constructs a `BigStep.ptree` for scalar integer
-programs with direct calls, conditionals, and loops.
+The minimal `-big` path now constructs, checks, sizes, and renders a
+`BigStep.ptree` for scalar integer programs with direct calls, conditionals, and
+loops.
 
 Likely next extensions:
 
-1. proof-tree visualization / pretty printing,
-2. global variable allocation and initializers,
-3. array index lvalue evaluation,
-4. pointer dereference and pointer arithmetic,
-5. runtime-error tests for uninitialized reads, division by zero, invalid
+1. re-audit proof checker structural coverage, especially `BTreeSeq` prefix
+   matching against source block statements,
+2. add missing checker tests for call-void and loop-specific invalid proof
+   shapes,
+3. global variable allocation and initializers,
+4. array index lvalue evaluation,
+5. pointer dereference and pointer arithmetic,
+6. runtime-error tests for uninitialized reads, division by zero, invalid
    locations, and fuel exhaustion.

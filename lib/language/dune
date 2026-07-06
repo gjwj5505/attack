@@ -15,6 +15,7 @@
   value
   valueOp
   memory
+  typeUtil
   bigStep
   bigStepUtil
   bigStepChecker

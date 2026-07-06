@@ -7,3 +7,7 @@
 (test
  (name check_test)
  (libraries language))
+
+(test
+ (name bigstepcheck_test)
+ (libraries language))

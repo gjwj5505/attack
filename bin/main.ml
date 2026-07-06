@@ -67,6 +67,13 @@ let run_big_step file =
   | Ok () -> (
       match Derivator.derive_file file with
       | Ok tree ->
+          begin
+            match BigStepChecker.check_ptree ~check_file:false tree with
+            | Valid -> ()
+            | Invalid msg ->
+                prerr_endline ("invalid Big-Step tree: " ^ msg);
+                exit 1
+          end;
           let BigStep.PTreeMainReturn (_, (_, _, value)) = tree in
           let size = Size.sizeof_tree (BigStep.PTree tree) in
           let out_dir = "dist/proofs" in
@@ -76,7 +83,7 @@ let run_big_step file =
           let svg_path = Filename.concat out_dir (base ^ ".svg") in
           Visualizer.write_tree_svg svg_path (BigStep.PTree tree);
           Printf.printf
-            "Big-Step tree constructed. main returned %s\nSize %s\nSVG written to %s\n"
+            "Big-Step tree constructed and checked. main returned %s\nSize %s\nSVG written to %s\n"
             (Value.string_of_t value) (Size.to_string size) svg_path
       | Error err ->
           prerr_endline (Derivator.string_of_error err);

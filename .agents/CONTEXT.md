@@ -11,7 +11,7 @@ language pipeline is now CIL-based.
 
 - Entry: `bin/main.ml`
 - Executable: `./attack`
-- Active CLI options: `-pp`, `-big`
+- Active CLI options: `-pp`, `-big`, `-ast`
 - Active language library: `lib/language`
 - Analyzer/config/synthesis/test libraries are mostly disabled in their dune
   files until the CIL' semantics is ready.
@@ -38,6 +38,20 @@ C source
   -> Check.check_file
   -> Derivator.derive_file
   -> BigStep.ptree
+  -> BigStepChecker.check_ptree
+  -> SVG proof tree in dist/proofs/<basename>.svg
+```
+
+Current `-ast` pipeline:
+
+```text
+C source
+  -> GoblintCil parser
+  -> GoblintCil.Cil.file
+  -> CIL'
+  -> Check.check_file
+  -> boxed AST rendering
+  -> SVG AST tree in dist/asts/<basename>.svg
 ```
 
 ## Key Files
@@ -53,7 +67,14 @@ C source
   memory.
 - `lib/language/semantics/proof/`: CIL' Big-Step proof trees, proof-tree
   accessors, and derivator.
+- `lib/language/semantics/proof/bigStepChecker.ml`: validates Big-Step proof
+  trees against their conclusions and the whole-program `main` structure.
+- `lib/language/semantics/typeUtil.ml`: scalar CIL' type side-condition checks
+  used by Big-Step proof checking.
 - `lib/language/semantics/proof/render/`: proof rendering helpers.
+- `lib/language/render/textSvg.ml`: shared boxed SVG text renderer for proof
+  and AST renderers.
+- `lib/language/syntaxTree.ml`: boxed CIL' AST renderer.
 - `lib/language/semantics/legacy/`: old Big-Step/reference files not in the
   active build.
 
@@ -66,23 +87,21 @@ Removed old files:
 
 ```bash
 dune build
-dune runtest
-./attack -pp examples/small_while.c
-./attack -pp examples/branch_loop.c
-./attack -pp examples/pointer_array_call.c
-./attack -pp examples/unsupported_cast_implicit.c
-./attack -big examples/small_while.c
-./attack -big examples/branch_loop.c
-./attack -big examples/call.c
+dune test
+dune exec lib/test/bigstepcheck_test.exe
+dune exec bin/main.exe -- -pp examples/simple.c
+dune exec bin/main.exe -- -ast examples/fibonacci.c
+dune exec bin/main.exe -- -big examples/fibonacci.c
 ```
 
 Expected behavior:
 
-- the first three `-pp` examples succeed,
-- `unsupported_cast_implicit.c` fails with `unsupported CIL feature: cast expression`,
-- the listed `-big` examples construct a `BigStep.ptree` and print the main
-  return value,
-- `dune runtest` runs direct CIL' checker fixtures.
+- current success examples are `examples/simple.c`,
+  `examples/function_call.c`, and `examples/fibonacci.c`,
+- `-ast` writes `dist/asts/<basename>.svg` and prints AST size,
+- `-big` constructs and checks a `BigStep.ptree`, writes
+  `dist/proofs/<basename>.svg`, and prints the main return value plus size,
+- `dune test` runs direct CIL' checker fixtures and Big-Step checker fixtures.
 
 ## Important Design Decisions
 
@@ -95,11 +114,16 @@ Current highlights:
 - Sparrow uses CIL 1.7.3, so exported C must later be checked for frontend
   compatibility before attack claims rely on it.
 - CIL' is cast-free.
-- CIL' currently supports `int`, `unsigned int`, pointers, arrays, function
+- CIL' syntax contains `int`, `unsigned int`, pointers, arrays, function
   definitions/calls, globals, conditionals, loops, break/continue, and returns.
+  The currently executable/type-checked Big-Step subset is scalar integer
+  focused; pointers, arrays, structs, and dereference/index execution remain
+  unsupported unless explicitly added later.
 - Unsupported features include structs/unions, field offsets, floats, strings,
   enums, typedefs, varargs, switch, goto, and casts.
-- The checker is intentionally thin. Runtime definedness belongs in Big-Step.
+- `Check.check_file` is intentionally thin. Runtime definedness belongs in
+  Big-Step. `BigStepChecker` separately validates proof trees, including scalar
+  type side conditions via `TypeUtil`.
 
 Big-Step proof-tree direction:
 
@@ -151,8 +175,9 @@ Big-Step proof-tree direction:
   against the function return type. `Check.check_file` should also statically
   reject return statements whose expression presence does not match the
   enclosing function return type.
-- The current `-big` milestone constructs a `BigStep.ptree`; proof-tree
-  visualization/pretty-printing remains separate follow-up work.
+- The current `-big` path constructs a `BigStep.ptree`, validates it with
+  `BigStepChecker.check_ptree ~check_file:false`, prints size, and writes a
+  boxed SVG proof tree.
 - Proof-tree constructors use layer-prefixed names such as `ETreeConst`,
   `LTreeVar`, `ITreeSet`, `STreeInstr`, `BTreeSeq`, `FTreeReturn`, and
   `PTreeMainReturn`.
@@ -164,6 +189,36 @@ Big-Step proof-tree direction:
   primitive integer construction/operations.
 - CIL' expressions are pure. Expression proof conclusions do not carry output
   memory; all side effects belong to instructions.
+
+Big-Step checker status:
+
+- `BigStepChecker` has two practical levels:
+  subtree checks for expression/lvalue/instruction/statement/block/function
+  proof fragments, and `check_ptree` for whole-program proof trees.
+- Whole-program checking verifies the optional `Check.check_file` result, that
+  the file has exactly one `main`, that the proof's function is that `main`,
+  that `main` is called with no arguments, and that `main` returns a value.
+- `check_ptree` defaults to `check_file:true`. CLI `-big` calls
+  `check_ptree ~check_file:false` because `Check.check_file` already ran before
+  derivation.
+- Return type checking is context-sensitive. Standalone `check_stree` can be
+  called without a return type, but function checking passes the enclosing
+  function return type into statement/block checks.
+- Scalar type side conditions are checked through `TypeUtil`: assignments,
+  calls, expression operators, lvalue reads, and returns must be type-consistent
+  without casts or implicit conversions.
+- `TypeUtil` currently supports scalar integer types. `Mem`, `Index`, fields,
+  `AddrOf`, `StartOf`, pointers, arrays, structs, bitwise/shift operators, and
+  pointer arithmetic are rejected as unsupported at the type-checking layer.
+- Function proof output memory must equal `Memory.leave_function body_out`.
+  Comparing body memory directly with function output memory is wrong because
+  the function frame must be popped.
+- `ETreeConst` must check both the expression shape and the concrete value.
+  A proof such as `1 ⇓ 2` must be rejected.
+- Big-Step checker regression coverage lives in
+  `lib/test/bigstepcheck_test.ml`. It accepts the current examples and checks
+  representative invalid proof trees for expression, lvalue, instruction,
+  call/type, statement, block, function, and program-level errors.
 
 Synthesis size policy:
 
@@ -201,12 +256,15 @@ Synthesis size policy:
 
 ## Next Actions
 
-1. Implement pretty-printing / visualization for the generated CIL' Big-Step
-   proof tree.
-2. Add global variable allocation and initializer semantics.
-3. Add array index lvalue evaluation.
-4. Add pointer dereference and pointer arithmetic.
-5. Add runtime-error tests for uninitialized reads, division by zero, invalid
+1. Re-audit `BigStepChecker` for remaining structural gaps, especially whether
+   `BTreeSeq` should verify that executed statement trees correspond to the
+   prefix of `block.bstmts`.
+2. Add tests for `ITreeCallVoid` and loop-specific proof checker failures if
+   those branches are not yet covered enough.
+3. Add global variable allocation and initializer semantics.
+4. Add array index lvalue evaluation.
+5. Add pointer dereference and pointer arithmetic.
+6. Add runtime-error tests for uninitialized reads, division by zero, invalid
    locations, and fuel exhaustion.
-6. Reconnect synthesis once the evaluator stabilizes.
-7. Reconnect Sparrow comparison after exported C compatibility is tested.
+7. Reconnect synthesis once the evaluator/checker stabilizes.
+8. Reconnect Sparrow comparison after exported C compatibility is tested.
