@@ -68,6 +68,60 @@ let reject_duplicate_global_name =
       S.GFun (main_fun [ stmt (S.Return (Some (int_const 0))) ]);
     ]
 
+let reject_duplicate_formal_name =
+  (* Expected: Error duplicate local name in f: x. *)
+  let x1 = var "x" int_t 30 in
+  let x2 = var "x" int_t 31 in
+  let f =
+    {
+      S.svar = var ~vglob:true "f" int_t 32;
+      sformals = [ x1; x2 ];
+      slocals = [];
+      sbody = block [ stmt (S.Return (Some (int_const 0))) ];
+    }
+  in
+  file
+    [
+      S.GFun f;
+      S.GFun (main_fun [ stmt (S.Return (Some (int_const 0))) ]);
+    ]
+
+let reject_duplicate_local_name =
+  (* Expected: Error duplicate local name in f: x. *)
+  let x1 = var "x" int_t 33 in
+  let x2 = var "x" int_t 34 in
+  let f =
+    {
+      S.svar = var ~vglob:true "f" int_t 35;
+      sformals = [];
+      slocals = [ x1; x2 ];
+      sbody = block [ stmt (S.Return (Some (int_const 0))) ];
+    }
+  in
+  file
+    [
+      S.GFun f;
+      S.GFun (main_fun [ stmt (S.Return (Some (int_const 0))) ]);
+    ]
+
+let reject_formal_local_name_collision =
+  (* Expected: Error duplicate local name in f: x. *)
+  let formal = var "x" int_t 36 in
+  let local = var "x" int_t 37 in
+  let f =
+    {
+      S.svar = var ~vglob:true "f" int_t 38;
+      sformals = [ formal ];
+      slocals = [ local ];
+      sbody = block [ stmt (S.Return (Some (int_const 0))) ];
+    }
+  in
+  file
+    [
+      S.GFun f;
+      S.GFun (main_fun [ stmt (S.Return (Some (int_const 0))) ]);
+    ]
+
 let reject_break_outside_loop =
   (* Expected: Error Break_outside_loop. This AST cannot come from valid C
      source, but the synthesizer can construct it directly. *)
@@ -165,6 +219,21 @@ let () =
         expect_error "reject_duplicate_global_name"
           (Check.Duplicate_global_name "g")
           reject_duplicate_global_name);
+      ("reject_duplicate_formal_name", fun () ->
+        expect_error "reject_duplicate_formal_name"
+          (Check.Duplicate_function_local_name
+             { function_name = "f"; name = "x" })
+          reject_duplicate_formal_name);
+      ("reject_duplicate_local_name", fun () ->
+        expect_error "reject_duplicate_local_name"
+          (Check.Duplicate_function_local_name
+             { function_name = "f"; name = "x" })
+          reject_duplicate_local_name);
+      ("reject_formal_local_name_collision", fun () ->
+        expect_error "reject_formal_local_name_collision"
+          (Check.Duplicate_function_local_name
+             { function_name = "f"; name = "x" })
+          reject_formal_local_name_collision);
       ("reject_break_outside_loop", fun () ->
         expect_error "reject_break_outside_loop" Check.Break_outside_loop
           reject_break_outside_loop);

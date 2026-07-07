@@ -219,6 +219,23 @@ Big-Step checker status:
   `lib/test/bigstepcheck_test.ml`. It accepts the current examples and checks
   representative invalid proof trees for expression, lvalue, instruction,
   call/type, statement, block, function, and program-level errors.
+- 2026-07-07 re-audit strengthened `BigStepChecker` against several accepted
+  invalid proof shapes: `BTreeSeq` must match the executed prefix of
+  `block.bstmts`, non-empty blocks cannot have empty executions, instruction
+  and statement sequences must connect memory, `return;`/`break`/`continue`
+  preserve memory, call arguments use the call-site memory, function body input
+  memory must match frame setup from formals/locals, direct callees must match
+  their function identity, whole-program proofs reject ghost callees and
+  non-empty `main` input memory, loop proof constructors must match body
+  control, `FTreeReturn`/`FTreeNoReturn` must match function return policy, and
+  logical `LAnd`/`LOr` cannot be checked through `ETreeBinOp`.
+- The same audit added `Check.check_file` coverage for duplicate formal/local
+  names within a function scope. `check_ptree` still defaults to
+  `check_file:true`, while the CLI `-big` path relies on its prior
+  `Check.check_file` call before using `check_ptree ~check_file:false`.
+- BigStepChecker should still be re-audited once more before treating it as
+  stable, especially before reconnecting synthesis or adding pointer/array/global
+  execution semantics.
 
 Synthesis size policy:
 
@@ -256,11 +273,10 @@ Synthesis size policy:
 
 ## Next Actions
 
-1. Re-audit `BigStepChecker` for remaining structural gaps, especially whether
-   `BTreeSeq` should verify that executed statement trees correspond to the
-   prefix of `block.bstmts`.
-2. Add tests for `ITreeCallVoid` and loop-specific proof checker failures if
-   those branches are not yet covered enough.
+1. Re-audit `BigStepChecker` once more for remaining structural gaps after the
+   2026-07-07 strengthening pass.
+2. Add focused `ITreeCallVoid` invalid-proof tests if coverage is still thinner
+   than `ITreeCallAssign`.
 3. Add global variable allocation and initializer semantics.
 4. Add array index lvalue evaluation.
 5. Add pointer dereference and pointer arithmetic.

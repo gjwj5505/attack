@@ -11,6 +11,10 @@ type error =
   | Invalid_main_type of Typ.t
   | Main_with_parameters
   | Duplicate_global_name of string
+  | Duplicate_function_local_name of {
+      function_name : string;
+      name : string;
+    }
   | Break_outside_loop
   | Continue_outside_loop
   | Return_value_in_void_function
@@ -33,6 +37,36 @@ let check_duplicate_global_names file =
         else (
           Hashtbl.add seen name ();
           loop globals )
+  in
+  loop file.globals
+
+let check_duplicate_function_local_names file =
+  let check_fundec fd =
+    let seen = Hashtbl.create 16 in
+    let check_var var =
+      if Hashtbl.mem seen var.vname then
+        error
+          (Duplicate_function_local_name
+             { function_name = fd.svar.vname; name = var.vname })
+      else (
+        Hashtbl.add seen var.vname ();
+        Ok () )
+    in
+    let rec loop = function
+      | [] -> Ok ()
+      | var :: vars ->
+          let* () = check_var var in
+          loop vars
+    in
+    let* () = loop fd.sformals in
+    loop fd.slocals
+  in
+  let rec loop = function
+    | [] -> Ok ()
+    | GFun fd :: globals ->
+        let* () = check_fundec fd in
+        loop globals
+    | (GVarDecl _ | GVar _) :: globals -> loop globals
   in
   loop file.globals
 
@@ -128,6 +162,7 @@ let check_goblint file =
 let check_file file =
   let* () = check_main file in
   let* () = check_duplicate_global_names file in
+  let* () = check_duplicate_function_local_names file in
   let* () = check_control_flow file in
   let* () = check_returns file in
   let* () = check_roundtrip file in
@@ -153,6 +188,8 @@ let string_of_error = function
       "invalid main return type: " ^ Typ.string_of_t typ
   | Main_with_parameters -> "main must have no parameters"
   | Duplicate_global_name name -> "duplicate global name: " ^ name
+  | Duplicate_function_local_name { function_name; name } ->
+      Printf.sprintf "duplicate local name in %s: %s" function_name name
   | Break_outside_loop -> "break outside loop"
   | Continue_outside_loop -> "continue outside loop"
   | Return_value_in_void_function -> "return value in void function"

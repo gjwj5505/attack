@@ -62,6 +62,25 @@ let expect_invalid name needle result =
   | C.Valid ->
       failwith (Printf.sprintf "%s: expected Invalid containing %S" name needle)
 
+let suspected_gap_failures = ref []
+
+let expect_suspected_gap_invalid name needle result =
+  match result with
+  | C.Invalid msg when contains msg needle ->
+      Printf.printf "ok - %s -> %s\n" name msg
+  | C.Invalid msg ->
+      suspected_gap_failures :=
+        (Printf.sprintf "%s: expected message containing %S, got %S" name
+           needle msg)
+        :: !suspected_gap_failures;
+      Printf.printf "not ok - %s -> wrong error: %s\n" name msg
+  | C.Valid ->
+      suspected_gap_failures :=
+        (Printf.sprintf "%s: expected Invalid containing %S, got Valid" name
+           needle)
+        :: !suspected_gap_failures;
+      Printf.printf "not ok - %s -> accepted invalid proof\n" name
+
 let parse_example path =
   match CilBridge.parse_c_file_as_file path with
   | Ok file -> file
@@ -148,6 +167,29 @@ let call_with_callee_var callee_var itree =
         (ltree, B.CalleeTreeDirect (callee_exp, callee_var, fd), args, ftree, concl)
   | _ -> failwith "expected call assignment tree"
 
+let call_with_first_arg_mem mem itree =
+  match itree with
+  | B.ITreeCallAssign (ltree, callee, arg :: args, ftree, concl) ->
+      let arg =
+        match arg with
+        | B.ETreeConst (_, exp, value) -> B.ETreeConst (mem, exp, value)
+        | _ -> failwith "expected constant call argument"
+      in
+      B.ITreeCallAssign (ltree, callee, arg :: args, ftree, concl)
+  | _ -> failwith "expected call assignment tree with arguments"
+
+let return_const_stree mem n =
+  let exp = int_exp n in
+  let value = must_value n in
+  B.STreeReturnSome
+    (B.ETreeConst (mem, exp, value), (mem, stmt (S.Return (Some exp)), mem, B.Return value))
+
+let break_btree mem =
+  let break_stmt = stmt S.Break in
+  B.BTreeSeq
+    ([ B.STreeBreak (mem, break_stmt, mem, B.Break) ],
+     (mem, block [ break_stmt ], mem, B.Break))
+
 let run_expression_errors () =
   expect_invalid "reject_const_value" "E-Const value"
     (C.check_etree (B.ETreeConst (mem0, int_exp 1, must_value 2)));
@@ -193,6 +235,13 @@ let run_expression_errors () =
           ( int_tree 1,
             int_tree 2,
             (mem0, S.BinOp (S.PlusA, int_exp 1, int_exp 2, int_t), must_value 99)
+          )));
+  expect_invalid "reject_binop_logical_constructor" "E-BinOp logical operator"
+    (C.check_etree
+       (B.ETreeBinOp
+          ( int_tree 1,
+            int_tree 2,
+            (mem0, S.BinOp (S.LAnd, int_exp 1, int_exp 2, int_t), Value.of_bool true)
           )));
   expect_invalid "reject_lor_true_premise" "false left premise"
     (C.check_etree
@@ -255,6 +304,11 @@ let run_instruction_and_call_errors () =
   in
   let callee typ = var ~vglob:true "f" typ callee_vid in
   let one_param = Some [ ("x", int_t) ] in
+  expect_invalid "reject_call_callee_varinfo_mismatch" "Callee direct: var/function mismatch"
+    (C.check_itree
+       (call_with_callee_var
+          (var ~vglob:true "g" (Typ.TFun (int_t, one_param)) callee_vid)
+          call_tree));
   expect_invalid "reject_call_expected_function" "expected function callee"
     (C.check_itree (call_with_callee_var (callee int_t) call_tree));
   expect_invalid "reject_call_without_parameter_types" "function without parameter types"
@@ -270,7 +324,9 @@ let run_instruction_and_call_errors () =
           call_tree));
   expect_invalid "reject_call_assigning_void" "assigning void call result"
     (C.check_itree
-       (call_with_callee_var (callee (Typ.TFun (void_t, one_param))) call_tree))
+       (call_with_callee_var (callee (Typ.TFun (void_t, one_param))) call_tree));
+  expect_invalid "reject_call_arg_input" "I-CallAssign argument input"
+    (C.check_itree (call_with_first_arg_mem (Memory.enter_function mem0) call_tree))
 
 let run_statement_and_block_errors () =
   expect_invalid "reject_return_none_type" "S-ReturnNone type"
@@ -282,6 +338,18 @@ let run_statement_and_block_errors () =
     (C.check_stree ~return_type:int_t
        (B.STreeReturnSome
           (int_tree 1, (mem0, stmt (S.Return (Some (int_exp 2))), mem0, B.Return (must_value 1)))));
+  expect_invalid "reject_return_none_output" "S-ReturnNone output"
+    (C.check_stree
+       (B.STreeReturnNone
+          (mem0, stmt (S.Return None), Memory.enter_function mem0, B.ReturnVoid)));
+  expect_invalid "reject_break_output" "S-Break output"
+    (C.check_stree
+       (B.STreeBreak
+          (mem0, stmt S.Break, Memory.enter_function mem0, B.Break)));
+  expect_invalid "reject_continue_output" "S-Continue output"
+    (C.check_stree
+       (B.STreeContinue
+          (mem0, stmt S.Continue, Memory.enter_function mem0, B.Continue)));
   let body = empty_btree mem0 in
   expect_invalid "reject_if_true_false_condition" "false condition"
     (C.check_stree
@@ -299,6 +367,27 @@ let run_statement_and_block_errors () =
           )));
   let ret = valid_return_stree () in
   let instr_stmt = B.STreeInstr ([], (mem0, stmt (S.Instr []), mem0, B.Normal)) in
+  let wrong_prefix_block = block [ stmt (S.Return (Some (int_exp 2))) ] in
+  expect_invalid "reject_block_prefix_statement" "B-Seq prefix statement"
+    (C.check_btree
+       (B.BTreeSeq
+          ([ ret ], (mem0, wrong_prefix_block, mem0, B.Return (must_value 1)))));
+  expect_invalid "reject_block_stopped_normal" "stopped before end of block"
+    (C.check_btree
+       (B.BTreeSeq
+          ( [ instr_stmt ],
+            ( mem0,
+              block [ stmt (S.Instr []); stmt (S.Return (Some (int_exp 0))) ],
+              mem0,
+              B.Normal ) )));
+  let set1 = valid_set_itree () in
+  let set2 = valid_set_itree () in
+  let set1_mem, instr1, _ = U.i_concl set1 in
+  let _, instr2, set2_out = U.i_concl set2 in
+  expect_invalid "reject_instr_flow" "S-Instr instruction input"
+    (C.check_stree
+       (B.STreeInstr
+          ([ set1; set2 ], (set1_mem, stmt (S.Instr [ instr1; instr2 ]), set2_out, B.Normal))));
   expect_invalid "reject_block_after_return" "after non-normal control"
     (C.check_btree (B.BTreeSeq ([ ret; instr_stmt ], (mem0, block [ stmt (S.Return (Some (int_exp 1))) ], mem0, B.Return (must_value 1)))));
   expect_invalid "reject_block_too_many_statements" "more statements"
@@ -326,6 +415,15 @@ let run_function_and_program_errors () =
   in
   expect_invalid "reject_function_control" "F control"
     (C.check_ptree ~check_file:false bad_control);
+  let bad_body_input =
+    match valid with
+    | B.PTreeMainReturn (B.FTreeReturn (btree, (mem, fd, args, out_mem, control)), _) ->
+        B.FTreeReturn
+          (btree, (Memory.enter_function mem, fd, args, out_mem, control))
+    | _ -> failwith "unexpected simple proof shape"
+  in
+  expect_invalid "reject_function_body_input" "F body input"
+    (C.check_ftree bad_body_input);
   let bad_p_output =
     mutate_main_concl (fun (file, _, value) -> (file, mem0, value)) valid
   in
@@ -360,8 +458,199 @@ let run_function_and_program_errors () =
       (B.FTreeNoReturn (btree, (mem0, fd, [], out_mem, B.Normal)),
        (file [ S.GFun fd ], out_mem, must_value 0))
   in
-  expect_invalid "reject_program_no_return" "did not return"
+  expect_invalid "reject_program_no_return" "F no-return type"
     (C.check_tree (B.PTree no_return))
+
+let run_suspected_gap_errors () =
+  let make_set_zero_stree lval loc mem =
+    let exp = int_exp 0 in
+    let value = must_value 0 in
+    let instr = S.Set (lval, exp) in
+    let etree = B.ETreeConst (mem, exp, value) in
+    let ltree = B.LTreeVar (mem, lval, loc) in
+    let out_mem =
+      must_ok "write zero" Memory.string_of_error
+        (Memory.write loc value mem)
+    in
+    ( B.STreeInstr ([ B.ITreeSet (ltree, etree, (mem, instr, out_mem)) ],
+        (mem, stmt (S.Instr [ instr ]), out_mem, B.Normal)),
+      out_mem )
+  in
+  let x, x_lval, x_loc, x_one_mem = local_binding "x" 90 in
+  ignore x;
+  let cond_exp = S.Lval x_lval in
+  let set_zero_from_one, x_zero_mem = make_set_zero_stree x_lval x_loc x_one_mem in
+  let set_zero_stmt =
+    let _, stmt, _, _ = U.s_concl set_zero_from_one in
+    stmt
+  in
+  let continue_stmt = stmt S.Continue in
+  let break_stmt = stmt S.Break in
+  let else_break_block = block [ break_stmt ] in
+  let else_break_body = break_btree x_zero_mem in
+  let continue_then_block = block [ set_zero_stmt; continue_stmt ] in
+  let continue_then_body =
+    B.BTreeSeq
+      ( [ set_zero_from_one;
+          B.STreeContinue (x_zero_mem, continue_stmt, x_zero_mem, B.Continue)
+        ],
+        (x_one_mem, continue_then_block, x_zero_mem, B.Continue) )
+  in
+  let continue_if_stmt =
+    stmt (S.If (cond_exp, continue_then_block, else_break_block))
+  in
+  let continue_loop_body_block = block [ continue_if_stmt ] in
+  let continue_body =
+    B.BTreeSeq
+      ( [ B.STreeIfTrue
+            ( B.ETreeLval
+                ( B.LTreeVar (x_one_mem, x_lval, x_loc),
+                  (x_one_mem, cond_exp, must_value 1) ),
+              continue_then_body,
+              (x_one_mem, continue_if_stmt, x_zero_mem, B.Continue) )
+        ],
+        (x_one_mem, continue_loop_body_block, x_zero_mem, B.Continue) )
+  in
+  let continue_break_body =
+    B.BTreeSeq
+      ( [ B.STreeIfFalse
+            ( B.ETreeLval
+                ( B.LTreeVar (x_zero_mem, x_lval, x_loc),
+                  (x_zero_mem, cond_exp, must_value 0) ),
+              else_break_body,
+              (x_zero_mem, continue_if_stmt, x_zero_mem, B.Break) )
+        ],
+        (x_zero_mem, continue_loop_body_block, x_zero_mem, B.Break) )
+  in
+  let continue_loop_stmt = stmt (S.Loop continue_loop_body_block) in
+  let continue_loop_rest =
+    B.STreeLoopBreak
+      (continue_break_body, (x_zero_mem, continue_loop_stmt, x_zero_mem, B.Normal))
+  in
+  expect_suspected_gap_invalid "reject_loop_repeat_continue_body"
+    "S-LoopRepeat body control"
+    (C.check_stree
+       (B.STreeLoopRepeat
+          ( continue_body,
+            continue_loop_rest,
+            (x_one_mem, continue_loop_stmt, x_zero_mem, B.Normal) )));
+  let y, y_lval, y_loc, y_one_mem = local_binding "y" 91 in
+  ignore y;
+  let normal_cond_exp = S.Lval y_lval in
+  let set_zero_from_y_one, y_zero_mem =
+    make_set_zero_stree y_lval y_loc y_one_mem
+  in
+  let normal_set_zero_stmt =
+    let _, stmt, _, _ = U.s_concl set_zero_from_y_one in
+    stmt
+  in
+  let normal_then_block = block [ normal_set_zero_stmt ] in
+  let normal_then_body =
+    B.BTreeSeq
+      ([ set_zero_from_y_one ], (y_one_mem, normal_then_block, y_zero_mem, B.Normal))
+  in
+  let normal_if_stmt =
+    stmt (S.If (normal_cond_exp, normal_then_block, else_break_block))
+  in
+  let normal_loop_body_block = block [ normal_if_stmt ] in
+  let normal_body =
+    B.BTreeSeq
+      ( [ B.STreeIfTrue
+            ( B.ETreeLval
+                ( B.LTreeVar (y_one_mem, y_lval, y_loc),
+                  (y_one_mem, normal_cond_exp, must_value 1) ),
+              normal_then_body,
+              (y_one_mem, normal_if_stmt, y_zero_mem, B.Normal) )
+        ],
+        (y_one_mem, normal_loop_body_block, y_zero_mem, B.Normal) )
+  in
+  let normal_break_body =
+    let else_break_body = break_btree y_zero_mem in
+    B.BTreeSeq
+      ( [ B.STreeIfFalse
+            ( B.ETreeLval
+                ( B.LTreeVar (y_zero_mem, y_lval, y_loc),
+                  (y_zero_mem, normal_cond_exp, must_value 0) ),
+              else_break_body,
+              (y_zero_mem, normal_if_stmt, y_zero_mem, B.Break) )
+        ],
+        (y_zero_mem, normal_loop_body_block, y_zero_mem, B.Break) )
+  in
+  let normal_loop_stmt = stmt (S.Loop normal_loop_body_block) in
+  let normal_loop_rest =
+    B.STreeLoopBreak
+      (normal_break_body, (y_zero_mem, normal_loop_stmt, y_zero_mem, B.Normal))
+  in
+  expect_suspected_gap_invalid "reject_loop_continue_normal_body"
+    "S-LoopContinue body control"
+    (C.check_stree
+       (B.STreeLoopContinue
+          ( normal_body,
+            normal_loop_rest,
+            (y_one_mem, normal_loop_stmt, y_zero_mem, B.Normal) )));
+  let fd_returns =
+    minimal_main (block [ stmt (S.Return (Some (int_exp 1))) ])
+  in
+  let body_mem = Memory.enter_function mem0 in
+  let body_tree =
+    B.BTreeSeq
+      ( [ return_const_stree body_mem 1 ],
+        (body_mem, fd_returns.S.sbody, body_mem, B.Return (must_value 1)) )
+  in
+  let out_mem =
+    must_ok "leave function" Memory.string_of_error
+      (Memory.leave_function body_mem)
+  in
+  expect_suspected_gap_invalid "reject_function_wrong_return_constructor"
+    "F no-return body control"
+    (C.check_ftree
+       (B.FTreeNoReturn
+          (body_tree, (mem0, fd_returns, [], out_mem, B.Return (must_value 1)))));
+  let ghost_tree = derive_example (example_path "function_call.c") in
+  let ghost_tree =
+    match ghost_tree with
+    | B.PTreeMainReturn (ftree, (_, mem, value)) ->
+        let _, main, _, _, _ = U.f_concl ftree in
+        B.PTreeMainReturn (ftree, (file [ S.GFun main ], mem, value))
+  in
+  expect_suspected_gap_invalid "reject_ghost_callee_function"
+    "callee function"
+    (C.check_ptree ~check_file:false ghost_tree);
+  let fd_main = minimal_main (block [ stmt (S.Return (Some (int_exp 0))) ]) in
+  let main_input = Memory.enter_function mem0 in
+  let main_body_input = Memory.enter_function main_input in
+  let main_body =
+    B.BTreeSeq
+      ( [ return_const_stree main_body_input 0 ],
+        ( main_body_input,
+          fd_main.S.sbody,
+          main_body_input,
+          B.Return (must_value 0) ) )
+  in
+  let main_out =
+    must_ok "leave main" Memory.string_of_error
+      (Memory.leave_function main_body_input)
+  in
+  let nonempty_main_input =
+    B.PTreeMainReturn
+      ( B.FTreeReturn
+          (main_body, (main_input, fd_main, [], main_out, B.Return (must_value 0))),
+        (file [ S.GFun fd_main ], main_out, must_value 0) )
+  in
+  expect_suspected_gap_invalid "reject_main_nonempty_input"
+    "P-Main input"
+    (C.check_ptree ~check_file:false nonempty_main_input);
+  expect_suspected_gap_invalid "reject_empty_execution_nonempty_block"
+    "B-Seq empty execution"
+    (C.check_btree
+       (B.BTreeSeq
+          ([], (mem0, block [ stmt (S.Instr []) ], mem0, B.Normal))));
+  match List.rev !suspected_gap_failures with
+  | [] -> ()
+  | failures ->
+      failwith
+        ("suspected gap tests accepted invalid proofs: "
+        ^ String.concat "; " failures)
 
 let () =
   List.iter expect_valid_example
@@ -370,4 +659,5 @@ let () =
   run_lvalue_errors ();
   run_instruction_and_call_errors ();
   run_statement_and_block_errors ();
-  run_function_and_program_errors ()
+  run_function_and_program_errors ();
+  run_suspected_gap_errors ()

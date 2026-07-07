@@ -49,6 +49,16 @@ let check_fundec label expected actual =
   if SyntaxEqual.equal_fundec expected actual then ok
   else error (label ^ ": function mismatch")
 
+let check_callee_varinfo label var fd =
+  let expected = fd.Syntax.svar in
+  if
+    String.equal var.Syntax.vname expected.Syntax.vname
+    && Bool.equal var.Syntax.vglob expected.Syntax.vglob
+    && Bool.equal var.Syntax.vtemp expected.Syntax.vtemp
+    && Int.equal var.Syntax.vid expected.Syntax.vid
+  then ok
+  else error (label ^ ": var/function mismatch")
+
 let check_type label = function
   | Ok () -> ok
   | Error err -> error (label ^ ": " ^ TypeUtil.string_of_error err)
@@ -61,6 +71,10 @@ let check_file_result label = function
   | Ok () -> ok
   | Error err -> error (label ^ ": " ^ Check.string_of_error err)
 
+let check_expected_memory label actual = function
+  | Ok expected -> check_memory label expected actual
+  | Error err -> error (label ^ ": " ^ err)
+
 let check_return_type label return_type exp =
   match return_type with
   | None -> ok
@@ -70,6 +84,30 @@ let check_return_type label return_type exp =
 let rec check_list check = function
   | [] -> ok
   | x :: xs -> check x >>= fun () -> check_list check xs
+
+let rec bind_expected_formals formals args mem =
+  match formals, args with
+  | [], [] -> Ok mem
+  | formal :: formals, arg :: args -> (
+      match Memory.bind_local formal arg mem with
+      | Ok (_, mem) -> bind_expected_formals formals args mem
+      | Error err -> Error (Memory.string_of_error err) )
+  | [], _ :: _ | _ :: _, [] ->
+      Error "arity mismatch"
+
+let rec allocate_expected_locals locals mem =
+  match locals with
+  | [] -> Ok mem
+  | local :: locals -> (
+      match Memory.allocate_local local mem with
+      | Ok (_, mem) -> allocate_expected_locals locals mem
+      | Error err -> Error (Memory.string_of_error err) )
+
+let expected_function_body_input fd args mem =
+  let mem = Memory.enter_function mem in
+  match bind_expected_formals fd.Syntax.sformals args mem with
+  | Error err -> Error err
+  | Ok mem -> allocate_expected_locals fd.Syntax.slocals mem
 
 let rec check_etree tree =
   match tree with
@@ -186,6 +224,8 @@ let rec check_etree tree =
       check_memory "E-BinOp left input" mem left_mem >>= fun () ->
       check_memory "E-BinOp right input" mem right_mem >>= fun () ->
       match exp with
+      | Syntax.BinOp ((Syntax.LAnd | Syntax.LOr), _, _, _) ->
+          error "E-BinOp logical operator must use short-circuit rule"
       | Syntax.BinOp (op, expected_left, expected_right, _) ->
           check_exp "E-BinOp left" expected_left left_exp >>= fun () ->
           check_exp "E-BinOp right" expected_right right_exp >>= fun () -> (
@@ -256,6 +296,7 @@ let rec check_itree tree =
   | ITreeCallVoid (callee, args, ftree, (mem, instr, out_mem)) -> (
       check_callee_tree callee >>= fun () ->
       check_list check_etree args >>= fun () ->
+      check_arg_inputs "I-CallVoid argument input" mem args >>= fun () ->
       check_ftree ftree >>= fun () ->
       let arg_values = List.map e_value args in
       let arg_exps = List.map (fun arg -> let _, exp, _ = e_concl arg in exp) args in
@@ -277,6 +318,7 @@ let rec check_itree tree =
       check_ltree ltree >>= fun () ->
       check_callee_tree callee >>= fun () ->
       check_list check_etree args >>= fun () ->
+      check_arg_inputs "I-CallAssign argument input" mem args >>= fun () ->
       check_ftree ftree >>= fun () ->
       let l_mem, lval, loc = l_concl ltree in
       let arg_values = List.map e_value args in
@@ -305,28 +347,76 @@ let rec check_itree tree =
         | ReturnVoid | Normal | Break | Continue ->
             error "I-CallAssign callee did not return a value" )
 
+and check_arg_inputs label mem = function
+  | [] -> ok
+  | arg :: args ->
+      let arg_mem, _, _ = e_concl arg in
+      check_memory label mem arg_mem >>= fun () ->
+      check_arg_inputs label mem args
+
 and check_callee_tree = function
   | CalleeTreeDirect (exp, var, fd) ->
       check_exp "Callee direct expression" exp (Syntax.Lval (Syntax.Var var, Syntax.NoOffset))
       >>= fun () ->
-      if var.Syntax.vid = fd.Syntax.svar.Syntax.vid then ok
-      else error "Callee direct var/function mismatch"
+      check_callee_varinfo "Callee direct" var fd
 
 and callee_exp = function
   | CalleeTreeDirect (exp, _, _) -> exp
+
+and check_callee_in_file file = function
+  | CalleeTreeDirect (_, _, fd) ->
+      if
+        List.exists
+          (function
+            | Syntax.GFun file_fd -> SyntaxEqual.equal_fundec fd file_fd
+            | Syntax.GVarDecl _ | Syntax.GVar _ -> false)
+          file.Syntax.globals
+      then ok
+      else error "P-File callee function missing from file"
+
+and check_itree_callees file = function
+  | ITreeSet _ -> ok
+  | ITreeCallVoid (callee, _, ftree, _) ->
+      check_callee_in_file file callee >>= fun () ->
+      check_ftree_callees file ftree
+  | ITreeCallAssign (_, callee, _, ftree, _) ->
+      check_callee_in_file file callee >>= fun () ->
+      check_ftree_callees file ftree
+
+and check_stree_callees file = function
+  | STreeInstr (itrees, _) -> check_list (check_itree_callees file) itrees
+  | STreeReturnNone _ | STreeReturnSome _ | STreeBreak _ | STreeContinue _ ->
+      ok
+  | STreeIfTrue (_, btree, _) | STreeIfFalse (_, btree, _)
+  | STreeBlock (btree, _) ->
+      check_btree_callees file btree
+  | STreeLoopRepeat (body, rest, _) | STreeLoopContinue (body, rest, _) ->
+      check_btree_callees file body >>= fun () ->
+      check_stree_callees file rest
+  | STreeLoopBreak (body, _) | STreeLoopReturn (body, _) ->
+      check_btree_callees file body
+
+and check_btree_callees file = function
+  | BTreeSeq (strees, _) -> check_list (check_stree_callees file) strees
+
+and check_ftree_callees file = function
+  | FTreeReturn (btree, _) | FTreeNoReturn (btree, _) ->
+      check_btree_callees file btree
 
 and check_stree ?return_type tree =
   match tree with
   | STreeInstr (itrees, (mem, stmt, out_mem, control)) ->
       check_list check_itree itrees >>= fun () ->
+      check_instr_flow mem itrees >>= fun () ->
       check_stmt "S-Instr subject" stmt (Syntax.{ labels = []; skind = Instr (List.map (fun itree -> let _, instr, _ = i_concl itree in instr) itrees); sid = stmt.sid })
       >>= fun () ->
       let expected_out = BigStepUtil.instrs_output_memory mem itrees in
       check_memory "S-Instr output" expected_out out_mem >>= fun () ->
       check_control "S-Instr control" Normal control
-  | STreeReturnNone (_mem, stmt, _out_mem, control) ->
+  | STreeReturnNone (mem, stmt, out_mem, control) ->
       check_stmt "S-ReturnNone subject" stmt { stmt with Syntax.skind = Syntax.Return None }
       >>= fun () ->
+      check_memory "S-ReturnNone output" mem out_mem >>= fun () ->
       check_return_type "S-ReturnNone type" return_type None >>= fun () ->
       check_control "S-ReturnNone control" ReturnVoid control
   | STreeReturnSome (etree, (mem, stmt, out_mem, control)) ->
@@ -338,12 +428,16 @@ and check_stree ?return_type tree =
       >>= fun () ->
       check_stmt "S-ReturnSome subject" stmt { stmt with Syntax.skind = Syntax.Return (Some exp) }
       >>= fun () -> check_control "S-ReturnSome control" (Return value) control
-  | STreeBreak (_mem, stmt, _out_mem, control) ->
+  | STreeBreak (mem, stmt, out_mem, control) ->
       check_stmt "S-Break subject" stmt { stmt with Syntax.skind = Syntax.Break }
-      >>= fun () -> check_control "S-Break control" Break control
-  | STreeContinue (_mem, stmt, _out_mem, control) ->
+      >>= fun () ->
+      check_memory "S-Break output" mem out_mem >>= fun () ->
+      check_control "S-Break control" Break control
+  | STreeContinue (mem, stmt, out_mem, control) ->
       check_stmt "S-Continue subject" stmt { stmt with Syntax.skind = Syntax.Continue }
-      >>= fun () -> check_control "S-Continue control" Continue control
+      >>= fun () ->
+      check_memory "S-Continue output" mem out_mem >>= fun () ->
+      check_control "S-Continue control" Continue control
   | STreeIfTrue (cond, body, (mem, stmt, out_mem, control)) -> (
       check_etree cond >>= fun () ->
       check_btree ?return_type body >>= fun () ->
@@ -382,13 +476,27 @@ and check_stree ?return_type tree =
           | Error err ->
               error ("S-IfFalse truthiness failed: " ^ Value.string_of_error err) )
       | _ -> error "S-IfFalse subject is not if")
-  | STreeLoopRepeat (body, rest, (mem, stmt, out_mem, control))
+  | STreeLoopRepeat (body, rest, (mem, stmt, out_mem, control)) ->
+      check_btree ?return_type body >>= fun () ->
+      check_stree ?return_type rest >>= fun () ->
+      let body_mem, body_block, body_out, body_control = b_concl body in
+      let rest_mem, rest_stmt, rest_out, rest_control = s_concl rest in
+      check_memory "S-Loop recursive body input" mem body_mem >>= fun () ->
+      check_control "S-LoopRepeat body control" Normal body_control >>= fun () ->
+      check_memory "S-Loop recursive rest input" body_out rest_mem >>= fun () ->
+      check_stmt "S-Loop recursive rest subject" stmt rest_stmt >>= fun () ->
+      check_memory "S-Loop recursive output" rest_out out_mem >>= fun () ->
+      check_control "S-Loop recursive control" rest_control control >>= fun () ->
+      (match stmt.Syntax.skind with
+      | Syntax.Loop expected_body -> check_block "S-Loop body" expected_body body_block
+      | _ -> error "S-Loop subject is not loop")
   | STreeLoopContinue (body, rest, (mem, stmt, out_mem, control)) ->
       check_btree ?return_type body >>= fun () ->
       check_stree ?return_type rest >>= fun () ->
-      let body_mem, body_block, body_out, _ = b_concl body in
+      let body_mem, body_block, body_out, body_control = b_concl body in
       let rest_mem, rest_stmt, rest_out, rest_control = s_concl rest in
       check_memory "S-Loop recursive body input" mem body_mem >>= fun () ->
+      check_control "S-LoopContinue body control" Continue body_control >>= fun () ->
       check_memory "S-Loop recursive rest input" body_out rest_mem >>= fun () ->
       check_stmt "S-Loop recursive rest subject" stmt rest_stmt >>= fun () ->
       check_memory "S-Loop recursive output" rest_out out_mem >>= fun () ->
@@ -426,11 +534,19 @@ and check_stree ?return_type tree =
       check_control "S-Block control" body_control control >>= fun () ->
       check_stmt "S-Block subject" stmt { stmt with Syntax.skind = Syntax.Block block }
 
+and check_instr_flow mem = function
+  | [] -> ok
+  | itree :: itrees ->
+      let i_mem, _, i_out = i_concl itree in
+      check_memory "S-Instr instruction input" mem i_mem >>= fun () ->
+      check_instr_flow i_out itrees
+
 and check_btree ?return_type tree =
   match tree with
   | BTreeSeq (strees, (mem, block, out_mem, control)) ->
       check_list (check_stree ?return_type) strees >>= fun () ->
       check_block_flow ?return_type mem strees >>= fun () ->
+      check_block_prefix strees block.Syntax.bstmts >>= fun () ->
       let expected_out =
         match List.rev strees with
         | [] -> mem
@@ -443,8 +559,7 @@ and check_btree ?return_type tree =
       in
       check_memory "B-Seq output" expected_out out_mem >>= fun () ->
       check_control "B-Seq control" expected_control control >>= fun () ->
-      if List.length strees <= List.length block.Syntax.bstmts then ok
-      else error "B-Seq executed more statements than block contains"
+      check_block_completion strees block.Syntax.bstmts
 
 and check_block_flow ?return_type mem = function
   | [] -> ok
@@ -455,21 +570,66 @@ and check_block_flow ?return_type mem = function
       else if strees = [] then ok
       else error "B-Seq has statements after non-normal control"
 
+and check_block_prefix strees stmts =
+  match strees, stmts with
+  | [], _ -> ok
+  | stree :: strees, stmt :: stmts ->
+      let _, actual, _, _ = s_concl stree in
+      check_stmt "B-Seq prefix statement" stmt actual >>= fun () ->
+      check_block_prefix strees stmts
+  | _ :: _, [] -> error "B-Seq executed more statements than block contains"
+
+and check_block_completion strees stmts =
+  match strees, stmts with
+  | [], _ :: _ -> error "B-Seq empty execution of non-empty block"
+  | _ ->
+      if List.length strees = List.length stmts then ok
+      else
+    match List.rev strees with
+    | last :: _ ->
+        if s_control last = Normal then
+          error "B-Seq stopped before end of block with normal control"
+        else ok
+    | [] -> ok
+
 and check_ftree tree =
   match tree with
-  | FTreeReturn (btree, (mem, fd, _args, out_mem, control))
-  | FTreeNoReturn (btree, (mem, fd, _args, out_mem, control)) ->
+  | FTreeReturn (btree, (mem, fd, args, out_mem, control)) ->
       check_btree ~return_type:(SyntaxUtil.function_return_type fd) btree
       >>= fun () ->
-      let _body_mem, body, body_out, body_control = b_concl btree in
+      let body_mem, body, body_out, body_control = b_concl btree in
+      check_expected_memory "F body input"
+        body_mem
+        (expected_function_body_input fd args mem)
+      >>= fun () ->
       check_block "F body" fd.Syntax.sbody body >>= fun () ->
       (match Memory.leave_function body_out with
       | Ok expected -> check_memory "F output" expected out_mem
       | Error err -> error ("F leave function failed: " ^ Memory.string_of_error err))
       >>= fun () ->
-      check_control "F control" body_control control >>= fun () ->
-      ignore mem;
-      ok
+      if is_return body_control then
+        check_control "F control" body_control control
+      else error "F return constructor: body did not return"
+  | FTreeNoReturn (btree, (mem, fd, args, out_mem, control)) ->
+      check_btree ~return_type:(SyntaxUtil.function_return_type fd) btree
+      >>= fun () ->
+      let body_mem, body, body_out, body_control = b_concl btree in
+      check_expected_memory "F body input"
+        body_mem
+        (expected_function_body_input fd args mem)
+      >>= fun () ->
+      check_block "F body" fd.Syntax.sbody body >>= fun () ->
+      (match Memory.leave_function body_out with
+      | Ok expected -> check_memory "F output" expected out_mem
+      | Error err -> error ("F leave function failed: " ^ Memory.string_of_error err))
+      >>= fun () ->
+      check_control "F no-return body control" Normal body_control >>= fun () ->
+      check_type "F no-return type"
+        (TypeUtil.check_return
+           ~return_type:(SyntaxUtil.function_return_type fd)
+           None)
+      >>= fun () ->
+      check_control "F no-return control" ReturnVoid control
 
 let check_ptree ?(check_file = true) = function
   | PTreeMainReturn (ftree, (file, mem, value)) ->
@@ -484,6 +644,9 @@ let check_ptree ?(check_file = true) = function
           check_fundec "P-Main function" main fd >>= fun () ->
           if args = [] then ok else error "P-Main arguments mismatch")
       >>= fun () ->
+      let f_mem, _, _, _, _ = f_concl ftree in
+      check_memory "P-Main input" Memory.empty f_mem >>= fun () ->
+      check_ftree_callees file ftree >>= fun () ->
       check_ftree ftree >>= fun () ->
       let f_out_mem = f_output_memory ftree in
       check_memory "P-Main output" f_out_mem mem >>= fun () ->
