@@ -100,7 +100,7 @@ let derive_example path =
 let expect_valid_example path =
   let tree = derive_example path in
   expect_valid ("accept_" ^ Filename.basename path)
-    (C.check_ptree ~check_file:false tree)
+    (C.check_ptree ~use_check_file:false tree)
 
 let local_binding ?(typ = int_t) ?(value = must_value 1) name vid =
   let x = var name typ vid in
@@ -177,6 +177,113 @@ let call_with_first_arg_mem mem itree =
       in
       B.ITreeCallAssign (ltree, callee, arg :: args, ftree, concl)
   | _ -> failwith "expected call assignment tree with arguments"
+
+let call_with_forged_callee_signature itree =
+  match itree with
+  | B.ITreeCallAssign
+      (ltree, B.CalleeTreeDirect (_, var, fd), args, _ftree, concl) ->
+      let call_mem, instr, _ = concl in
+      let _, _, ret_loc = U.l_concl ltree in
+      let arg_values = List.map U.e_value args in
+      let forged_var = { var with S.vtype = Typ.TFun (int_t, Some [ ("x", int_t) ]) } in
+      let forged_formal =
+        match fd.S.sformals with
+        | formal :: _ -> { formal with S.vtype = uint_t }
+        | [] -> failwith "expected one formal"
+      in
+      let return_stmt = stmt (S.Return (Some (int_exp 1))) in
+      let forged_fd =
+        { fd with S.sformals = [ forged_formal ]; sbody = block [ return_stmt ] }
+      in
+      let body_mem =
+        must_ok "forged body input" Memory.string_of_error
+          (Memory.bind_local forged_formal (List.hd arg_values)
+             (Memory.enter_function call_mem))
+        |> snd
+      in
+      let forged_body =
+        let exp = int_exp 1 in
+        let value = must_value 1 in
+        let return_tree =
+          B.STreeReturnSome
+            ( B.ETreeConst (body_mem, exp, value),
+              (body_mem, stmt (S.Return (Some exp)), body_mem, B.Return value)
+            )
+        in
+        B.BTreeSeq
+          ([ return_tree ], (body_mem, forged_fd.S.sbody, body_mem, B.Return value))
+      in
+      let forged_out =
+        must_ok "forged leave function" Memory.string_of_error
+          (Memory.leave_function body_mem)
+      in
+      let forged_call_out =
+        must_ok "forged call write" Memory.string_of_error
+          (Memory.write ret_loc (must_value 1) forged_out)
+      in
+      let forged_ftree =
+        B.FTreeReturn
+          (forged_body, (call_mem, forged_fd, arg_values, forged_out, B.Return (must_value 1)))
+      in
+      let callee_exp = S.Lval (S.Var forged_var, S.NoOffset) in
+      B.ITreeCallAssign
+        ( ltree,
+          B.CalleeTreeDirect (callee_exp, forged_var, forged_fd),
+          args,
+          forged_ftree,
+          (call_mem, instr, forged_call_out) )
+  | _ -> failwith "expected call assignment tree"
+
+let call_void_with_forged_callee_signature itree =
+  match itree with
+  | B.ITreeCallAssign
+      (_, B.CalleeTreeDirect (_, var, fd), args, _ftree, concl) ->
+      let call_mem, _, _ = concl in
+      let arg_values = List.map U.e_value args in
+      let arg_exps = List.map (fun arg -> let _, exp, _ = U.e_concl arg in exp) args in
+      let forged_var = { var with S.vtype = Typ.TFun (int_t, Some [ ("x", int_t) ]) } in
+      let forged_formal =
+        match fd.S.sformals with
+        | formal :: _ -> { formal with S.vtype = uint_t }
+        | [] -> failwith "expected one formal"
+      in
+      let return_stmt = stmt (S.Return (Some (int_exp 1))) in
+      let forged_fd =
+        { fd with S.sformals = [ forged_formal ]; sbody = block [ return_stmt ] }
+      in
+      let body_mem =
+        must_ok "forged void body input" Memory.string_of_error
+          (Memory.bind_local forged_formal (List.hd arg_values)
+             (Memory.enter_function call_mem))
+        |> snd
+      in
+      let forged_body =
+        let exp = int_exp 1 in
+        let value = must_value 1 in
+        let return_tree =
+          B.STreeReturnSome
+            ( B.ETreeConst (body_mem, exp, value),
+              (body_mem, stmt (S.Return (Some exp)), body_mem, B.Return value)
+            )
+        in
+        B.BTreeSeq
+          ([ return_tree ], (body_mem, forged_fd.S.sbody, body_mem, B.Return value))
+      in
+      let forged_out =
+        must_ok "forged void leave function" Memory.string_of_error
+          (Memory.leave_function body_mem)
+      in
+      let forged_ftree =
+        B.FTreeReturn
+          (forged_body, (call_mem, forged_fd, arg_values, forged_out, B.Return (must_value 1)))
+      in
+      let callee_exp = S.Lval (S.Var forged_var, S.NoOffset) in
+      B.ITreeCallVoid
+        ( B.CalleeTreeDirect (callee_exp, forged_var, forged_fd),
+          args,
+          forged_ftree,
+          (call_mem, S.Call (None, callee_exp, arg_exps), forged_out) )
+  | _ -> failwith "expected call assignment tree"
 
 let return_const_stree mem n =
   let exp = int_exp n in
@@ -404,7 +511,7 @@ let run_function_and_program_errors () =
       valid
   in
   expect_invalid "reject_function_output" "F output"
-    (C.check_ptree ~check_file:false bad_output);
+    (C.check_ptree ~use_check_file:false bad_output);
   let bad_control =
     mutate_main_ftree
       (function
@@ -414,7 +521,7 @@ let run_function_and_program_errors () =
       valid
   in
   expect_invalid "reject_function_control" "F control"
-    (C.check_ptree ~check_file:false bad_control);
+    (C.check_ptree ~use_check_file:false bad_control);
   let bad_body_input =
     match valid with
     | B.PTreeMainReturn (B.FTreeReturn (btree, (mem, fd, args, out_mem, control)), _) ->
@@ -428,12 +535,12 @@ let run_function_and_program_errors () =
     mutate_main_concl (fun (file, _, value) -> (file, mem0, value)) valid
   in
   expect_invalid "reject_program_output" "P-Main output"
-    (C.check_ptree ~check_file:false bad_p_output);
+    (C.check_ptree ~use_check_file:false bad_p_output);
   let bad_p_value =
     mutate_main_concl (fun (file, mem, _) -> (file, mem, must_value 99)) valid
   in
   expect_invalid "reject_program_value" "P-Main value"
-    (C.check_ptree ~check_file:false bad_p_value);
+    (C.check_ptree ~use_check_file:false bad_p_value);
   let no_main_file = file [] in
   let bad_file = mutate_main_concl (fun (_, mem, value) -> (no_main_file, mem, value)) valid in
   expect_invalid "reject_program_file" "missing main function" (C.check_ptree bad_file);
@@ -445,7 +552,7 @@ let run_function_and_program_errors () =
     mutate_main_concl (fun (_, mem, value) -> (mismatch_file, mem, value)) valid
   in
   expect_invalid "reject_program_main_function" "P-Main function"
-    (C.check_ptree ~check_file:false bad_main);
+    (C.check_ptree ~use_check_file:false bad_main);
   let no_return =
     let fd = minimal_main (block []) in
     let body_mem = Memory.enter_function mem0 in
@@ -615,7 +722,7 @@ let run_suspected_gap_errors () =
   in
   expect_suspected_gap_invalid "reject_ghost_callee_function"
     "callee function"
-    (C.check_ptree ~check_file:false ghost_tree);
+    (C.check_ptree ~use_check_file:false ghost_tree);
   let fd_main = minimal_main (block [ stmt (S.Return (Some (int_exp 0))) ]) in
   let main_input = Memory.enter_function mem0 in
   let main_body_input = Memory.enter_function main_input in
@@ -639,12 +746,26 @@ let run_suspected_gap_errors () =
   in
   expect_suspected_gap_invalid "reject_main_nonempty_input"
     "P-Main input"
-    (C.check_ptree ~check_file:false nonempty_main_input);
+    (C.check_ptree ~use_check_file:false nonempty_main_input);
   expect_suspected_gap_invalid "reject_empty_execution_nonempty_block"
     "B-Seq empty execution"
     (C.check_btree
        (B.BTreeSeq
           ([], (mem0, block [ stmt (S.Instr []) ], mem0, B.Normal))));
+  let forged_call_tree =
+    first_call_assign (derive_example (example_path "function_call.c"))
+    |> call_with_forged_callee_signature
+  in
+  expect_suspected_gap_invalid "reject_call_callee_signature_mismatch"
+    "callee signature"
+    (C.check_itree forged_call_tree);
+  let forged_call_void_tree =
+    first_call_assign (derive_example (example_path "function_call.c"))
+    |> call_void_with_forged_callee_signature
+  in
+  expect_suspected_gap_invalid "reject_call_void_callee_signature_mismatch"
+    "callee signature"
+    (C.check_itree forged_call_void_tree);
   match List.rev !suspected_gap_failures with
   | [] -> ()
   | failures ->

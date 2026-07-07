@@ -16,6 +16,8 @@ Always follow these rules:
   `AGENTS.md` file after approval.
 - During design discussions, keep durable conclusions, hypotheses, and next
   actions updated in `.agents/CONTEXT.md` as the conversation progresses.
+- Keep `.agents/LANGUAGE.md` for stable language/semantics design and
+  `.agents/CONTEXT.md` for current state, recent changes, and next actions.
 - Do not delete or overwrite user-written content without explicit approval.
 - Before modifying files, show the planned diff/patch and present options to
   the user; apply changes only after the user confirms.

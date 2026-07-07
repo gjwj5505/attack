@@ -49,6 +49,14 @@ let check_fundec label expected actual =
   if SyntaxEqual.equal_fundec expected actual then ok
   else error (label ^ ": function mismatch")
 
+let expected_callee_type fd =
+  Typ.TFun
+    ( fd.Syntax.svar.Syntax.vtype,
+      Some
+        (List.map
+           (fun formal -> (formal.Syntax.vname, formal.Syntax.vtype))
+           fd.Syntax.sformals) )
+
 let check_callee_varinfo label var fd =
   let expected = fd.Syntax.svar in
   if
@@ -58,6 +66,12 @@ let check_callee_varinfo label var fd =
     && Int.equal var.Syntax.vid expected.Syntax.vid
   then ok
   else error (label ^ ": var/function mismatch")
+
+let check_callee_signature label callee =
+  match callee with
+  | CalleeTreeDirect (_, var, fd) ->
+      if var.Syntax.vtype = expected_callee_type fd then ok
+      else error (label ^ ": callee signature mismatch")
 
 let check_type label = function
   | Ok () -> ok
@@ -310,6 +324,7 @@ let rec check_itree tree =
           (TypeUtil.check_call ~return_target:None ~callee:(callee_exp callee)
              ~args:arg_exps)
         >>= fun () ->
+        check_callee_signature "I-CallVoid" callee >>= fun () ->
         check_instr "I-CallVoid subject"
           instr
           (Syntax.Call (None, callee_exp callee, arg_exps))
@@ -334,6 +349,7 @@ let rec check_itree tree =
           (TypeUtil.check_call ~return_target:(Some lval)
              ~callee:(callee_exp callee) ~args:arg_exps)
         >>= fun () ->
+        check_callee_signature "I-CallAssign" callee >>= fun () ->
         check_instr "I-CallAssign subject"
           instr
           (Syntax.Call (Some lval, callee_exp callee, arg_exps))
@@ -631,9 +647,11 @@ and check_ftree tree =
       >>= fun () ->
       check_control "F no-return control" ReturnVoid control
 
-let check_ptree ?(check_file = true) = function
+(* This option controls only whether Check.check_file is run. The proof-level
+   program checks below still run even when use_check_file is false. *)
+let check_ptree ?(use_check_file = true) = function
   | PTreeMainReturn (ftree, (file, mem, value)) ->
-      (if check_file then check_file_result "P-File" (Check.check_file file)
+      (if use_check_file then check_file_result "P-File" (Check.check_file file)
        else ok)
       >>= fun () ->
       (match SyntaxUtil.main_functions file with

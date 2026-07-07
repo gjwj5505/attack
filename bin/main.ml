@@ -68,7 +68,7 @@ let run_big_step file =
       match Derivator.derive_file file with
       | Ok tree ->
           begin
-            match BigStepChecker.check_ptree ~check_file:false tree with
+            match BigStepChecker.check_ptree ~use_check_file:false tree with
             | Valid -> ()
             | Invalid msg ->
                 prerr_endline ("invalid Big-Step tree: " ^ msg);

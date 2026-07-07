@@ -290,14 +290,19 @@ Whole-program checking verifies:
 - the function proof checks;
 - the program conclusion memory and return value match the function proof.
 
-`check_ptree` defaults to `check_file:true`. The CLI `-big` path already runs
-`Check.check_file` before derivation, so it calls
-`check_ptree ~check_file:false` after constructing the proof tree.
+`check_ptree` defaults to `use_check_file:true`. The option controls only
+whether `Check.check_file` is run; proof-level program checks still run either
+way. The CLI `-big` path already runs `Check.check_file` before derivation, so
+it calls `check_ptree ~use_check_file:false` after constructing the proof tree.
 
 Function return types are context-sensitive. Standalone statement/block checks
 can omit a return type, but function checking passes the enclosing function
 return type down to return statement checks. This keeps subtree checking useful
 while still making complete function/file proof checking strict.
+
+Direct callee proof trees must match both function identity and function
+signature. For direct calls, the callee expression's function type must agree
+with the callee `fundec` return type and formal parameter types.
 
 `lib/language/semantics/typeUtil.ml` owns the scalar type side conditions used
 by the proof checker. Current policy:
@@ -379,21 +384,3 @@ Soundness/completeness comparison uses all live local memory bindings at normal
 - soundness failure: the concrete value is not included in the analyzer result
 - completeness/precision failure: the analyzer result is wider than the
   singleton abstraction of the concrete value
-
-## Next Semantics Work
-
-The minimal `-big` path now constructs, checks, sizes, and renders a
-`BigStep.ptree` for scalar integer programs with direct calls, conditionals, and
-loops.
-
-Likely next extensions:
-
-1. re-audit proof checker structural coverage, especially `BTreeSeq` prefix
-   matching against source block statements,
-2. add missing checker tests for call-void and loop-specific invalid proof
-   shapes,
-3. global variable allocation and initializers,
-4. array index lvalue evaluation,
-5. pointer dereference and pointer arithmetic,
-6. runtime-error tests for uninitialized reads, division by zero, invalid
-   locations, and fuel exhaustion.
