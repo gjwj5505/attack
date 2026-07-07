@@ -119,14 +119,42 @@ Synthesis size is two-dimensional: `(program size, proof size)`.
   `0` unless they later become synthesis targets.
 - Keep synthesis rules and `lib/language/semantics/proof/size.ml` aligned.
 
+## Synthesis Reconnect Plan
+
+Reconnect synthesis incrementally while preserving the old file roles.
+
+Initial temporary target:
+
+- synthesize a `simple.c`-level scalar CIL' program;
+- no `if`, loop, function call, global, pointer, or array generation yet;
+- validate generated candidates through `Check.check_file`,
+  `Derivator.derive_file`, `BigStepChecker.check_ptree ~use_check_file:false`,
+  and `Objective.concrete_of_ptree`.
+
+Implementation plan:
+
+1. Rewrite `lib/synthesis/component_pool/` for CIL' candidate components.
+   Current component layers are syntax `exp`, `lval`, `offset`, `instr`,
+   `stmt`, `block`, `fundec`, `init`, `global`, `file` and proof `etree`,
+   `ltree`, `itree`, `stree`, `btree`, `ftree`, `ptree`.
+2. Temporarily implement `bottom_up.ml` as the owner of the small hardcoded
+   candidate generator, while preserving `grow_at_size` and `build_up_to`.
+3. Rewrite `attack.ml` around candidate search from the bottom-up table.
+   Keep `attack_result` as the future analyzer/objective result type, with
+   `Objective.witness` carrying concrete and analyzer observations.
+4. Re-enable the minimal `synthesis` library in dune and connect a small CLI
+   option after the library builds.
+5. Replace the temporary hardcoded candidate with real bottom-up grow rules for
+   expressions, assignments, returns, blocks, and `main` files.
+
 ## Next Actions
 
-1. Add global variable allocation and initializer semantics.
-2. Add array index lvalue evaluation.
-3. Add pointer dereference and pointer arithmetic.
-4. Add runtime-error tests for uninitialized reads, division by zero, invalid
+1. Reconnect minimal CIL' synthesis as described above.
+2. Add global variable allocation and initializer semantics.
+3. Add array index lvalue evaluation.
+4. Add pointer dereference and pointer arithmetic.
+5. Add runtime-error tests for uninitialized reads, division by zero, invalid
    locations, and fuel exhaustion.
-5. Re-audit `BigStepChecker` when pointer/array/global execution semantics are
+6. Re-audit `BigStepChecker` when pointer/array/global execution semantics are
    added.
-6. Reconnect synthesis once the evaluator/checker stabilizes.
 7. Reconnect Sparrow comparison after exported C compatibility is tested.

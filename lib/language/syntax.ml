@@ -251,3 +251,15 @@ type file = {
   mutable globinitcalled : bool;
   *)
 }
+
+type ast =
+  | AExp of exp
+  | ALval of lval
+  | AOffset of offset
+  | AInstr of instr
+  | AStmt of stmt
+  | ABlock of block
+  | AFundec of fundec
+  | AInit of init
+  | AGlobal of global
+  | AFile of file
