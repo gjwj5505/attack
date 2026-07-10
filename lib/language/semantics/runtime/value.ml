@@ -6,8 +6,8 @@ type int_value = {
 module Int32 = struct
   module I = Stdlib.Int32
 
-  (* Runtime integers are 32-bit words tagged with a CIL' integer kind. Int64 is
-     used only as a wider intermediate for checked conversion from CIL' integer
+  (* Runtime integers are 32-bit words tagged with a CIL-- integer kind. Int64 is
+     used only as a wider intermediate for checked conversion from CIL-- integer
      literal payloads, signed-overflow checks, and unsigned interpretation for
      division, remainder, comparison, and printing. Do not convert Int64
      payloads with Int64.to_int32 until the range check succeeds; that

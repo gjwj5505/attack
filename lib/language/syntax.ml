@@ -1,31 +1,41 @@
 (*
- * Syntax for the Sparrow-facing CIL subset. ( = CIL' )
+ * Syntax for the Sparrow-facing CIL subset. ( = CIL-- )
  *)
 
 type id = string
 
 module VarId = struct
-  type t = int
+  type scope =
+    | Global
+    | Function of id
 
-  let compare = Int.compare
+  type t = {
+    scope : scope;
+    name : id;
+  }
+
+  let compare = Stdlib.compare
+  let name id = id.name
+  let scope id = id.scope
+  let global name = { scope = Global; name }
+  let local ~function_name name = { scope = Function function_name; name }
 end
 
 type varinfo = {
-  (* mutable *) vname : id;
   (* mutable *) vtype : Typ.t; (* CIL: typ *)
   (*
   mutable vattr : attributes;
   mutable vstorage : storage;
   *)
   (* mutable *) vglob : bool;
-  (* CIL' extension. GoblintCil varinfo has no vtemp field. *)
+  (* CIL-- extension. GoblintCil varinfo has no vtemp field. *)
   vtemp : bool;
   (*
   mutable vinline : bool;
   mutable vdecl : location;
   vinit : initinfo;
   *)
-  (* mutable *) vid : int;
+  (* mutable *) vid : VarId.t;
   (*
   mutable vaddrof : bool;
   mutable vreferenced : bool;

@@ -12,11 +12,10 @@ let equal_option equal x y =
 let equal_typ = ( = )
 
 let equal_varinfo x y =
-  String.equal x.vname y.vname
+  Syntax.VarId.compare x.vid y.vid = 0
   && equal_typ x.vtype y.vtype
   && Bool.equal x.vglob y.vglob
   && Bool.equal x.vtemp y.vtemp
-  && Int.equal x.vid y.vid
 
 let equal_fieldinfo x y =
   String.equal x.fname y.fname && equal_typ x.ftype y.ftype

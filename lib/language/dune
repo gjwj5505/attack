@@ -10,7 +10,7 @@
   syntaxTree
   syntaxEqual
   cilBridge
-  check
+  astChecker
   location
   value
   valueOp

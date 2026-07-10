@@ -156,7 +156,7 @@ let string_of_exp_result value = Value.string_of_t value
 let string_of_lval_result loc = Location.string_of_t loc
 let string_of_instr_result mem = Memory.string_of_t mem
 let string_of_control_result control = string_of_control control
-let string_of_function_subject fd = fd.Syntax.svar.vname ^ "()"
+let string_of_function_subject fd = SyntaxUtil.var_name fd.Syntax.svar ^ "()"
 
 let e_conclusion ?(verbose = false) (mem, exp, value) =
   make_conclusion ~verbose mem (string_of_exp exp) (string_of_exp_result value)
@@ -230,7 +230,8 @@ and box_of_ltree ?(verbose = false) tree =
 let box_of_callee = function
   | CalleeTreeDirect (exp, _var, fd) ->
       build_proof "Callee" []
-        (make_conclusion_no_mem (string_of_exp exp) fd.Syntax.svar.vname)
+        (make_conclusion_no_mem (string_of_exp exp)
+           (SyntaxUtil.var_name fd.Syntax.svar))
 
 let rec box_of_itree ?(verbose = false) tree =
   match tree with

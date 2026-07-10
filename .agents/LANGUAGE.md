@@ -2,11 +2,11 @@
 
 This project no longer treats a hand-written C-like parser as the language
 source of truth. The current language target is a Sparrow-facing, CIL-shaped
-subset called CIL'.
+subset called CIL--.
 
 ## Goal
 
-The purpose of CIL' is to synthesize and execute small deterministic programs
+The purpose of CIL-- is to synthesize and execute small deterministic programs
 whose concrete final memory can be compared against Sparrow's abstract result.
 
 The intended pipeline is:
@@ -15,32 +15,32 @@ The intended pipeline is:
 C source
   -> GoblintCil parser
   -> GoblintCil.Cil.file
-  -> CIL'
-  -> Check.check_file
+  -> CIL--
+  -> AstChecker.check_file
   -> Big-Step / synthesis / objective
 ```
 
 For generated attacks:
 
 ```text
-Synthesized CIL'
-  -> optional Check.check_file
+Synthesized CIL--
+  -> optional AstChecker.check_file
   -> Big-Step concrete execution
   -> CIL
   -> pretty-printed C
   -> Sparrow input
 ```
 
-## CIL and CIL'
+## CIL and CIL--
 
 - CIL means the external OCaml CIL representation from `goblint-cil`.
-- CIL' means the internal supported subset in `lib/language/syntax.ml`.
+- CIL-- means the internal supported subset in `lib/language/syntax.ml`.
 
 CIL is used for parsing, pretty-printing, library utilities, and sanity checks.
-CIL' is the source of truth for synthesis, Big-Step semantics, proof trees, and
+CIL-- is the source of truth for synthesis, Big-Step semantics, proof trees, and
 attack objectives.
 
-CIL' follows CIL constructor shapes where useful:
+CIL-- follows CIL constructor shapes where useful:
 
 - `file -> global list`
 - `GFun -> fundec`
@@ -53,9 +53,38 @@ CIL' follows CIL constructor shapes where useful:
 - `offset = NoOffset | Field | Index`
 - `exp` is side-effect-free
 
-CIL' records are immutable for now. If later passes need labels, statement ids,
+CIL-- records are immutable for now. If later passes need labels, statement ids,
 CFG metadata, analysis annotations, or proof annotations attached after
 construction, make the relevant fields mutable in the CIL style at that point.
+
+## Variable Identity
+
+CIL-- identifies variables by `(scope, name)` rather than by arbitrary integer
+IDs. A scope is either `Global` or `Function function_name`.
+
+Global names are unique within a file. Formal and local names are unique within
+their function. Recursive activations reuse the same static variable ID because
+runtime memory contains only the active top stack state.
+
+`varinfo` does not store a separate `vname`. `VarId.name` is the sole source of
+truth for a variable's name, preventing inconsistent name/ID pairs. Renderers
+display only the name; scope remains available internally for checking and
+synthesis.
+
+GoblintCil integer `vid` values are bridge-only administrative IDs. CIL-- -> CIL
+conversion allocates integer IDs and maintains a scoped-ID-to-CIL-varinfo table.
+CIL -> CIL-- conversion reconstructs scoped IDs from the global or enclosing
+function context.
+
+Bottom-up synthesis should use a finite canonical name set such as `main`,
+`f0`, `x0`, and `ret`. This avoids both integer-ID bookkeeping and unbounded
+alpha-renaming variants. Scope-aware IDs prevent components belonging to one
+function from being combined accidentally with another function.
+
+The current `Global | Function name` scope model relies on the existing policy
+that rejects duplicate formal/local names within a function. If nested shadowing
+is supported later, function scope must be refined with a declaration or block
+path.
 
 ## Current Active Subset
 
@@ -100,7 +129,7 @@ Expressions and lvalues:
 
 ## Excluded Features
 
-These features are outside CIL' until explicitly designed:
+These features are outside CIL-- until explicitly designed:
 
 - casts
 - all integer kinds except `int` and `unsigned int`
@@ -122,16 +151,16 @@ relationship to GoblintCil while keeping the active AST small.
 
 ## Cast-Free Policy
 
-CIL' is a cast-free lowered CIL subset. There is no active `CastE` constructor.
+CIL-- is a cast-free lowered CIL subset. There is no active `CastE` constructor.
 
 This avoids having to distinguish source-level explicit casts from C front-end
 implicit conversions. If GoblintCil lowers a C source program into CIL containing
-`CastE`, the CIL -> CIL' bridge rejects it.
+`CastE`, the CIL -> CIL-- bridge rejects it.
 
 Consequences:
 
-- CIL' contains no implicit casts.
-- CIL' contains no explicit casts.
+- CIL-- contains no implicit casts.
+- CIL-- contains no explicit casts.
 - Binary operations must already have matching operand/result types.
 - Assignments and calls must be type-consistent without relying on conversion.
 - Mixed signedness examples such as `int + unsigned int` are rejected because
@@ -143,15 +172,15 @@ Big-Step rule and Sparrow CIL 1.7.3 compatibility check.
 ## Bridge Policy
 
 `lib/language/cilBridge.ml` implements conversion between GoblintCil CIL and
-CIL'.
+CIL--.
 
 - Input acceptance is based on the GoblintCil-lowered CIL form, not the surface
   C source shape. For example, a source expression such as `return f(-1);` may
   be accepted if GoblintCil lowers it into CIL instructions and expressions that
-  belong to CIL'. The project does not currently enforce a stricter
-  source-syntax-only CIL' policy.
-- CIL' -> CIL should be total for checked CIL' programs.
-- CIL -> CIL' accepts only the supported subset.
+  belong to CIL--. The project does not currently enforce a stricter
+  source-syntax-only CIL-- policy.
+- CIL-- -> CIL should be total for checked CIL-- programs.
+- CIL -> CIL-- accepts only the supported subset.
 - Unsupported CIL features return explicit errors.
 - Builtin declarations inserted by GoblintCil, such as `__builtin_*`,
   `__sync_*`, `__atomic_*`, and `__builtin_va_list`, are filtered from external
@@ -160,14 +189,15 @@ CIL'.
 The bridge also provides roundtrip checking:
 
 ```text
-CIL' -> CIL -> CIL'
+CIL-- -> CIL -> CIL--
 ```
 
-Roundtrip equality is structural CIL' equality. Statement ids are ignored.
+Roundtrip equality is structural CIL-- equality. Statement ids are ignored.
 
 ## Checker Policy
 
-`lib/language/check.ml` is a thin structural checker, not a full C typechecker.
+`lib/language/astChecker.ml` is a thin structural checker, not a full C
+typechecker.
 
 It currently checks:
 
@@ -179,7 +209,7 @@ It currently checks:
 - `continue` outside loops
 - return statement expression presence matches the enclosing function return
   type
-- CIL' roundtrip stability
+- CIL-- roundtrip stability
 - GoblintCil `Check.checkFile` on the converted CIL
 
 Big-Step program entry intentionally supports only `int main(void)`. `argc` /
@@ -190,10 +220,18 @@ GoblintCil's checker is used for CIL internal consistency, type consistency,
 varinfo sharing, initializer consistency, call consistency, and related CIL
 invariants.
 
-The CIL' checker exists because some invariants are enforced by the C parser,
+The current checked and executable value type is `int`. `void` is used only for
+functions that return no value, and `Typ.TFun` carries function signatures.
+`unsigned int`, pointers, arrays, and compound types may still be syntactically
+present in the bridge-facing AST, but their type correctness is intentionally
+outside the current `AstChecker.check_file` guarantee. When any of those types
+enters the active CIL-- subset, add explicit type checks and direct AST-checker
+tests before treating programs that use it as validated CIL--.
+
+The CIL-- checker exists because some invariants are enforced by the C parser,
 not by GoblintCil's CIL checker. For example, C source cannot contain a
 top-level loop-free `break`, but a synthesizer can directly construct such a
-CIL' AST.
+CIL-- AST.
 
 The checker is useful for CLI input validation and synthesis debugging. The
 final synthesis hot path may skip it if the generator itself maintains these
@@ -219,7 +257,7 @@ front-end.
 
 ## Big-Step Semantics
 
-The active Big-Step implementation constructs proof trees for CIL' programs.
+The active Big-Step implementation constructs proof trees for CIL-- programs.
 
 Layering:
 
@@ -231,7 +269,7 @@ Layering:
 - function proof trees enter/leave call frames and validate return control
 - file proof trees execute `main()`
 
-CIL' expressions are pure. Expression conclusions therefore have no output
+CIL-- expressions are pure. Expression conclusions therefore have no output
 memory:
 
 ```ocaml
@@ -326,7 +364,7 @@ separate buckets for each layer because grow rules need typed inputs such as
 ## Big-Step Checker
 
 `lib/language/semantics/proof/bigStepChecker.ml` validates that a Big-Step proof
-tree is consistent with its conclusion and with the CIL' program structure.
+tree is consistent with its conclusion and with the CIL-- program structure.
 
 There are two useful checking levels:
 
@@ -337,7 +375,7 @@ There are two useful checking levels:
 
 Whole-program checking verifies:
 
-- optionally, `Check.check_file file`;
+- optionally, `AstChecker.check_file file`;
 - exactly one `main` exists in the file;
 - the proof's function is that `main`;
 - `main` is called with no arguments;
@@ -345,8 +383,8 @@ Whole-program checking verifies:
 - the program conclusion memory and return value match the function proof.
 
 `check_ptree` defaults to `use_check_file:true`. The option controls only
-whether `Check.check_file` is run; proof-level program checks still run either
-way. The CLI `-big` path already runs `Check.check_file` before derivation, so
+whether `AstChecker.check_file` is run; proof-level program checks still run
+either way. The CLI `-big` path already runs `AstChecker.check_file` before derivation, so
 it calls `check_ptree ~use_check_file:false` after constructing the proof tree.
 
 Function return types are context-sensitive. Standalone statement/block checks
@@ -391,14 +429,14 @@ statement, block, function, and program layers.
 Sparrow reportedly uses CIL 1.7.3. GoblintCil 2.0.9 is only a utility layer for
 this project.
 
-For soundness/completeness attacks, CIL' Big-Step behavior must match the
+For soundness/completeness attacks, CIL-- Big-Step behavior must match the
 concrete behavior of the exported C program as parsed and lowered by Sparrow's
 CIL 1.7.3 frontend.
 
 Before relying on a feature for attacks, check that:
 
 ```text
-CIL' Big-Step concrete execution
+CIL-- Big-Step concrete execution
   = concrete behavior of exported C under Sparrow CIL 1.7.3 lowering
 ```
 
@@ -408,9 +446,9 @@ Only then can the result be compared against Sparrow's abstract analysis.
 
 Example files use `.c` because CIL is an OCaml AST, not a source-file syntax.
 Examples should be C source programs whose GoblintCil-lowered CIL belongs to
-the supported CIL' subset.
+the supported CIL-- subset.
 
-Success examples should avoid features outside CIL'. Unsupported examples
+Success examples should avoid features outside CIL--. Unsupported examples
 should be named clearly, such as `unsupported_cast_implicit.c`, and should have
 an expected rejection reason.
 
@@ -421,7 +459,7 @@ Current examples include:
 - `examples/fibonacci.c`
 
 Control-flow cases that cannot be represented as valid C source, such as
-loop-free `break`, should be tested by constructing CIL' ASTs directly in OCaml
+loop-free `break`, should be tested by constructing CIL-- ASTs directly in OCaml
 unit tests.
 
 ## Attack Observables
@@ -438,3 +476,10 @@ Soundness/completeness comparison uses all live local memory bindings at normal
 - soundness failure: the concrete value is not included in the analyzer result
 - completeness/precision failure: the analyzer result is wider than the
   singleton abstraction of the concrete value
+Function `svar.vtype` stores the complete non-vararg `Typ.TFun`, including the
+return type and formal parameter types. It is the canonical type of the
+function variable at definitions and call sites.
+
+`fundec.sformals` carries the corresponding formal varinfos. The AST checker
+requires the parameter names and types in `svar.vtype` to match `sformals`.
+`SyntaxUtil.function_return_type` extracts the return type from `svar.vtype`.

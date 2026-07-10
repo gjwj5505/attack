@@ -4,7 +4,7 @@ type object_id =
   | Heap of int
 
 (* Offsets are concrete linear element offsets within an allocated object.
-   CIL' lvalue offsets remain structural in Syntax.offset; lvalue evaluation is
+   CIL-- lvalue offsets remain structural in Syntax.offset; lvalue evaluation is
    responsible for lowering them through type/layout information into this
    linear offset.
 

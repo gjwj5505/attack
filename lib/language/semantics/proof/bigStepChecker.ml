@@ -13,7 +13,15 @@ let ( >>= ) res f =
   | Valid -> f ()
   | Invalid _ as err -> err
 
+let check_memory_well_formed label mem =
+  match Memory.check_well_formed mem with
+  | Ok () -> ok
+  | Error err ->
+      error (label ^ ": malformed memory: " ^ Memory.string_of_error err)
+
 let check_memory label expected actual =
+  check_memory_well_formed (label ^ " expected") expected >>= fun () ->
+  check_memory_well_formed (label ^ " actual") actual >>= fun () ->
   if expected = actual then ok else error (label ^ ": memory mismatch")
 
 let check_value label expected actual =
@@ -49,29 +57,170 @@ let check_fundec label expected actual =
   if SyntaxEqual.equal_fundec expected actual then ok
   else error (label ^ ": function mismatch")
 
-let expected_callee_type fd =
-  Typ.TFun
-    ( fd.Syntax.svar.Syntax.vtype,
-      Some
-        (List.map
-           (fun formal -> (formal.Syntax.vname, formal.Syntax.vtype))
-           fd.Syntax.sformals) )
+module VarMap = Map.Make (Syntax.VarId)
+module StringSet = Set.Make (String)
+
+let check_int_value label = function
+  | Value.Int { ikind = Typ.IInt; _ } -> ok
+  | value -> error (label ^ ": expected int value, got " ^ Value.string_of_t value)
+
+let check_function_metadata label fd =
+  let function_name = SyntaxUtil.var_name fd.Syntax.svar in
+  let svar = fd.Syntax.svar in
+  let rec check_all check = function
+    | [] -> ok
+    | item :: items ->
+        check item >>= fun () ->
+        check_all check items
+  in
+  let check_svar () =
+    if Syntax.VarId.scope svar.Syntax.vid <> Syntax.VarId.Global then
+      error (label ^ ": function svar must have global scope")
+    else if not svar.Syntax.vglob then
+      error (label ^ ": function svar must be global")
+    else if svar.Syntax.vtemp then
+      error (label ^ ": function svar cannot be temporary")
+    else
+      match svar.Syntax.vtype with
+      | Typ.TFun
+          ((Typ.TInt Typ.IInt | Typ.TVoid), Some declared_formals)
+        when List.for_all
+               (fun (_, typ) -> typ = Typ.TInt Typ.IInt)
+               declared_formals ->
+          ok
+      | _ -> error (label ^ ": function type is outside the int-only subset")
+  in
+  let expected_scope = Syntax.VarId.Function function_name in
+  let rec collect_declarations seen declarations = function
+    | [] -> Valid, seen, declarations
+    | variable :: variables ->
+        let name = SyntaxUtil.var_name variable in
+        if Syntax.VarId.scope variable.Syntax.vid <> expected_scope then
+          ( error (label ^ ": invalid local scope for " ^ name),
+            seen,
+            declarations )
+        else if variable.Syntax.vglob then
+          ( error (label ^ ": local marked global: " ^ name),
+            seen,
+            declarations )
+        else if variable.Syntax.vtype <> Typ.TInt Typ.IInt then
+          ( error (label ^ ": local type is not int: " ^ name),
+            seen,
+            declarations )
+        else if StringSet.mem name seen then
+          ( error (label ^ ": duplicate formal/local name: " ^ name),
+            seen,
+            declarations )
+        else
+          collect_declarations (StringSet.add name seen)
+            (VarMap.add variable.Syntax.vid variable declarations)
+            variables
+  in
+  let check_local_reference declarations occurrence =
+    match Syntax.VarId.scope occurrence.Syntax.vid with
+    | Syntax.VarId.Global -> ok
+    | Syntax.VarId.Function occurrence_function ->
+        if occurrence_function <> function_name then
+          error
+            (label ^ ": reference to another function local: "
+           ^ SyntaxUtil.string_of_var occurrence)
+        else
+          match VarMap.find_opt occurrence.Syntax.vid declarations with
+          | None ->
+              error
+                (label ^ ": undeclared local: "
+               ^ SyntaxUtil.string_of_var occurrence)
+          | Some declaration ->
+              if SyntaxEqual.equal_varinfo occurrence declaration then ok
+              else
+                error
+                  (label ^ ": local declaration mismatch: "
+                 ^ SyntaxUtil.string_of_var occurrence)
+  in
+  let rec check_exp declarations = function
+    | Syntax.Const _ -> ok
+    | Syntax.Lval lval -> check_lval declarations lval
+    | Syntax.UnOp (_, exp, _) -> check_exp declarations exp
+    | Syntax.BinOp (_, left, right, _) ->
+        check_exp declarations left >>= fun () ->
+        check_exp declarations right
+    | Syntax.AddrOf lval | Syntax.StartOf lval ->
+        check_lval declarations lval
+  and check_lval declarations (host, offset) =
+    (match host with
+    | Syntax.Var occurrence -> check_local_reference declarations occurrence
+    | Syntax.Mem exp -> check_exp declarations exp)
+    >>= fun () -> check_offset declarations offset
+  and check_offset declarations = function
+    | Syntax.NoOffset -> ok
+    | Syntax.Field (_, offset) -> check_offset declarations offset
+    | Syntax.Index (exp, offset) ->
+        check_exp declarations exp >>= fun () ->
+        check_offset declarations offset
+  in
+  let check_instr_references declarations = function
+    | Syntax.Set (lval, exp) ->
+        check_lval declarations lval >>= fun () ->
+        check_exp declarations exp
+    | Syntax.Call (return_lval, callee, args) ->
+        (match return_lval with
+        | None -> ok
+        | Some lval -> check_lval declarations lval)
+        >>= fun () ->
+        check_exp declarations callee >>= fun () ->
+        check_all (check_exp declarations) args
+  in
+  let rec check_stmt_references declarations stmt =
+    match stmt.Syntax.skind with
+    | Syntax.Instr instrs ->
+        check_all (check_instr_references declarations) instrs
+    | Syntax.Return None | Syntax.Break | Syntax.Continue -> ok
+    | Syntax.Return (Some exp) -> check_exp declarations exp
+    | Syntax.If (cond, then_block, else_block) ->
+        check_exp declarations cond >>= fun () ->
+        check_block_references declarations then_block >>= fun () ->
+        check_block_references declarations else_block
+    | Syntax.Loop body | Syntax.Block body ->
+        check_block_references declarations body
+  and check_block_references declarations block =
+    check_all (check_stmt_references declarations) block.Syntax.bstmts
+  in
+  check_svar () >>= fun () ->
+  let formal_result, seen, declarations =
+    collect_declarations StringSet.empty VarMap.empty fd.Syntax.sformals
+  in
+  formal_result >>= fun () ->
+  let local_result, _, declarations =
+    collect_declarations seen declarations fd.Syntax.slocals
+  in
+  local_result >>= fun () ->
+  check_block_references declarations fd.Syntax.sbody
 
 let check_callee_varinfo label var fd =
   let expected = fd.Syntax.svar in
   if
-    String.equal var.Syntax.vname expected.Syntax.vname
+    Syntax.VarId.compare var.Syntax.vid expected.Syntax.vid = 0
     && Bool.equal var.Syntax.vglob expected.Syntax.vglob
     && Bool.equal var.Syntax.vtemp expected.Syntax.vtemp
-    && Int.equal var.Syntax.vid expected.Syntax.vid
   then ok
   else error (label ^ ": var/function mismatch")
+
+let check_function_signature label fd =
+  let formals =
+    List.map
+      (fun formal -> (SyntaxUtil.var_name formal, formal.Syntax.vtype))
+      fd.Syntax.sformals
+  in
+  match fd.Syntax.svar.Syntax.vtype with
+  | Typ.TFun (_, Some declared_formals) when declared_formals = formals -> ok
+  | _ -> error (label ^ ": function signature mismatch")
 
 let check_callee_signature label callee =
   match callee with
   | CalleeTreeDirect (_, var, fd) ->
-      if var.Syntax.vtype = expected_callee_type fd then ok
-      else error (label ^ ": callee signature mismatch")
+      if var.Syntax.vtype <> fd.Syntax.svar.Syntax.vtype then
+        error (label ^ ": callee signature mismatch")
+      else check_function_signature label fd
 
 let check_type label = function
   | Ok () -> ok
@@ -83,7 +232,7 @@ let check_type_value label = function
 
 let check_file_result label = function
   | Ok () -> ok
-  | Error err -> error (label ^ ": " ^ Check.string_of_error err)
+  | Error err -> error (label ^ ": " ^ AstChecker.string_of_error err)
 
 let check_expected_memory label actual = function
   | Ok expected -> check_memory label expected actual
@@ -98,6 +247,19 @@ let check_return_type label return_type exp =
 let rec check_list check = function
   | [] -> ok
   | x :: xs -> check x >>= fun () -> check_list check xs
+
+let rec check_function_arguments label formals args =
+  match formals, args with
+  | [], [] -> ok
+  | formal :: formals, arg :: args ->
+      if formal.Syntax.vtype <> Typ.TInt Typ.IInt then
+        error
+          (label ^ ": formal type is outside the int-only subset: "
+         ^ SyntaxUtil.string_of_var formal)
+      else
+        check_int_value (label ^ " " ^ SyntaxUtil.var_name formal) arg
+        >>= fun () -> check_function_arguments label formals args
+  | [], _ :: _ | _ :: _, [] -> error (label ^ ": arity mismatch")
 
 let rec bind_expected_formals formals args mem =
   match formals, args with
@@ -124,6 +286,8 @@ let expected_function_body_input fd args mem =
   | Ok mem -> allocate_expected_locals fd.Syntax.slocals mem
 
 let rec check_etree tree =
+  let mem, _, _ = e_concl tree in
+  check_memory_well_formed "E input" mem >>= fun () ->
   match tree with
   | ETreeConst (_, exp, value) -> (
       check_type_value "E-Const type" (TypeUtil.type_of_exp exp) >>= fun () ->
@@ -268,6 +432,8 @@ let rec check_etree tree =
       | Value.Int _ -> error "E-StartOf result is not a pointer")
 
 and check_ltree tree =
+  let mem, _, _ = l_concl tree in
+  check_memory_well_formed "L input" mem >>= fun () ->
   match tree with
   | LTreeVar (mem, lval, loc) -> (
       check_type_value "L-Var type" (TypeUtil.type_of_lval lval) >>= fun () ->
@@ -294,6 +460,8 @@ and check_ltree tree =
       check_memory "L-Index index input" mem index_mem
 
 let rec check_itree tree =
+  let mem, _, _ = i_concl tree in
+  check_memory_well_formed "I input" mem >>= fun () ->
   match tree with
   | ITreeSet (ltree, etree, (mem, instr, out_mem)) -> (
       check_ltree ltree >>= fun () ->
@@ -420,6 +588,8 @@ and check_ftree_callees file = function
       check_btree_callees file btree
 
 and check_stree ?return_type tree =
+  let mem, _, _, _ = s_concl tree in
+  check_memory_well_formed "S input" mem >>= fun () ->
   match tree with
   | STreeInstr (itrees, (mem, stmt, out_mem, control)) ->
       check_list check_itree itrees >>= fun () ->
@@ -558,6 +728,8 @@ and check_instr_flow mem = function
       check_instr_flow i_out itrees
 
 and check_btree ?return_type tree =
+  let mem, _, _, _ = b_concl tree in
+  check_memory_well_formed "B input" mem >>= fun () ->
   match tree with
   | BTreeSeq (strees, (mem, block, out_mem, control)) ->
       check_list (check_stree ?return_type) strees >>= fun () ->
@@ -611,6 +783,12 @@ and check_block_completion strees stmts =
 and check_ftree tree =
   match tree with
   | FTreeReturn (btree, (mem, fd, args, out_mem, control)) ->
+      check_memory_well_formed "F input" mem >>= fun () ->
+      check_memory_well_formed "F output" out_mem >>= fun () ->
+      check_function_signature "F" fd >>= fun () ->
+      check_function_metadata "F" fd >>= fun () ->
+      check_function_arguments "F arguments" fd.Syntax.sformals args
+      >>= fun () ->
       check_btree ~return_type:(SyntaxUtil.function_return_type fd) btree
       >>= fun () ->
       let body_mem, body, body_out, body_control = b_concl btree in
@@ -619,7 +797,9 @@ and check_ftree tree =
         (expected_function_body_input fd args mem)
       >>= fun () ->
       check_block "F body" fd.Syntax.sbody body >>= fun () ->
-      (match Memory.leave_function body_out with
+      (match
+         Memory.leave_function ~caller_stack:mem.Memory.stack body_out
+       with
       | Ok expected -> check_memory "F output" expected out_mem
       | Error err -> error ("F leave function failed: " ^ Memory.string_of_error err))
       >>= fun () ->
@@ -627,6 +807,12 @@ and check_ftree tree =
         check_control "F control" body_control control
       else error "F return constructor: body did not return"
   | FTreeNoReturn (btree, (mem, fd, args, out_mem, control)) ->
+      check_memory_well_formed "F input" mem >>= fun () ->
+      check_memory_well_formed "F output" out_mem >>= fun () ->
+      check_function_signature "F" fd >>= fun () ->
+      check_function_metadata "F" fd >>= fun () ->
+      check_function_arguments "F arguments" fd.Syntax.sformals args
+      >>= fun () ->
       check_btree ~return_type:(SyntaxUtil.function_return_type fd) btree
       >>= fun () ->
       let body_mem, body, body_out, body_control = b_concl btree in
@@ -635,7 +821,9 @@ and check_ftree tree =
         (expected_function_body_input fd args mem)
       >>= fun () ->
       check_block "F body" fd.Syntax.sbody body >>= fun () ->
-      (match Memory.leave_function body_out with
+      (match
+         Memory.leave_function ~caller_stack:mem.Memory.stack body_out
+       with
       | Ok expected -> check_memory "F output" expected out_mem
       | Error err -> error ("F leave function failed: " ^ Memory.string_of_error err))
       >>= fun () ->
@@ -647,11 +835,14 @@ and check_ftree tree =
       >>= fun () ->
       check_control "F no-return control" ReturnVoid control
 
-(* This option controls only whether Check.check_file is run. The proof-level
+(* This option controls only whether AstChecker.check_file is run. The proof-level
    program checks below still run even when use_check_file is false. *)
 let check_ptree ?(use_check_file = true) = function
   | PTreeMainReturn (ftree, (file, mem, value)) ->
-      (if use_check_file then check_file_result "P-File" (Check.check_file file)
+      check_memory_well_formed "P output" mem >>= fun () ->
+      check_int_value "P value" value >>= fun () ->
+      (if use_check_file then
+         check_file_result "P-File" (AstChecker.check_file file)
        else ok)
       >>= fun () ->
       (match SyntaxUtil.main_functions file with

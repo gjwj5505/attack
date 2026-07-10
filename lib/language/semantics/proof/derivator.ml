@@ -302,7 +302,7 @@ and derive_function ctx fuel call_mem fd arg_values =
   let actual = List.length arg_values in
   if expected <> actual then
     Error
-      (Arity_mismatch { function_name = fd.svar.vname; expected; actual })
+      (Arity_mismatch { function_name = var_name fd.svar; expected; actual })
   else
     let mem = Memory.enter_function call_mem in
     let* mem = bind_formals fd.sformals arg_values mem in
@@ -327,7 +327,10 @@ and derive_function ctx fuel call_mem fd arg_values =
           | Break -> Error Break_outside_loop
           | Continue -> Error Continue_outside_loop )
     in
-    let* out_mem = map_memory_error (Memory.leave_function body_mem) in
+    let* out_mem =
+      map_memory_error
+        (Memory.leave_function ~caller_stack:call_mem.Memory.stack body_mem)
+    in
     let concl = (call_mem, fd, arg_values, out_mem, control) in
     if explicit_return then Ok (FTreeReturn (body_tree, concl), fuel)
     else Ok (FTreeNoReturn (body_tree, concl), fuel)
@@ -353,7 +356,7 @@ let string_of_error = function
   | Value_error err -> "value error: " ^ Value.string_of_error err
   | Value_op_error err -> "value operator error: " ^ ValueOp.string_of_error err
   | Memory_error err -> "memory error: " ^ Memory.string_of_error err
-  | Unsupported msg -> "unsupported CIL' construct: " ^ msg
+  | Unsupported msg -> "unsupported CIL-- construct: " ^ msg
   | Type_error msg -> "type error: " ^ msg
   | Missing_main -> "missing main function"
   | Multiple_main -> "multiple main functions"
@@ -361,11 +364,11 @@ let string_of_error = function
   | Arity_mismatch { function_name; expected; actual } ->
       Printf.sprintf "arity mismatch in %s: expected %d argument(s), got %d"
         function_name expected actual
-  | Missing_return fd -> "missing return in " ^ fd.svar.vname
+  | Missing_return fd -> "missing return in " ^ var_name fd.svar
   | Return_value_in_void_function fd ->
-      "return value in void function " ^ fd.svar.vname
+      "return value in void function " ^ var_name fd.svar
   | Return_without_value_in_nonvoid_function fd ->
-      "return without value in non-void function " ^ fd.svar.vname
+      "return without value in non-void function " ^ var_name fd.svar
   | Break_outside_loop -> "break reached function boundary"
   | Continue_outside_loop -> "continue reached function boundary"
   | Out_of_fuel -> "derivation ran out of fuel"

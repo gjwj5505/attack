@@ -1,6 +1,6 @@
 module S = Syntax
 
-(* CIL' calls have a callee expression:
+(* CIL-- calls have a callee expression:
 
      Call of lval option * Exp.t * Exp.t list
 

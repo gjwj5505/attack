@@ -5,7 +5,7 @@
 ;  (libraries language attack_config synthesis))
 
 (test
- (name check_test)
+ (name astcheck_test)
  (libraries language))
 
 (test

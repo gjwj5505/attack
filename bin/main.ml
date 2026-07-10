@@ -4,9 +4,11 @@ let src = ref ""
 let opt_pp = ref false
 let opt_big = ref false
 let opt_ast = ref false
+let opt_verbose = ref false
 
 let usage =
-  "Usage : " ^ Filename.basename Sys.argv.(0) ^ " [-pp|-big|-ast] [c-file] "
+  "Usage : " ^ Filename.basename Sys.argv.(0)
+  ^ " [-pp|-big|-ast] [-v] [c-file] "
 
 let fail_usage msg =
   prerr_endline ("Error: " ^ msg);
@@ -28,7 +30,7 @@ let parse_file () =
       exit 1
 
 let print_file file =
-  match Check.check_file file with
+  match AstChecker.check_file file with
   | Ok () -> (
       match CilBridge.write_file stdout file with
       | Ok () -> ()
@@ -36,7 +38,7 @@ let print_file file =
           prerr_endline (CilBridge.string_of_error err);
           exit 1 )
   | Error err ->
-      prerr_endline (Check.string_of_error err);
+      prerr_endline (AstChecker.string_of_error err);
       exit 1
 
 let ensure_dir path =
@@ -44,7 +46,7 @@ let ensure_dir path =
   else Sys.mkdir path 0o755
 
 let print_ast file =
-  match Check.check_file file with
+  match AstChecker.check_file file with
   | Ok () ->
       let out_dir = "dist/asts" in
       ensure_dir "dist";
@@ -53,16 +55,16 @@ let print_ast file =
       let svg_path = Filename.concat out_dir (base ^ ".svg") in
       SyntaxTree.write_file_svg svg_path file;
       let size = Size.make (Size.sizeof_file file) 0 in
-      Printf.printf "CIL' AST size %s\nSVG written to %s\n"
+      Printf.printf "CIL-- AST size %s\nSVG written to %s\n"
         (Size.to_string size) svg_path
   | Error err ->
-      prerr_endline (Check.string_of_error err);
+      prerr_endline (AstChecker.string_of_error err);
       exit 1
 
 let run_big_step file =
-  match Check.check_file file with
+  match AstChecker.check_file file with
   | Error err ->
-      prerr_endline (Check.string_of_error err);
+      prerr_endline (AstChecker.string_of_error err);
       exit 1
   | Ok () -> (
       match Derivator.derive_file file with
@@ -81,7 +83,8 @@ let run_big_step file =
           ensure_dir out_dir;
           let base = Filename.basename !src |> Filename.remove_extension in
           let svg_path = Filename.concat out_dir (base ^ ".svg") in
-          Visualizer.write_tree_svg svg_path (BigStep.PTree tree);
+          Visualizer.write_tree_svg ~verbose:!opt_verbose svg_path
+            (BigStep.PTree tree);
           Printf.printf
             "Big-Step tree constructed and checked. main returned %s\nSize %s\nSVG written to %s\n"
             (Value.string_of_t value) (Size.to_string size) svg_path
@@ -94,13 +97,16 @@ let main () =
     [
       ( "-pp",
         Arg.Unit (fun _ -> opt_pp := true),
-        "parse C with GoblintCil, lower to CIL', convert back to CIL, and print" );
+        "parse C with GoblintCil, lower to CIL--, convert back to CIL, and print" );
       ( "-big",
         Arg.Unit (fun _ -> opt_big := true),
-        "derive and print a CIL' Big-Step tree" );
+        "derive and print a CIL-- Big-Step tree" );
       ( "-ast",
         Arg.Unit (fun _ -> opt_ast := true),
-        "parse C with GoblintCil, lower to CIL', check, and print the CIL' AST" );
+        "parse C with GoblintCil, lower to CIL--, check, and print the CIL-- AST" );
+      ( "-v",
+        Arg.Set opt_verbose,
+        "show global and top-stack memory in Big-Step proof conclusions" );
     ]
   in
   let speclist =

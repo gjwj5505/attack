@@ -3,7 +3,7 @@ open Syntax
 let indent lvl = String.make (2 * lvl) ' '
 
 let string_of_varinfo v =
-  Printf.sprintf "%s %s" (Typ.string_of_t v.vtype) v.vname
+  Printf.sprintf "%s %s" (Typ.string_of_t v.vtype) (SyntaxUtil.var_name v)
 
 module Exp = struct
   let string_of_constant = function
@@ -54,7 +54,7 @@ module Exp = struct
     string_of_lhost host ^ string_of_offset offset
 
   and string_of_lhost = function
-    | Var v -> v.vname
+    | Var v -> SyntaxUtil.var_name v
     | Mem e -> "*" ^ string_of_t e
 
   and string_of_offset = function
@@ -114,8 +114,9 @@ and string_of_block ?(lvl = 0) block =
 
 let string_of_fundec f =
   let params = String.concat ", " (List.map string_of_varinfo f.sformals) in
-  Printf.sprintf "%s %s(%s) %s" (Typ.string_of_t f.svar.vtype)
-    f.svar.vname params (string_of_block f.sbody)
+  Printf.sprintf "%s %s(%s) %s"
+    (Typ.string_of_t (SyntaxUtil.function_return_type f))
+    (SyntaxUtil.var_name f.svar) params (string_of_block f.sbody)
 
 let rec string_of_init = function
   | SingleInit e -> Exp.string_of_t e

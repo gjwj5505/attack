@@ -1,54 +1,77 @@
 # TODO
 
-## Next: CIL' Big-Step
+## Next Session: Minimal CIL-- Synthesis
 
-- Define CIL' runtime values.
-- Define addresses, memory blocks, and variable allocation.
-- Define global/function environments.
-- Implement lvalue evaluation.
-- Implement expression evaluation.
-- Implement instruction evaluation for `Set` and `Call`.
-- Implement statement/block evaluation for `Return`, `If`, `Loop`,
-  `Break`, `Continue`, and `Block`.
-- Reintroduce proof tree types for CIL'.
-- Add runtime-error/no-tree cases.
+- Inspect the current `lib/synthesis` files and disabled dune stanzas before
+  editing.
+- Re-enable only the minimal synthesis library needed for the first target.
+- Preserve the existing size-indexed bottom-up API: `grow_at_size` and
+  `build_up_to`.
+- Use the rewritten CIL-- component pool for syntax and proof components.
+- Seed only the active int-only subset:
+  - `int` constants;
+  - local int variables;
+  - variable lvalues and reads;
+  - supported integer unary/binary expressions;
+  - assignment, sequential block, and return;
+  - one `int main(void)` function and file.
+- Do not initially generate globals, additional functions/calls, branches,
+  loops, pointers, arrays, fields, or deferred integer kinds.
+- Validate completed candidates through:
 
-## Runtime Errors To Model
+```text
+AstChecker.check_file
+-> Derivator.derive_file
+-> BigStepChecker.check_ptree ~use_check_file:false
+-> Objective.concrete_of_ptree
+```
 
-- Uninitialized read.
-- Division or modulo by zero.
-- Invalid pointer dereference.
-- Out-of-bounds array access.
-- Missing function body.
-- Nonzero `main` return for normal-completion comparisons.
-- Fuel exhaustion.
+- Rewrite `bottom_up.ml` around the minimal candidate generator.
+- Rewrite `attack.ml` around candidate search and objective observation.
+- Add a minimal CLI entry only after the synthesis library builds and its direct
+  tests pass.
 
-## Validation
+## Completed 2026-07-10 Checkpoint
+
+- CIL-- uses scoped variable IDs and canonical complete `Typ.TFun` function
+  types.
+- Runtime memory stores only the active top stack frame plus global and heap
+  state; there is no full-stack mode.
+- The derivator recursion owns caller stacks across calls.
+- `enter_function` replaces the active frame; `leave_function ~caller_stack`
+  restores the caller while retaining callee global/heap updates.
+- `Memory.check_well_formed` validates int-only proof-boundary memories.
+- AstChecker has 57 passing regression cases; see `.agents/astcheck.md`.
+- BigStepChecker has 105 passing regression cases; see
+  `.agents/bigstepcheck.md`.
+- Nested caller restoration, callee-local disposal, global propagation,
+  malformed memories, raw non-int values, and standalone fundec metadata are
+  covered by direct tests.
+
+## Deferred Semantics
+
+- Global variable allocation and initializer execution in the derivator.
+- Additional function/call generation in synthesis.
+- Branch and loop generation in synthesis.
+- Array index lvalue evaluation.
+- Pointer dereference, pointer arithmetic, and stack reachability through
+  pointers.
+- Deferred integer kinds and conversions.
+- Runtime-error tests for uninitialized reads, division by zero, invalid
+  locations, and fuel exhaustion.
+- Sparrow comparison after exported C compatibility is tested.
+
+Re-audit memory and BigStepChecker invariants whenever pointer, array, global,
+or additional value-type execution semantics are activated.
+
+## Validation Discipline
 
 - Keep `dune build` green after each small step.
-- Keep `dune runtest` green.
-- Keep supported examples passing:
-  - `examples/cil_small_while.c`
-  - `examples/cil_branch_loop.c`
-  - `examples/cil_pointer_array_call.c`
-- Keep unsupported examples rejecting as expected:
-  - `examples/unsupported_cast_implicit.c`
-- Add one direct CIL' unit test for every new checker or semantic invariant
-  that cannot be expressed as valid C source.
-
-## Analyzer / Synthesis Reconnect
-
-- Re-enable synthesis only after CIL' Big-Step stabilizes.
-- Make synthesis generate well-formed CIL' directly.
-- Use `Check.check_file` as an optional debug guard, not necessarily on the
-  final fast synthesis path.
-- Re-enable Sparrow wrapper after printable CIL' programs are stable.
-- Check exported C against Sparrow's CIL 1.7.3 frontend before relying on an
-  attack result.
-
-## Cleanup
-
-- Keep `.agents/CONTEXT.md` updated with current implementation state.
-- Keep `.agents/LANGUAGE.md` as the language/semantics source of truth.
+- Run `lib/test/astcheck_test.exe` and `lib/test/bigstepcheck_test.exe` after
+  language, memory, derivator, or checker changes.
+- Add a direct CIL-- unit test for every new semantic or checker invariant that
+  cannot be expressed as valid C source.
+- Keep `.agents/CONTEXT.md`, `.agents/LANGUAGE.md`, `.agents/astcheck.md`, and
+  `.agents/bigstepcheck.md` synchronized with implementation changes.
 - Do not update `.agents/c-feature.csv` until the feature matrix is
   intentionally revisited.

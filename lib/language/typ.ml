@@ -27,11 +27,11 @@ type t =
   | TPtr of t (* CIL: TPtr of typ * attributes *)
   | TArray of t * int64 option
     (* CIL: TArray of typ * exp option * attributes.
-       CIL' keeps only constant integer array lengths to avoid a Typ/Syntax
+       CIL-- keeps only constant integer array lengths to avoid a Typ/Syntax
        module cycle. *)
   | TFun of t * (string * t) list option
     (* CIL: TFun of typ * (string * typ * attributes) list option
-       * bool * attributes. CIL' does not support varargs. *)
+       * bool * attributes. CIL-- does not support varargs. *)
   (*
   | TNamed of typeinfo
   | TComp of compinfo

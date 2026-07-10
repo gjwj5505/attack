@@ -79,7 +79,8 @@ let leaf name value = build_node (name ^ " " ^ value) []
 let leaf_name name = build_node name []
 
 let string_of_varinfo v =
-  Printf.sprintf "%s#%d : %s%s" v.vname v.vid (Typ.string_of_t v.vtype)
+  Printf.sprintf "%s : %s%s" (SyntaxUtil.string_of_var v)
+    (Typ.string_of_t v.vtype)
     (if v.vglob then " global" else "")
 
 let string_of_fieldinfo f =
