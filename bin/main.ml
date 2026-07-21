@@ -30,7 +30,7 @@ let parse_file () =
       exit 1
 
 let print_file file =
-  match AstChecker.check_file file with
+  match SyntaxChecker.check_file file with
   | Ok () -> (
       match CilBridge.write_file stdout file with
       | Ok () -> ()
@@ -38,7 +38,7 @@ let print_file file =
           prerr_endline (CilBridge.string_of_error err);
           exit 1 )
   | Error err ->
-      prerr_endline (AstChecker.string_of_error err);
+      prerr_endline (SyntaxChecker.string_of_error err);
       exit 1
 
 let ensure_dir path =
@@ -46,25 +46,25 @@ let ensure_dir path =
   else Sys.mkdir path 0o755
 
 let print_ast file =
-  match AstChecker.check_file file with
+  match SyntaxChecker.check_file file with
   | Ok () ->
       let out_dir = "dist/asts" in
       ensure_dir "dist";
       ensure_dir out_dir;
       let base = Filename.basename !src |> Filename.remove_extension in
       let svg_path = Filename.concat out_dir (base ^ ".svg") in
-      SyntaxTree.write_file_svg svg_path file;
+      SyntaxPretty.write_file_svg svg_path file;
       let size = Size.make (Size.sizeof_file file) 0 in
       Printf.printf "CIL-- AST size %s\nSVG written to %s\n"
         (Size.to_string size) svg_path
   | Error err ->
-      prerr_endline (AstChecker.string_of_error err);
+      prerr_endline (SyntaxChecker.string_of_error err);
       exit 1
 
 let run_big_step file =
-  match AstChecker.check_file file with
+  match SyntaxChecker.check_file file with
   | Error err ->
-      prerr_endline (AstChecker.string_of_error err);
+      prerr_endline (SyntaxChecker.string_of_error err);
       exit 1
   | Ok () -> (
       match Derivator.derive_file file with

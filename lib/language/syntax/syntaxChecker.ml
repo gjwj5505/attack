@@ -1,4 +1,4 @@
-(* Structural checker for CIL-- abstract syntax. *)
+(* Structural checker for CIL-- syntax. *)
 
 module Cil = GoblintCil.Cil
 module GoblintCheck = GoblintCil.Check

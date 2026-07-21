@@ -106,7 +106,7 @@ return.
 
 ### Whole programs
 
-- `AstChecker.check_file` is optional through `use_check_file` and defaults to
+- `SyntaxChecker.check_file` is optional through `use_check_file` and defaults to
   enabled.
 - The proof function is the file's unique `main`.
 - `main` receives no arguments and begins with empty program input memory.
@@ -114,7 +114,7 @@ return.
 - Program output memory equals the function output memory.
 - Program result equals the value returned by `main`.
 
-The CLI already runs `AstChecker.check_file` before derivation, so its final
+The CLI already runs `SyntaxChecker.check_file` before derivation, so its final
 proof check uses `check_ptree ~use_check_file:false` without skipping any
 proof-level invariant.
 

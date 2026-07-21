@@ -5,7 +5,15 @@
 ;  (libraries language attack_config synthesis))
 
 (test
- (name astcheck_test)
+ (name syntaxcheck_test)
+ (libraries language))
+
+(test
+ (name holeSyntaxCheck_test)
+ (libraries language))
+
+(test
+ (name holeSubstitution_test)
  (libraries language))
 
 (test

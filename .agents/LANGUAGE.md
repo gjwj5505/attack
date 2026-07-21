@@ -16,7 +16,7 @@ C source
   -> GoblintCil parser
   -> GoblintCil.Cil.file
   -> CIL--
-  -> AstChecker.check_file
+  -> SyntaxChecker.check_file
   -> Big-Step / synthesis / objective
 ```
 
@@ -24,7 +24,7 @@ For generated attacks:
 
 ```text
 Synthesized CIL--
-  -> optional AstChecker.check_file
+  -> optional SyntaxChecker.check_file
   -> Big-Step concrete execution
   -> CIL
   -> pretty-printed C
@@ -34,7 +34,8 @@ Synthesized CIL--
 ## CIL and CIL--
 
 - CIL means the external OCaml CIL representation from `goblint-cil`.
-- CIL-- means the internal supported subset in `lib/language/syntax.ml`.
+- CIL-- means the internal supported subset in
+  `lib/language/syntax/syntax.ml`.
 
 CIL is used for parsing, pretty-printing, library utilities, and sanity checks.
 CIL-- is the source of truth for synthesis, Big-Step semantics, proof trees, and
@@ -62,9 +63,11 @@ construction, make the relevant fields mutable in the CIL style at that point.
 CIL-- identifies variables by `(scope, name)` rather than by arbitrary integer
 IDs. A scope is either `Global` or `Function function_name`.
 
-Global names are unique within a file. Formal and local names are unique within
-their function. Recursive activations reuse the same static variable ID because
-runtime memory contains only the active top stack state.
+Global object names are unique within a file. A function identifier may occur
+in compatible forward declarations and once in a function definition, as
+specified below. Formal and local names are unique within their function.
+Recursive activations reuse the same static variable ID because runtime memory
+contains only the active top stack state.
 
 `varinfo` does not store a separate `vname`. `VarId.name` is the sole source of
 truth for a variable's name, preventing inconsistent name/ID pairs. Renderers
@@ -76,10 +79,13 @@ conversion allocates integer IDs and maintains a scoped-ID-to-CIL-varinfo table.
 CIL -> CIL-- conversion reconstructs scoped IDs from the global or enclosing
 function context.
 
-Bottom-up synthesis should use a finite canonical name set such as `main`,
-`f0`, `x0`, and `ret`. This avoids both integer-ID bookkeeping and unbounded
-alpha-renaming variants. Scope-aware IDs prevent components belonging to one
-function from being combined accidentally with another function.
+The current bottom-up synthesis reconnect uses the finite canonical function
+name set `main`, `f`, and `g`, plus finite canonical formal/local name sets. The
+first auxiliary function is `f`; `g` is introduced only after `f`. This avoids
+both integer-ID bookkeeping and unbounded alpha-renaming variants while still
+distinguishing self calls from calls to another function. Scope-aware IDs
+prevent components belonging to one function from being combined accidentally
+with another function.
 
 The current `Global | Function name` scope model relies on the existing policy
 that rejects duplicate formal/local names within a function. If nested shadowing
@@ -99,9 +105,37 @@ Types:
 
 Globals:
 
+- function declarations represented by `GVarDecl` whose type is `TFun`
 - function definitions
 - global variable declarations
 - global variable definitions with initializers
+
+### Function Forward Declarations
+
+CIL-- permits a function declaration and definition to share one global
+function identifier. This is required for recursive and mutually recursive
+files whose definitions must be presented to C tooling in declaration order.
+
+- Every declaration and definition of one function uses the same global
+  `VarId`.
+- Their complete non-vararg `TFun` signatures must be structurally equal,
+  including return type and formal parameter types.
+- A file contains at most one `GFun` definition for a function identifier.
+- Compatible repeated declarations may be accepted by the checker. The
+  synthesizer emits at most one forward declaration per function.
+- A non-function global object and a function may not share an identifier.
+- Function declarations needed by later definitions appear before those
+  definitions in the emitted global list.
+- The CIL bridge must reuse the same CIL function `varinfo` for compatible
+  declarations, definitions, and direct call sites.
+
+Forward declarations add static `Total` syntax but do not independently enter
+an execution `Footprint`. A footprint records the unique completed `fundec`
+actually used by a proof.
+
+Implementation status: `SyntaxChecker` still rejects every duplicate global name,
+including a compatible function declaration/definition pair. The synthesis
+reconnect must implement the policy above before emitting mutual recursion.
 
 Statements and instructions:
 
@@ -146,8 +180,8 @@ These features are outside CIL-- until explicitly designed:
 - source locations as active semantic data
 
 Some excluded CIL constructors remain as comments beside the corresponding
-active definitions in `syntax.ml`. That is intentional: the file records the
-relationship to GoblintCil while keeping the active AST small.
+active definitions in `lib/language/syntax/syntax.ml`. That is intentional: the
+file records the relationship to GoblintCil while keeping the active AST small.
 
 ## Cast-Free Policy
 
@@ -196,7 +230,7 @@ Roundtrip equality is structural CIL-- equality. Statement ids are ignored.
 
 ## Checker Policy
 
-`lib/language/astChecker.ml` is a thin structural checker, not a full C
+`lib/language/syntax/syntaxChecker.ml` is a thin structural checker, not a full C
 typechecker.
 
 It currently checks:
@@ -204,7 +238,8 @@ It currently checks:
 - exactly one `main`
 - `main` has return type `int`
 - `main` has no parameters
-- duplicate global names
+- duplicate global names; this is the current rule to be replaced by the
+  compatible function declaration/definition policy above
 - `break` outside loops
 - `continue` outside loops
 - return statement expression presence matches the enclosing function return
@@ -224,7 +259,7 @@ The current checked and executable value type is `int`. `void` is used only for
 functions that return no value, and `Typ.TFun` carries function signatures.
 `unsigned int`, pointers, arrays, and compound types may still be syntactically
 present in the bridge-facing AST, but their type correctness is intentionally
-outside the current `AstChecker.check_file` guarantee. When any of those types
+outside the current `SyntaxChecker.check_file` guarantee. When any of those types
 enters the active CIL-- subset, add explicit type checks and direct AST-checker
 tests before treating programs that use it as validated CIL--.
 
@@ -349,12 +384,21 @@ For Big-Step proofs, component layers follow the independent proof-tree layers:
 `callee_tree` is not a component bucket for now. Direct-call rules construct it
 inside the call-instruction proof rule.
 
-Component buckets are organized by two-dimensional synthesis size:
+The selected synthesis design does not use a two-dimensional size for proof
+components. Raw code and proofs live in independently scheduled pools:
 
-- raw syntax components are stored at `(sizeof syntax, 0)`;
-- proof components are stored at `Size.sizeof_tree (BigStep.<layer> tree)`,
-  which includes both the proof tree size and the program size of the proof
-  conclusion.
+- `CodePool` stores raw syntax components by ordinary static AST size;
+- `ProofPool` stores schematic Big-Step proof components by
+  one-dimensional `proof_size` only.
+
+For a proof target of size `n`, the parent proof rule costs one and the sizes
+of its actual proof-tree premises are positive integers summing to `n - 1`.
+Static syntax appearing in a conclusion, including holes, receives no part of
+that proof-size partition. Loops and calls therefore depend only on already
+synthesized strict proof subtrees. The size of the materialized concrete
+program is measured only after completion and may be used for reporting,
+result ordering, or a separate output bound; it is not a proof construction
+order.
 
 The syntax wrapper `Syntax.ast` mirrors the syntax component layers for
 documentation and future shared dispatch. The component pool still keeps
@@ -375,7 +419,7 @@ There are two useful checking levels:
 
 Whole-program checking verifies:
 
-- optionally, `AstChecker.check_file file`;
+- optionally, `SyntaxChecker.check_file file`;
 - exactly one `main` exists in the file;
 - the proof's function is that `main`;
 - `main` is called with no arguments;
@@ -383,8 +427,8 @@ Whole-program checking verifies:
 - the program conclusion memory and return value match the function proof.
 
 `check_ptree` defaults to `use_check_file:true`. The option controls only
-whether `AstChecker.check_file` is run; proof-level program checks still run
-either way. The CLI `-big` path already runs `AstChecker.check_file` before derivation, so
+whether `SyntaxChecker.check_file` is run; proof-level program checks still run
+either way. The CLI `-big` path already runs `SyntaxChecker.check_file` before derivation, so
 it calls `check_ptree ~use_check_file:false` after constructing the proof tree.
 
 Function return types are context-sensitive. Standalone statement/block checks

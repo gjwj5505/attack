@@ -83,9 +83,9 @@ let parse_example path =
 let derive_example path =
   let file = parse_example path in
   begin
-    match AstChecker.check_file file with
+    match SyntaxChecker.check_file file with
     | Ok () -> ()
-    | Error err -> failwith (path ^ ": " ^ AstChecker.string_of_error err)
+    | Error err -> failwith (path ^ ": " ^ SyntaxChecker.string_of_error err)
   end;
   match Derivator.derive_file file with
   | Ok tree -> tree

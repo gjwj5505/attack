@@ -130,9 +130,9 @@ let build_proof rule_name premises conclusion_box =
     height = List.length p_lines + 1 + List.length c_lines;
   }
 
-let string_of_exp = SyntaxPretty.Exp.string_of_t
-let string_of_lval = SyntaxPretty.string_of_lval
-let string_of_instr = SyntaxPretty.string_of_instr
+let string_of_exp = Syntax.Exp.string_of_t
+let string_of_lval = Syntax.string_of_lval
+let string_of_instr = Syntax.string_of_instr
 
 let string_of_stmt_summary stmt =
   match stmt.Syntax.skind with
@@ -146,10 +146,10 @@ let string_of_stmt_summary stmt =
   | Block block -> Printf.sprintf "block[%d]" (List.length block.bstmts)
 
 let string_of_stmt ?(verbose = false) stmt =
-  if verbose then SyntaxPretty.string_of_stmt stmt else string_of_stmt_summary stmt
+  if verbose then Syntax.string_of_stmt stmt else string_of_stmt_summary stmt
 
 let string_of_block ?(verbose = false) block =
-  if verbose then SyntaxPretty.string_of_block block
+  if verbose then Syntax.string_of_block block
   else Printf.sprintf "block[%d]" (List.length block.Syntax.bstmts)
 
 let string_of_exp_result value = Value.string_of_t value
@@ -331,4 +331,4 @@ let print_tree ?(verbose = false) tree =
   render_tree ~verbose tree |> List.iter print_endline
 
 let write_tree_svg ?(verbose = false) path tree =
-  render_tree ~verbose tree |> TextSvg.write_lines path
+  render_tree ~verbose tree |> Pretty.Svg.write_lines path

@@ -8,12 +8,15 @@ Always follow these rules:
   action. This includes `dune build`, tests, example runs, `git`, and other
   verification commands.
 - You may freely read and explore files to understand the project
+- `.agents/생각 끄적끄적` is the user's private scratch file. Never read,
+  inspect, modify, move, rename, delete, quote, or summarize its contents.
 - Modify files only with `apply_patch`; do not use Python, shell redirection,
   heredocs, `cat > file`, or similar write methods for edits.
 - When adding prune rules, include a short code comment showing the form of
   program/expression/command being removed.
 - When the user gives a durable workflow instruction, add it to this
   `AGENTS.md` file after approval.
+- Treat a user reply of `rr` as confirmation or approval equivalent to `ㅇㅇ`.
 - During design discussions, keep durable conclusions, hypotheses, and next
   actions updated in `.agents/CONTEXT.md` as the conversation progresses.
 - Keep `.agents/LANGUAGE.md` for stable language/semantics design and

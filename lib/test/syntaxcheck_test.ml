@@ -1,5 +1,5 @@
 module S = Language.Syntax
-module AstChecker = Language.AstChecker
+module SyntaxChecker = Language.SyntaxChecker
 
 let int_t = Language.Typ.TInt Language.Typ.IInt
 let void_t = Language.Typ.TVoid
@@ -839,87 +839,87 @@ let reject_goblint_call_before_declaration =
     ]
 
 let expect_ok name f =
-  match AstChecker.check_file f with
+  match SyntaxChecker.check_file f with
   | Ok () -> ()
   | Error err ->
       failwith
         (Printf.sprintf "%s: expected Ok, got %s" name
-           (AstChecker.string_of_error err))
+           (SyntaxChecker.string_of_error err))
 
 let expect_error name expected f =
-  match AstChecker.check_file f with
+  match SyntaxChecker.check_file f with
   | Error actual when actual = expected -> ()
   | Error actual ->
       failwith
         (Printf.sprintf "%s: expected %s, got %s" name
-           (AstChecker.string_of_error expected)
-           (AstChecker.string_of_error actual))
+           (SyntaxChecker.string_of_error expected)
+           (SyntaxChecker.string_of_error actual))
   | Ok () ->
       failwith
         (Printf.sprintf "%s: expected %s, got Ok" name
-           (AstChecker.string_of_error expected))
+           (SyntaxChecker.string_of_error expected))
 
 let () =
   let cases =
     [
       ("accept_minimal_main", fun () -> expect_ok "accept_minimal_main" accept_minimal_main);
       ("reject_missing_main", fun () ->
-        expect_error "reject_missing_main" AstChecker.Missing_main
+        expect_error "reject_missing_main" SyntaxChecker.Missing_main
           reject_missing_main);
       ("reject_multiple_main", fun () ->
-        expect_error "reject_multiple_main" AstChecker.Multiple_main
+        expect_error "reject_multiple_main" SyntaxChecker.Multiple_main
           reject_multiple_main);
       ("reject_invalid_main_type", fun () ->
         expect_error "reject_invalid_main_type"
-          (AstChecker.Invalid_main_type void_t)
+          (SyntaxChecker.Invalid_main_type void_t)
           reject_invalid_main_type);
       ("reject_main_with_parameters", fun () ->
         expect_error "reject_main_with_parameters"
-          AstChecker.Main_with_parameters reject_main_with_parameters);
+          SyntaxChecker.Main_with_parameters reject_main_with_parameters);
       ("reject_duplicate_global_name", fun () ->
         expect_error "reject_duplicate_global_name"
-          (AstChecker.Duplicate_global_name "g")
+          (SyntaxChecker.Duplicate_global_name "g")
           reject_duplicate_global_name);
       ("reject_duplicate_formal_name", fun () ->
         expect_error "reject_duplicate_formal_name"
-          (AstChecker.Duplicate_function_local_name
+          (SyntaxChecker.Duplicate_function_local_name
              { function_name = "f"; name = "x" })
           reject_duplicate_formal_name);
       ("reject_duplicate_local_name", fun () ->
         expect_error "reject_duplicate_local_name"
-          (AstChecker.Duplicate_function_local_name
+          (SyntaxChecker.Duplicate_function_local_name
              { function_name = "f"; name = "x" })
           reject_duplicate_local_name);
       ("reject_formal_local_name_collision", fun () ->
         expect_error "reject_formal_local_name_collision"
-          (AstChecker.Duplicate_function_local_name
+          (SyntaxChecker.Duplicate_function_local_name
              { function_name = "f"; name = "x" })
           reject_formal_local_name_collision);
       ("reject_break_outside_loop", fun () ->
-        expect_error "reject_break_outside_loop" AstChecker.Break_outside_loop
+        expect_error "reject_break_outside_loop" SyntaxChecker.Break_outside_loop
           reject_break_outside_loop);
       ("reject_continue_outside_loop", fun () ->
         expect_error "reject_continue_outside_loop"
-          AstChecker.Continue_outside_loop reject_continue_outside_loop);
+          SyntaxChecker.Continue_outside_loop reject_continue_outside_loop);
       ("reject_return_value_in_void_function", fun () ->
         expect_error "reject_return_value_in_void_function"
-          AstChecker.Return_value_in_void_function
+          SyntaxChecker.Return_value_in_void_function
           reject_return_value_in_void_function);
       ("reject_return_without_value_in_nonvoid_function", fun () ->
         expect_error "reject_return_without_value_in_nonvoid_function"
-          (AstChecker.Return_without_value_in_nonvoid_function int_t)
+          (SyntaxChecker.Return_without_value_in_nonvoid_function int_t)
           reject_return_without_value_in_nonvoid_function);
       ("accept_break_continue_inside_loop", fun () ->
         expect_ok "accept_break_continue_inside_loop"
           accept_break_continue_inside_loop);
       ("reject_invalid_global_scope", fun () ->
         expect_error "reject_invalid_global_scope"
-          (AstChecker.Invalid_variable_scope
+          (SyntaxChecker.Invalid_variable_scope
              { variable = invalid_global_scope_var; expected = S.VarId.Global })
           reject_invalid_global_scope);
       ("reject_invalid_function_scope", fun () ->
         expect_error "reject_invalid_function_scope"
-          (AstChecker.Invalid_variable_scope
+          (SyntaxChecker.Invalid_variable_scope
              {
                variable = invalid_function_scope_var;
                expected = S.VarId.Global;
@@ -927,7 +927,7 @@ let () =
           reject_invalid_function_scope);
       ("reject_invalid_formal_scope", fun () ->
         expect_error "reject_invalid_formal_scope"
-          (AstChecker.Invalid_variable_scope
+          (SyntaxChecker.Invalid_variable_scope
              {
                variable = invalid_formal_scope_var;
                expected = S.VarId.Function "f";
@@ -935,7 +935,7 @@ let () =
           reject_invalid_formal_scope);
       ("reject_invalid_local_scope", fun () ->
         expect_error "reject_invalid_local_scope"
-          (AstChecker.Invalid_variable_scope
+          (SyntaxChecker.Invalid_variable_scope
              {
                variable = invalid_local_scope_var;
                expected = S.VarId.Function "f";
@@ -943,11 +943,11 @@ let () =
           reject_invalid_local_scope);
       ("reject_cross_function_reference", fun () ->
         expect_error "reject_cross_function_reference"
-          (AstChecker.Undeclared_variable cross_function_reference)
+          (SyntaxChecker.Undeclared_variable cross_function_reference)
           reject_cross_function_reference);
       ("reject_variable_temp_mismatch", fun () ->
         expect_error "reject_variable_temp_mismatch"
-          (AstChecker.Variable_declaration_mismatch
+          (SyntaxChecker.Variable_declaration_mismatch
              {
                occurrence = mismatched_temp_occurrence;
                declaration = mismatched_temp_declaration;
@@ -955,29 +955,29 @@ let () =
           reject_variable_temp_mismatch);
       ("reject_undeclared_global_reference", fun () ->
         expect_error "reject_undeclared_global_reference"
-          (AstChecker.Undeclared_variable undeclared_global_reference)
+          (SyntaxChecker.Undeclared_variable undeclared_global_reference)
           reject_undeclared_global_reference);
       ("reject_local_reference_in_global_initializer", fun () ->
         expect_error "reject_local_reference_in_global_initializer"
-          (AstChecker.Undeclared_variable initializer_local_reference)
+          (SyntaxChecker.Undeclared_variable initializer_local_reference)
           reject_local_reference_in_global_initializer);
       ("accept_same_local_name_in_different_functions", fun () ->
         expect_ok "accept_same_local_name_in_different_functions"
           accept_same_local_name_in_different_functions);
       ("reject_global_and_local_same_name", fun () ->
         expect_error "reject_global_and_local_same_name"
-          (AstChecker.Global_local_name_collision
+          (SyntaxChecker.Global_local_name_collision
              { function_name = "main"; name = "x" })
           reject_global_and_local_same_name);
       ("accept_global_reference", fun () ->
         expect_ok "accept_global_reference" accept_global_reference);
       ("reject_invalid_function_type", fun () ->
         expect_error "reject_invalid_function_type"
-          (AstChecker.Invalid_function_type invalid_function_type_var)
+          (SyntaxChecker.Invalid_function_type invalid_function_type_var)
           reject_invalid_function_type);
       ("reject_incomplete_function_type", fun () ->
         expect_error "reject_incomplete_function_type"
-          (AstChecker.Function_formals_mismatch
+          (SyntaxChecker.Function_formals_mismatch
              { function_variable = incomplete_function_variable; formals = [] })
           reject_incomplete_function_type);
       ("accept_multi_formal_function_signature", fun () ->
@@ -985,7 +985,7 @@ let () =
           accept_multi_formal_function_signature);
       ("reject_function_formal_name_mismatch", fun () ->
         expect_error "reject_function_formal_name_mismatch"
-          (AstChecker.Function_formals_mismatch
+          (SyntaxChecker.Function_formals_mismatch
              {
                function_variable = name_mismatch_function_variable;
                formals = [ name_mismatch_formal ];
@@ -993,7 +993,7 @@ let () =
           reject_function_formal_name_mismatch);
       ("reject_function_too_few_formals", fun () ->
         expect_error "reject_function_too_few_formals"
-          (AstChecker.Function_formals_mismatch
+          (SyntaxChecker.Function_formals_mismatch
              {
                function_variable = too_few_formals_function_variable;
                formals = [ count_mismatch_formal ];
@@ -1001,7 +1001,7 @@ let () =
           reject_function_too_few_formals);
       ("reject_function_too_many_formals", fun () ->
         expect_error "reject_function_too_many_formals"
-          (AstChecker.Function_formals_mismatch
+          (SyntaxChecker.Function_formals_mismatch
              {
                function_variable = too_many_formals_function_variable;
                formals = [ count_mismatch_formal ];
@@ -1011,7 +1011,7 @@ let () =
         expect_ok "accept_function_reference" accept_function_reference);
       ("reject_function_occurrence_signature_mismatch", fun () ->
         expect_error "reject_function_occurrence_signature_mismatch"
-          (AstChecker.Variable_declaration_mismatch
+          (SyntaxChecker.Variable_declaration_mismatch
              {
                occurrence = mismatched_function_signature_occurrence;
                declaration = reference_function.S.svar;
@@ -1019,7 +1019,7 @@ let () =
           reject_function_occurrence_signature_mismatch);
       ("reject_variable_vglob_mismatch", fun () ->
         expect_error "reject_variable_vglob_mismatch"
-          (AstChecker.Variable_declaration_mismatch
+          (SyntaxChecker.Variable_declaration_mismatch
              {
                occurrence = mismatched_vglob_occurrence;
                declaration = mismatched_vglob_declaration;
@@ -1027,93 +1027,93 @@ let () =
           reject_variable_vglob_mismatch);
       ("reject_undeclared_in_unop", fun () ->
         expect_error "reject_undeclared_in_unop"
-          (AstChecker.Undeclared_variable traversal_missing)
+          (SyntaxChecker.Undeclared_variable traversal_missing)
           reject_undeclared_in_unop);
       ("reject_undeclared_in_binop", fun () ->
         expect_error "reject_undeclared_in_binop"
-          (AstChecker.Undeclared_variable traversal_missing)
+          (SyntaxChecker.Undeclared_variable traversal_missing)
           reject_undeclared_in_binop);
       ("reject_undeclared_in_set_lval", fun () ->
         expect_error "reject_undeclared_in_set_lval"
-          (AstChecker.Undeclared_variable traversal_missing)
+          (SyntaxChecker.Undeclared_variable traversal_missing)
           reject_undeclared_in_set_lval);
       ("reject_undeclared_in_set_exp", fun () ->
         expect_error "reject_undeclared_in_set_exp"
-          (AstChecker.Undeclared_variable traversal_missing)
+          (SyntaxChecker.Undeclared_variable traversal_missing)
           reject_undeclared_in_set_exp);
       ("reject_undeclared_in_call_return_lval", fun () ->
         expect_error "reject_undeclared_in_call_return_lval"
-          (AstChecker.Undeclared_variable traversal_missing)
+          (SyntaxChecker.Undeclared_variable traversal_missing)
           reject_undeclared_in_call_return_lval);
       ("reject_undeclared_call_callee", fun () ->
         expect_error "reject_undeclared_call_callee"
-          (AstChecker.Undeclared_variable undeclared_function)
+          (SyntaxChecker.Undeclared_variable undeclared_function)
           reject_undeclared_call_callee);
       ("reject_undeclared_call_argument", fun () ->
         expect_error "reject_undeclared_call_argument"
-          (AstChecker.Undeclared_variable traversal_missing)
+          (SyntaxChecker.Undeclared_variable traversal_missing)
           reject_undeclared_call_argument);
       ("reject_undeclared_if_condition", fun () ->
         expect_error "reject_undeclared_if_condition"
-          (AstChecker.Undeclared_variable traversal_missing)
+          (SyntaxChecker.Undeclared_variable traversal_missing)
           reject_undeclared_if_condition);
       ("reject_undeclared_if_then", fun () ->
         expect_error "reject_undeclared_if_then"
-          (AstChecker.Undeclared_variable traversal_missing)
+          (SyntaxChecker.Undeclared_variable traversal_missing)
           reject_undeclared_if_then);
       ("reject_undeclared_if_else", fun () ->
         expect_error "reject_undeclared_if_else"
-          (AstChecker.Undeclared_variable traversal_missing)
+          (SyntaxChecker.Undeclared_variable traversal_missing)
           reject_undeclared_if_else);
       ("reject_undeclared_in_loop", fun () ->
         expect_error "reject_undeclared_in_loop"
-          (AstChecker.Undeclared_variable traversal_missing)
+          (SyntaxChecker.Undeclared_variable traversal_missing)
           reject_undeclared_in_loop);
       ("reject_undeclared_in_block", fun () ->
         expect_error "reject_undeclared_in_block"
-          (AstChecker.Undeclared_variable traversal_missing)
+          (SyntaxChecker.Undeclared_variable traversal_missing)
           reject_undeclared_in_block);
       ("reject_break_in_nested_if", fun () ->
         expect_error "reject_break_in_nested_if"
-          AstChecker.Break_outside_loop reject_break_in_nested_if);
+          SyntaxChecker.Break_outside_loop reject_break_in_nested_if);
       ("reject_continue_in_nested_block", fun () ->
         expect_error "reject_continue_in_nested_block"
-          AstChecker.Continue_outside_loop reject_continue_in_nested_block);
+          SyntaxChecker.Continue_outside_loop reject_continue_in_nested_block);
       ("reject_nested_return_value_in_void_function", fun () ->
         expect_error "reject_nested_return_value_in_void_function"
-          AstChecker.Return_value_in_void_function
+          SyntaxChecker.Return_value_in_void_function
           reject_nested_return_value_in_void_function);
       ("reject_nested_return_without_value", fun () ->
         expect_error "reject_nested_return_without_value"
-          (AstChecker.Return_without_value_in_nonvoid_function int_t)
+          (SyntaxChecker.Return_without_value_in_nonvoid_function int_t)
           reject_nested_return_without_value);
       ("reject_duplicate_function_and_global_name", fun () ->
         expect_error "reject_duplicate_function_and_global_name"
-          (AstChecker.Duplicate_global_name "f")
+          (SyntaxChecker.Duplicate_global_name "f")
           reject_duplicate_function_and_global_name);
       ("reject_global_and_formal_same_name", fun () ->
         expect_error "reject_global_and_formal_same_name"
-          (AstChecker.Global_local_name_collision
+          (SyntaxChecker.Global_local_name_collision
              { function_name = "f"; name = "x" })
           reject_global_and_formal_same_name);
       ("reject_roundtrip_temp_loss", fun () ->
         expect_error "reject_roundtrip_temp_loss"
-          (AstChecker.Bridge_error
+          (SyntaxChecker.Bridge_error
              (Language.CilBridge.Roundtrip_mismatch
                 "CIL-- file changed after CIL-- -> CIL -> CIL--"))
           reject_roundtrip_temp_loss);
       ("reject_goblint_call_arity", fun () ->
         expect_error "reject_goblint_call_arity"
-          AstChecker.Goblint_check_failed reject_goblint_call_arity);
+          SyntaxChecker.Goblint_check_failed reject_goblint_call_arity);
       ("accept_uninitialized_global", fun () ->
         expect_ok "accept_uninitialized_global" accept_uninitialized_global);
       ("reject_block_return_value_in_void_function", fun () ->
         expect_error "reject_block_return_value_in_void_function"
-          AstChecker.Return_value_in_void_function
+          SyntaxChecker.Return_value_in_void_function
           reject_block_return_value_in_void_function);
       ("reject_goblint_call_before_declaration", fun () ->
         expect_error "reject_goblint_call_before_declaration"
-          AstChecker.Goblint_check_failed
+          SyntaxChecker.Goblint_check_failed
           reject_goblint_call_before_declaration);
     ]
   in

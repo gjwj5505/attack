@@ -5,12 +5,16 @@
  (modules
   typ
   syntax
+  holeSyntax
+  holeSubstitution
   syntaxUtil
+  holeSyntaxUtil
   syntaxPretty
-  syntaxTree
+  holeSyntaxPretty
   syntaxEqual
   cilBridge
-  astChecker
+  syntaxChecker
+  holeSyntaxChecker
   location
   value
   valueOp
@@ -21,6 +25,5 @@
   bigStepChecker
   derivator
   size
-  textSvg
   visualizer)
- (libraries goblint-cil))
+ (libraries goblint-cil pretty))

@@ -232,7 +232,7 @@ let check_type_value label = function
 
 let check_file_result label = function
   | Ok () -> ok
-  | Error err -> error (label ^ ": " ^ AstChecker.string_of_error err)
+  | Error err -> error (label ^ ": " ^ SyntaxChecker.string_of_error err)
 
 let check_expected_memory label actual = function
   | Ok expected -> check_memory label expected actual
@@ -835,14 +835,14 @@ and check_ftree tree =
       >>= fun () ->
       check_control "F no-return control" ReturnVoid control
 
-(* This option controls only whether AstChecker.check_file is run. The proof-level
+(* This option controls only whether SyntaxChecker.check_file is run. The proof-level
    program checks below still run even when use_check_file is false. *)
 let check_ptree ?(use_check_file = true) = function
   | PTreeMainReturn (ftree, (file, mem, value)) ->
       check_memory_well_formed "P output" mem >>= fun () ->
       check_int_value "P value" value >>= fun () ->
       (if use_check_file then
-         check_file_result "P-File" (AstChecker.check_file file)
+         check_file_result "P-File" (SyntaxChecker.check_file file)
        else ok)
       >>= fun () ->
       (match SyntaxUtil.main_functions file with

@@ -148,17 +148,17 @@ let check_return ~return_type exp =
 let string_of_error = function
   | Unsupported_type typ -> "unsupported type: " ^ Typ.string_of_t typ
   | Unsupported_lvalue lval ->
-      "unsupported lvalue: " ^ SyntaxPretty.string_of_lval lval
+      "unsupported lvalue: " ^ Syntax.string_of_lval lval
   | Unsupported_expression exp ->
-      "unsupported expression: " ^ SyntaxPretty.Exp.string_of_t exp
+      "unsupported expression: " ^ Syntax.Exp.string_of_t exp
   | Unsupported_unop op ->
-      "unsupported unary operator: " ^ SyntaxPretty.Exp.string_of_unop op
+      "unsupported unary operator: " ^ Syntax.Exp.string_of_unop op
   | Unsupported_binop op ->
-      "unsupported binary operator: " ^ SyntaxPretty.Exp.string_of_binop op
+      "unsupported binary operator: " ^ Syntax.Exp.string_of_binop op
   | Expected_function exp ->
-      "expected function callee: " ^ SyntaxPretty.Exp.string_of_t exp
+      "expected function callee: " ^ Syntax.Exp.string_of_t exp
   | Function_without_parameter_types exp ->
-      "function without parameter types: " ^ SyntaxPretty.Exp.string_of_t exp
+      "function without parameter types: " ^ Syntax.Exp.string_of_t exp
   | Arity_mismatch { expected; actual } ->
       Printf.sprintf "arity mismatch: expected %d argument(s), got %d"
         expected actual

@@ -1,8 +1,8 @@
-# CIL-- AST Checker
+# CIL-- Syntax Checker
 
 ## Purpose
 
-`lib/language/astChecker.ml` validates directly constructed CIL-- syntax before
+`lib/language/syntax/syntaxChecker.ml` validates directly constructed CIL-- syntax before
 derivation, rendering, or synthesis debugging. It is a structural checker, not
 a complete C typechecker and not a runtime-definedness checker.
 
@@ -11,7 +11,7 @@ return no value, and `Typ.TFun` carries function signatures.
 
 ## Check Order
 
-`AstChecker.check_file` stops at the first error and performs checks in this
+`SyntaxChecker.check_file` stops at the first error and performs checks in this
 order:
 
 1. Function `svar.vtype` and `sformals` consistency.
@@ -76,7 +76,7 @@ order:
 
 ## Regression Coverage
 
-The direct test suite is `lib/test/astcheck_test.ml`. The current suite contains
+The direct test suite is `lib/test/syntaxcheck_test.ml`. The current suite contains
 57 cases.
 
 | Area | Tests | Expected result |
@@ -100,7 +100,7 @@ Latest verified result:
 
 ```text
 dune build                                  PASS
-dune exec lib/test/astcheck_test.exe        57 / 57 PASS
+dune exec lib/test/syntaxcheck_test.exe        57 / 57 PASS
 ```
 
 The negative GoblintCil cases intentionally print diagnostics such as `Not
@@ -108,7 +108,7 @@ enough arguments` and `Unknown id ... for f`.
 
 ## Deferred Type Coverage
 
-The following types or operations are outside the current AstChecker guarantee:
+The following types or operations are outside the current SyntaxChecker guarantee:
 
 - `unsigned int` and other integer kinds;
 - pointers, `Mem`, `AddrOf`, and `StartOf` type correctness;
@@ -123,6 +123,6 @@ before considering it validated.
 
 ## Out of Scope
 
-AstChecker does not prove runtime definedness. Uninitialized reads, division by
+SyntaxChecker does not prove runtime definedness. Uninitialized reads, division by
 zero, invalid locations, nontermination, and future pointer/array runtime errors
 belong to derivation and Big-Step proof checking.
