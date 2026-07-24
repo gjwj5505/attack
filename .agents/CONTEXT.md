@@ -49,6 +49,12 @@ dune exec bin/main.exe -- -big examples/fibonacci.c
 ## Key Files
 
 - `lib/language/syntax/syntax.ml`: CIL-- AST.
+- `lib/language/holeSyntax/holeSyntax.ml`: hole-aware CIL-- AST with expression
+  and final statement-sequence holes.
+- `lib/language/holeSyntax/holeSubstitution.ml`: sort-separated, normalized,
+  idempotent hole substitutions.
+- `lib/language/holeSyntax/holeSyntaxUnify.ml`: structural unification under an
+  existing substitution.
 - `lib/language/typ.ml`: CIL-- type subset.
 - `lib/language/cilBridge.ml`: GoblintCil CIL <-> CIL-- conversion.
 - `lib/language/syntax/syntaxChecker.ml`: thin CIL-- syntax checker.
@@ -60,6 +66,9 @@ dune exec bin/main.exe -- -big examples/fibonacci.c
 - `lib/language/semantics/typeUtil.ml`: scalar type side conditions for the
   proof checker.
 - `lib/test/syntaxcheck_test.ml`: direct CIL-- syntax checker tests.
+- `lib/test/holeSyntaxCheck_test.ml`: hole-aware syntax checker tests.
+- `lib/test/holeSubstitution_test.ml`: substitution and invariant tests.
+- `lib/test/holeSyntaxUnify_test.ml`: hole-aware structural unification tests.
 - `lib/test/bigstepcheck_test.ml`: Big-Step checker regression tests.
 - `lib/language/semantics/proof/size.ml`: the current, pre-migration
   `(program size, proof size)` implementation; the selected synthesis design
@@ -130,7 +139,9 @@ update propagation, and forged-memory rejection.
 This is the selected direction for reconnecting synthesis. It supersedes the
 provisional plan to order proof components by `(program footprint, proof size)`.
 The hole-syntax foundation has been implemented, while hole-aware proof types,
-substitution, unification, and synthesis integration remain pending.
+component freshening/freezing, canonical hole renumbering, and synthesis
+integration remain pending. `HoleSubstitution` and `HoleSyntaxUnify` are
+implemented and tested.
 
 ### Why Program Size Leaves the Proof Order
 
@@ -301,6 +312,21 @@ transitively contain a hole. `HoleBigStep` will mirror the concrete proof rules
 with hole syntax in their conclusions. The only new syntax holes are
 expression holes and statement-sequence holes.
 
+Implementation checkpoint (2026-07-24):
+
+- `HoleSyntax`, its checker, utility, and pretty-printing modules are active;
+- `HoleSubstitution` supports expression and statement-sequence bindings,
+  statement-list splicing, occurs checks, composition, and normalized
+  idempotent extension;
+- `HoleSyntaxUnify` structurally unifies every `HoleSyntax` layer, including
+  expressions, blocks, functions, files, and the generic AST wrapper, while
+  threading an existing substitution;
+- `holeSyntaxUnify_test.ml` has 23 passing success/failure cases covering
+  recursive refinement, empty and non-empty tail completion, canonical
+  hole-to-hole aliases, mismatch paths, occurs checks, cross-sort rejection,
+  and upper-AST dispatch;
+- the full `dune test` suite passes.
+
 ### Hole Syntax and Proof Completion
 
 A hole-aware proof conclusion may contain holes only where that proof has no
@@ -440,6 +466,12 @@ Snew  = compose ~after:delta ~before:S0
 
 The implementation may expose this safely as `unify_under S0 lhs rhs` so
 callers do not reverse the composition accidentally.
+
+The active unifier implements this incrementally. Recursive child comparisons
+thread the current immutable substitution, and each successful `bind_*`
+performs the required singleton composition and normalization internally.
+Consequently, the unifier does not build an independent delta and call the
+general `compose` function after every child.
 
 Stored substitutions are normalized and idempotent:
 
@@ -627,11 +659,13 @@ proof subtrees and unify their complete hole-aware static syntax.
 1. **Hole representation and unification**
    - `HoleSyntax`, its utilities, pretty-printer, checker, and dedicated tests
      are implemented while reusing hole-independent concrete leaf types.
-   - Correct the checker so IDs are unique within one AST/conclusion; test
-     cross-conclusion reuse later at the `HoleBigStep` level.
-   - Add `HoleSubstitution`, idempotent extension/composition, substitution-aware
-     views, `HoleSyntaxUnify`, freshening, canonical renumbering, and occurs
-     checks.
+   - Hole IDs are checked as unique within one AST/conclusion; cross-conclusion
+     reuse remains to be tested at the `HoleBigStep` level.
+   - `HoleSubstitution`, idempotent extension/composition,
+     substitution-aware apply operations, `HoleSyntaxUnify`, and occurs checks
+     are implemented and tested.
+   - Component freshening, unreachable-binding removal, freeze, and canonical
+     renumbering remain pending.
    - Add `HoleBigStep`, whose immutable proof tree is paired with a persistent
      component-local substitution.
 2. **Proof/code dual synthesis**
@@ -668,12 +702,12 @@ Presentation note:
 
 ## Next Actions
 
-1. Reject duplicate hole IDs inside one `HoleSyntax` AST and update its tests.
-2. Implement and test `HoleSubstitution`, including sort-separated bindings,
-   statement splicing, occurs checks, composition orientation, and idempotence.
-3. Implement and test `HoleSyntaxUnify` under an existing substitution.
-4. Define `HoleBigStep` and its proof-component identity/freeze boundary for
-   repeated loop and function executions.
+1. Define `HoleBigStep` and pair each immutable proof tree with its
+   component-local `HoleSubstitution`.
+2. Implement component freshening, unreachable-binding removal, freeze, and
+   canonical hole renumbering for stable pool identity.
+3. Add raw expression/block synthesis and hole-aware proof synthesis, including
+   their proof/code pool join indexes for repeated loop and function executions.
 
 ## Deferred Semantics Work
 

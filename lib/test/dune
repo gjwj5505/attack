@@ -17,5 +17,9 @@
  (libraries language))
 
 (test
+ (name holeSyntaxUnify_test)
+ (libraries language))
+
+(test
  (name bigstepcheck_test)
  (libraries language))

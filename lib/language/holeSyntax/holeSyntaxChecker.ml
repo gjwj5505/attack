@@ -45,7 +45,8 @@ let string_of_error = function
 let ( let* ) = Result.bind
 let error error = Error error
 let syntax_error error = Error (Syntax_error error)
-let lift_syntax result = Result.map_error (fun error -> Syntax_error error) result
+let lift_syntax_error result =
+  Result.map_error (fun error -> Syntax_error error) result
 
 let rec check_list check = function
   | [] -> Ok ()
@@ -278,10 +279,10 @@ let check_global_local_name_collisions file =
     file.globals
 
 let check_variable_scope expected variable =
-  lift_syntax (SyntaxChecker.check_variable_scope expected variable)
+  lift_syntax_error (SyntaxChecker.check_variable_scope expected variable)
 
 let check_variable_reference declarations occurrence =
-  lift_syntax
+  lift_syntax_error
     (SyntaxChecker.check_variable_reference declarations occurrence)
 
 let rec check_exp_variables declarations = function

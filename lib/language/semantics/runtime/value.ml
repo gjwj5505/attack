@@ -224,7 +224,7 @@ type t =
 type error =
   | Int32_error of Int32.error
 
-let lift_int32_result = function
+let lift_int32_error = function
   | Ok value -> Ok value
   | Error err -> Error (Int32_error err)
 
@@ -234,7 +234,7 @@ let of_bool b = Int (Int32.of_ocaml_bool b)
 
 let of_int32_result result =
   let ( let* ) = Result.bind in
-  let* n = lift_int32_result result in
+  let* n = lift_int32_error result in
   Ok (Int n)
 
 let of_int64 ikind n = of_int32_result (Int32.of_int64 ikind n)

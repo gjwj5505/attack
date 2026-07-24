@@ -11,7 +11,7 @@ type error =
       right : Value.t;
     }
 
-let lift_value_result = function
+let lift_value_error = function
   | Ok value -> Ok value
   | Error err -> Error (Value_error err)
 
@@ -35,7 +35,7 @@ let expect_int_binary op left right =
 let neg value =
   let ( let* ) = Result.bind in
   let* n = expect_int_unary "-" value in
-  lift_value_result (Value.of_int32_result (Value.Int32.neg n))
+  lift_value_error (Value.of_int32_result (Value.Int32.neg n))
 
 let lnot value =
   let ( let* ) = Result.bind in
@@ -45,7 +45,7 @@ let lnot value =
 let int_binary op f left right =
   let ( let* ) = Result.bind in
   let* left, right = expect_int_binary op left right in
-  lift_value_result (Value.of_int32_result (f left right))
+  lift_value_error (Value.of_int32_result (f left right))
 
 let plus_a = int_binary "+" Value.Int32.add
 let minus_a = int_binary "-" Value.Int32.sub

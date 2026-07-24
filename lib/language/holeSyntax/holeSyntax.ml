@@ -170,26 +170,28 @@ let rec string_of_stmt ?(lvl = 0) stmt =
   let labels =
     List.map (fun label -> pad ^ string_of_label label) stmt.labels
   in
-  let body =
-    match stmt.skind with
-    | Instr instrs ->
-        List.map (fun instr -> pad ^ string_of_instr instr) instrs
-    | Return None -> [ pad ^ "return;" ]
-    | Return (Some exp) -> [ pad ^ "return " ^ Exp.string_of_t exp ^ ";" ]
-    | If (condition, then_block, else_block) ->
-        [
-          Printf.sprintf "%sif (%s) %s else %s" pad
-            (Exp.string_of_t condition)
-            (string_of_block ~lvl then_block)
-            (string_of_block ~lvl else_block);
-        ]
-    | Loop body ->
-        [ Printf.sprintf "%sloop %s" pad (string_of_block ~lvl body) ]
-    | Break -> [ pad ^ "break;" ]
-    | Continue -> [ pad ^ "continue;" ]
-    | Block block -> [ pad ^ string_of_block ~lvl block ]
-  in
-  String.concat "\n" (labels @ body)
+  let body = string_of_stmtkind ~lvl stmt.skind in
+  let lines = if String.equal body "" then labels else labels @ [ body ] in
+  String.concat "\n" lines
+
+and string_of_stmtkind ?(lvl = 0) = function
+  | Instr instrs ->
+      instrs
+      |> List.map (fun instr -> indent lvl ^ string_of_instr instr)
+      |> String.concat "\n"
+  | Return None -> indent lvl ^ "return;"
+  | Return (Some exp) ->
+      indent lvl ^ "return " ^ Exp.string_of_t exp ^ ";"
+  | If (condition, then_block, else_block) ->
+      Printf.sprintf "%sif (%s) %s else %s" (indent lvl)
+        (Exp.string_of_t condition)
+        (string_of_block ~lvl then_block)
+        (string_of_block ~lvl else_block)
+  | Loop body ->
+      Printf.sprintf "%sloop %s" (indent lvl) (string_of_block ~lvl body)
+  | Break -> indent lvl ^ "break;"
+  | Continue -> indent lvl ^ "continue;"
+  | Block block -> indent lvl ^ string_of_block ~lvl block
 
 and string_of_stmt_seq_item ?(lvl = 0) = function
   | Stmt stmt -> string_of_stmt ~lvl stmt
