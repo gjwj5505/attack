@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`lib/language/semantics/proof/bigStepChecker.ml` independently validates CIL--
+`lib/language/semantics/proof/ground/bigStepChecker.ml` independently validates CIL--
 Big-Step proof trees. It checks that a supplied subtree follows the rule encoded
 by its constructor, that its conclusion matches its premises, and that memories
 and control states compose correctly.

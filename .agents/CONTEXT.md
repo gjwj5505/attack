@@ -60,9 +60,9 @@ dune exec bin/main.exe -- -big examples/fibonacci.c
 - `lib/language/syntax/syntaxChecker.ml`: thin CIL-- syntax checker.
 - `lib/language/semantics/runtime/`: locations, values, value operations, and
   memory.
-- `lib/language/semantics/proof/bigStep.ml`: proof tree types.
-- `lib/language/semantics/proof/derivator.ml`: concrete Big-Step derivation.
-- `lib/language/semantics/proof/bigStepChecker.ml`: proof tree checker.
+- `lib/language/semantics/proof/ground/bigStep.ml`: proof tree types.
+- `lib/language/semantics/proof/ground/derivator.ml`: ground Big-Step derivation.
+- `lib/language/semantics/proof/ground/bigStepChecker.ml`: proof tree checker.
 - `lib/language/semantics/typeUtil.ml`: scalar type side conditions for the
   proof checker.
 - `lib/test/syntaxcheck_test.ml`: direct CIL-- syntax checker tests.
@@ -70,7 +70,7 @@ dune exec bin/main.exe -- -big examples/fibonacci.c
 - `lib/test/holeSubstitution_test.ml`: substitution and invariant tests.
 - `lib/test/holeSyntaxUnify_test.ml`: hole-aware structural unification tests.
 - `lib/test/bigstepcheck_test.ml`: Big-Step checker regression tests.
-- `lib/language/semantics/proof/size.ml`: the current, pre-migration
+- `lib/language/semantics/proof/ground/size.ml`: the current, pre-migration
   `(program size, proof size)` implementation; the selected synthesis design
   replaces this with separate raw-syntax and proof-size accounting.
 

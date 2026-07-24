@@ -407,7 +407,7 @@ separate buckets for each layer because grow rules need typed inputs such as
 
 ## Big-Step Checker
 
-`lib/language/semantics/proof/bigStepChecker.ml` validates that a Big-Step proof
+`lib/language/semantics/proof/ground/bigStepChecker.ml` validates that a Big-Step proof
 tree is consistent with its conclusion and with the CIL-- program structure.
 
 There are two useful checking levels:
