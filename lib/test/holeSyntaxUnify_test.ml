@@ -1,13 +1,13 @@
 open Language
 
-module S = HoleSyntax
+module S = Syntax
 module Sub = HoleSubstitution
 module U = HoleSyntaxUnify
 
 let int_t = Typ.TInt Typ.IInt
 
 let int_const n =
-  S.Exp.Const (Syntax.Exp.CInt (Int64.of_int n, Typ.IInt))
+  S.Const (Syntax.Exp.CInt (Int64.of_int n, Typ.IInt))
 
 let plus left right = S.BinOp (Syntax.PlusA, left, right, int_t)
 
@@ -16,10 +16,11 @@ let global_var name typ : S.varinfo =
 
 let var_exp var = S.Lval (S.Var var, S.NoOffset)
 let lval var = (S.Var var, S.NoOffset)
-let stmt ?(labels = []) ?sid skind : S.stmt = { labels; skind; sid }
+let stmt ?(labels = []) ?sid skind : S.holed S.stmt =
+  { labels; skind; sid }
 let known ?(labels = []) ?sid skind = S.Stmt (stmt ~labels ?sid skind)
 let return exp = known (S.Return (Some exp))
-let block bstmts : S.block = { bstmts }
+let block bstmts : S.holed S.block = { bstmts }
 
 let function_type return_type formals =
   Typ.TFun
@@ -29,7 +30,7 @@ let function_type return_type formals =
            (fun formal -> (SyntaxUtil.var_name formal, formal.vtype))
            formals) )
 
-let fundec ?(formals = []) ?(locals = []) name body : S.fundec =
+let fundec ?(formals = []) ?(locals = []) name body : S.holed S.fundec =
   {
     svar = global_var name (function_type int_t formals);
     sformals = formals;
@@ -37,7 +38,8 @@ let fundec ?(formals = []) ?(locals = []) name body : S.fundec =
     sbody = block body;
   }
 
-let file globals : S.file = { fileName = "unify-test.c"; globals }
+let file globals : S.holed S.file =
+  { fileName = "unify-test.c"; globals }
 
 let expect_ok name = function
   | Ok substitution -> substitution

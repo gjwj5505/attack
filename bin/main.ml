@@ -54,7 +54,7 @@ let print_ast file =
       let base = Filename.basename !src |> Filename.remove_extension in
       let svg_path = Filename.concat out_dir (base ^ ".svg") in
       SyntaxPretty.write_file_svg svg_path file;
-      let size = Size.make (Size.sizeof_file file) 0 in
+      let size = SyntaxSize.sizeof_file file in
       Printf.printf "CIL-- AST size %s\nSVG written to %s\n"
         (Size.to_string size) svg_path
   | Error err ->
@@ -70,14 +70,17 @@ let run_big_step file =
       match Derivator.derive_file file with
       | Ok tree ->
           begin
-            match BigStepChecker.check_ptree ~use_check_file:false tree with
+            match
+              BigStepChecker.check_tree BigStepChecker.Ground
+                (BigStep.PTree tree)
+            with
             | Valid -> ()
             | Invalid msg ->
                 prerr_endline ("invalid Big-Step tree: " ^ msg);
                 exit 1
           end;
           let BigStep.PTreeMainReturn (_, (_, _, value)) = tree in
-          let size = Size.sizeof_tree (BigStep.PTree tree) in
+          let size = ProofSize.sizeof_tree (BigStep.PTree tree) in
           let out_dir = "dist/proofs" in
           ensure_dir "dist";
           ensure_dir out_dir;
@@ -86,7 +89,7 @@ let run_big_step file =
           Visualizer.write_tree_svg ~verbose:!opt_verbose svg_path
             (BigStep.PTree tree);
           Printf.printf
-            "Big-Step tree constructed and checked. main returned %s\nSize %s\nSVG written to %s\n"
+            "Big-Step tree constructed and checked. main returned %s\nProof size %s\nSVG written to %s\n"
             (Value.string_of_t value) (Size.to_string size) svg_path
       | Error err ->
           prerr_endline (Derivator.string_of_error err);

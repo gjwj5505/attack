@@ -1,6 +1,6 @@
 open Language
 
-module S = HoleSyntax
+module S = Syntax
 module C = HoleSyntaxChecker
 module SC = SyntaxChecker
 
@@ -19,14 +19,14 @@ let local_var ~function_name name typ : S.varinfo =
     vid = S.VarId.local ~function_name name;
   }
 
-let stmt skind : S.stmt = { labels = []; skind; sid = None }
+let stmt skind : S.holed S.stmt = { labels = []; skind; sid = None }
 let known skind = S.Stmt (stmt skind)
-let block bstmts : S.block = { bstmts }
+let block bstmts : S.holed S.block = { bstmts }
 
 let int_const n =
-  S.Exp.Const (Syntax.Exp.CInt (Int64.of_int n, Typ.IInt))
+  S.Const (Syntax.Exp.CInt (Int64.of_int n, Typ.IInt))
 
-let var_exp var = S.Exp.Lval (S.Var var, S.NoOffset)
+let var_exp var = S.Lval (S.Var var, S.NoOffset)
 
 let function_type return_type formals =
   Typ.TFun
@@ -40,7 +40,7 @@ let function_var name return_type formals =
   global_var name (function_type return_type formals)
 
 let fundec ?(return_type = int_t) ?(formals = []) ?(locals = []) name body :
-    S.fundec =
+    S.holed S.fundec =
   {
     svar = function_var name return_type formals;
     sformals = formals;
@@ -52,7 +52,8 @@ let main ?(return_type = int_t) ?(formals = []) ?(locals = []) body =
   fundec ~return_type ~formals ~locals "main" body
 
 let return_zero = known (S.Return (Some (int_const 0)))
-let file globals : S.file = { fileName = "holesyntax-test.c"; globals }
+let file globals : S.holed S.file =
+  { fileName = "holesyntax-test.c"; globals }
 let valid_main body = file [ S.GFun (main body) ]
 
 let contains haystack needle =
@@ -335,7 +336,7 @@ let test_pretty_output () =
     known
       (S.If (S.ExpHole 1, block [ S.StmtSeqHole 2 ], block [ return_zero ]))
   in
-  let output = HoleSyntaxPretty.string_of_file (valid_main [ conditional ]) in
+  let output = SyntaxPretty.string_of_file (valid_main [ conditional ]) in
   if not (contains output "ExpHole H1") then
     failwith "pretty_output: missing ExpHole H1";
   if not (contains output "StmtSeqHole H2") then
@@ -343,8 +344,8 @@ let test_pretty_output () =
 
 let test_util_functions () =
   let source = valid_main [ S.StmtSeqHole 1 ] in
-  match HoleSyntaxUtil.main_functions source with
-  | [ main ] when HoleSyntaxUtil.function_return_type main = int_t -> ()
+  match SyntaxUtil.main_functions source with
+  | [ main ] when SyntaxUtil.function_return_type main = int_t -> ()
   | _ -> failwith "util_functions: main lookup or return type failed"
 
 let () =

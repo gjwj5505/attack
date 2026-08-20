@@ -310,8 +310,8 @@ and box_of_ftree ?(verbose = false) tree =
 let box_of_ptree ?(verbose = false) = function
   | PTreeMainReturn (ftree, concl) as ptree ->
       let rule_name =
-        Printf.sprintf "PMainReturn size %s"
-          (Size.to_string (Size.sizeof_tree (PTree ptree)))
+        Printf.sprintf "PMainReturn proof size %s"
+          (Size.to_string (ProofSize.sizeof_tree (PTree ptree)))
       in
       build_proof rule_name [ box_of_ftree ~verbose ftree ]
         (p_conclusion concl)

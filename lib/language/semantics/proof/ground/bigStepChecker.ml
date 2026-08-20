@@ -1,70 +1,44 @@
 open BigStep
 open BigStepUtil
+open BigStepCheckerCore
 
-type result =
+type result = BigStepCheckerCore.result =
   | Valid
   | Invalid of string
 
-let ok = Valid
-let error msg = Invalid msg
-
-let ( >>= ) res f =
-  match res with
-  | Valid -> f ()
-  | Invalid _ as err -> err
-
-let check_memory_well_formed label mem =
-  match Memory.check_well_formed mem with
-  | Ok () -> ok
-  | Error err ->
-      error (label ^ ": malformed memory: " ^ Memory.string_of_error err)
-
-let check_memory label expected actual =
-  check_memory_well_formed (label ^ " expected") expected >>= fun () ->
-  check_memory_well_formed (label ^ " actual") actual >>= fun () ->
-  if expected = actual then ok else error (label ^ ": memory mismatch")
-
-let check_value label expected actual =
-  if expected = actual then ok else error (label ^ ": value mismatch")
-
-let check_location label expected actual =
-  if expected = actual then ok else error (label ^ ": location mismatch")
-
-let check_control label expected actual =
-  if expected = actual then ok else error (label ^ ": control mismatch")
+type _ mode =
+  | Ground : Syntax.ground mode
+  | Holed : Syntax.holed mode
 
 let check_exp label expected actual =
-  if SyntaxEqual.Exp.equal_t expected actual then ok
+  if Syntax.equal_exp expected actual then ok
   else error (label ^ ": expression mismatch")
 
 let check_lval label expected actual =
-  if SyntaxEqual.equal_lval expected actual then ok
+  if Syntax.equal_lval expected actual then ok
   else error (label ^ ": lvalue mismatch")
 
 let check_instr label expected actual =
-  if SyntaxEqual.equal_instr expected actual then ok
+  if Syntax.equal_instr expected actual then ok
   else error (label ^ ": instruction mismatch")
 
 let check_stmt label expected actual =
-  if SyntaxEqual.equal_stmt expected actual then ok
+  if Syntax.equal_stmt expected actual then ok
   else error (label ^ ": statement mismatch")
 
 let check_block label expected actual =
-  if SyntaxEqual.equal_block expected actual then ok
+  if Syntax.equal_block expected actual then ok
   else error (label ^ ": block mismatch")
 
 let check_fundec label expected actual =
-  if SyntaxEqual.equal_fundec expected actual then ok
+  if Syntax.equal_fundec expected actual then ok
   else error (label ^ ": function mismatch")
 
 module VarMap = Map.Make (Syntax.VarId)
 module StringSet = Set.Make (String)
 
-let check_int_value label = function
-  | Value.Int { ikind = Typ.IInt; _ } -> ok
-  | value -> error (label ^ ": expected int value, got " ^ Value.string_of_t value)
-
-let check_function_metadata label fd =
+let check_function_metadata (type mode) label
+    (fd : mode Syntax.fundec) =
   let function_name = SyntaxUtil.var_name fd.Syntax.svar in
   let svar = fd.Syntax.svar in
   let rec check_all check = function
@@ -131,13 +105,15 @@ let check_function_metadata label fd =
                 (label ^ ": undeclared local: "
                ^ SyntaxUtil.string_of_var occurrence)
           | Some declaration ->
-              if SyntaxEqual.equal_varinfo occurrence declaration then ok
+              if Syntax.equal_varinfo occurrence declaration then ok
               else
                 error
                   (label ^ ": local declaration mismatch: "
                  ^ SyntaxUtil.string_of_var occurrence)
   in
-  let rec check_exp declarations = function
+  let rec check_exp declarations (exp : mode Syntax.exp) =
+    match exp with
+    | Syntax.ExpHole _ -> ok
     | Syntax.Const _ -> ok
     | Syntax.Lval lval -> check_lval declarations lval
     | Syntax.UnOp (_, exp, _) -> check_exp declarations exp
@@ -182,8 +158,18 @@ let check_function_metadata label fd =
         check_block_references declarations else_block
     | Syntax.Loop body | Syntax.Block body ->
         check_block_references declarations body
-  and check_block_references declarations block =
-    check_all (check_stmt_references declarations) block.Syntax.bstmts
+  and check_block_references declarations
+      (block : mode Syntax.block) =
+    check_stmt_seq_references declarations block.Syntax.bstmts
+  and check_stmt_seq_references declarations
+      (items : mode Syntax.stmt_seq_item list) =
+    match items with
+    | [] -> ok
+    | Syntax.Stmt stmt :: rest ->
+        check_stmt_references declarations stmt >>= fun () ->
+        check_stmt_seq_references declarations rest
+    | Syntax.StmtSeqHole _ :: rest ->
+        check_stmt_seq_references declarations rest
   in
   check_svar () >>= fun () ->
   let formal_result, seen, declarations =
@@ -230,13 +216,49 @@ let check_type_value label = function
   | Ok _ -> ok
   | Error err -> error (label ^ ": " ^ TypeUtil.string_of_error err)
 
+let rec has_exp_hole : type mode. mode Syntax.exp -> bool = function
+  | Syntax.ExpHole _ -> true
+  | Syntax.Const _ -> false
+  | Syntax.Lval lval | Syntax.AddrOf lval | Syntax.StartOf lval ->
+      has_lval_exp_hole lval
+  | Syntax.UnOp (_, exp, _) -> has_exp_hole exp
+  | Syntax.BinOp (_, left, right, _) ->
+      has_exp_hole left || has_exp_hole right
+
+and has_lval_exp_hole : type mode. mode Syntax.lval -> bool =
+ fun (host, offset) ->
+  has_lhost_exp_hole host || has_offset_exp_hole offset
+
+and has_lhost_exp_hole : type mode. mode Syntax.lhost -> bool = function
+  | Syntax.Var _ -> false
+  | Syntax.Mem exp -> has_exp_hole exp
+
+and has_offset_exp_hole : type mode. mode Syntax.offset -> bool = function
+  | Syntax.NoOffset -> false
+  | Syntax.Field (_, offset) -> has_offset_exp_hole offset
+  | Syntax.Index (exp, offset) ->
+      has_exp_hole exp || has_offset_exp_hole offset
+
+let check_short_circuit_type label op left right result_type =
+  if has_exp_hole right then
+    match TypeUtil.type_of_exp left with
+    | Error err -> error (label ^ ": " ^ TypeUtil.string_of_error err)
+    | Ok left_type ->
+        check_type label
+          (TypeUtil.check_binop op ~left_type ~right_type:left_type
+             ~result_type)
+  else
+    check_type_value label
+      (TypeUtil.type_of_exp (Syntax.BinOp (op, left, right, result_type)))
+
 let check_file_result label = function
   | Ok () -> ok
   | Error err -> error (label ^ ": " ^ SyntaxChecker.string_of_error err)
 
-let check_expected_memory label actual = function
-  | Ok expected -> check_memory label expected actual
-  | Error err -> error (label ^ ": " ^ err)
+let check_holed_syntax_result label = function
+  | Ok () -> ok
+  | Error err ->
+      error (label ^ ": " ^ HoleSyntaxChecker.string_of_error err)
 
 let check_return_type label return_type exp =
   match return_type with
@@ -244,46 +266,9 @@ let check_return_type label return_type exp =
   | Some return_type ->
       check_type label (TypeUtil.check_return ~return_type exp)
 
-let rec check_list check = function
-  | [] -> ok
-  | x :: xs -> check x >>= fun () -> check_list check xs
-
-let rec check_function_arguments label formals args =
-  match formals, args with
-  | [], [] -> ok
-  | formal :: formals, arg :: args ->
-      if formal.Syntax.vtype <> Typ.TInt Typ.IInt then
-        error
-          (label ^ ": formal type is outside the int-only subset: "
-         ^ SyntaxUtil.string_of_var formal)
-      else
-        check_int_value (label ^ " " ^ SyntaxUtil.var_name formal) arg
-        >>= fun () -> check_function_arguments label formals args
-  | [], _ :: _ | _ :: _, [] -> error (label ^ ": arity mismatch")
-
-let rec bind_expected_formals formals args mem =
-  match formals, args with
-  | [], [] -> Ok mem
-  | formal :: formals, arg :: args -> (
-      match Memory.bind_local formal arg mem with
-      | Ok (_, mem) -> bind_expected_formals formals args mem
-      | Error err -> Error (Memory.string_of_error err) )
-  | [], _ :: _ | _ :: _, [] ->
-      Error "arity mismatch"
-
-let rec allocate_expected_locals locals mem =
-  match locals with
-  | [] -> Ok mem
-  | local :: locals -> (
-      match Memory.allocate_local local mem with
-      | Ok (_, mem) -> allocate_expected_locals locals mem
-      | Error err -> Error (Memory.string_of_error err) )
-
 let expected_function_body_input fd args mem =
-  let mem = Memory.enter_function mem in
-  match bind_expected_formals fd.Syntax.sformals args mem with
-  | Error err -> Error err
-  | Ok mem -> allocate_expected_locals fd.Syntax.slocals mem
+  BigStepCheckerCore.expected_function_body_input
+    ~formals:fd.Syntax.sformals ~locals:fd.Syntax.slocals args mem
 
 let rec check_etree tree =
   let mem, _, _ = e_concl tree in
@@ -329,11 +314,13 @@ let rec check_etree tree =
       | _ -> error "E-UnOp subject is not a unary expression")
   | ETreeLogicalOrLeftTrue (left, (mem, exp, value)) -> (
       check_etree left >>= fun () ->
-      check_type_value "E-LOr true type" (TypeUtil.type_of_exp exp) >>= fun () ->
       let left_mem, left_exp, left_value = e_concl left in
       check_memory "E-LOr true input" mem left_mem >>= fun () ->
       match exp with
-      | Syntax.BinOp (Syntax.LOr, expected_left, _, _) ->
+      | Syntax.BinOp (Syntax.LOr, expected_left, skipped_right, result_type) ->
+          check_short_circuit_type "E-LOr true type" Syntax.LOr
+            expected_left skipped_right result_type
+          >>= fun () ->
           check_exp "E-LOr true left" expected_left left_exp >>= fun () -> (
           match Value.truthy left_value with
           | Ok true -> check_value "E-LOr true value" (Value.of_bool true) value
@@ -362,11 +349,13 @@ let rec check_etree tree =
       | _ -> error "E-LOr false subject is not logical-or")
   | ETreeLogicalAndLeftFalse (left, (mem, exp, value)) -> (
       check_etree left >>= fun () ->
-      check_type_value "E-LAnd false type" (TypeUtil.type_of_exp exp) >>= fun () ->
       let left_mem, left_exp, left_value = e_concl left in
       check_memory "E-LAnd false input" mem left_mem >>= fun () ->
       match exp with
-      | Syntax.BinOp (Syntax.LAnd, expected_left, _, _) ->
+      | Syntax.BinOp (Syntax.LAnd, expected_left, skipped_right, result_type) ->
+          check_short_circuit_type "E-LAnd false type" Syntax.LAnd
+            expected_left skipped_right result_type
+          >>= fun () ->
           check_exp "E-LAnd false left" expected_left left_exp >>= fun () -> (
           match Value.truthy left_value with
           | Ok false -> check_value "E-LAnd false value" (Value.of_bool false) value
@@ -552,7 +541,7 @@ and check_callee_in_file file = function
       if
         List.exists
           (function
-            | Syntax.GFun file_fd -> SyntaxEqual.equal_fundec fd file_fd
+            | Syntax.GFun file_fd -> Syntax.equal_fundec fd file_fd
             | Syntax.GVarDecl _ | Syntax.GVar _ -> false)
           file.Syntax.globals
       then ok
@@ -596,7 +585,7 @@ and check_stree ?return_type tree =
       check_instr_flow mem itrees >>= fun () ->
       check_stmt "S-Instr subject" stmt (Syntax.{ labels = []; skind = Instr (List.map (fun itree -> let _, instr, _ = i_concl itree in instr) itrees); sid = stmt.sid })
       >>= fun () ->
-      let expected_out = BigStepUtil.instrs_output_memory mem itrees in
+      let expected_out = instrs_output_memory mem itrees in
       check_memory "S-Instr output" expected_out out_mem >>= fun () ->
       check_control "S-Instr control" Normal control
   | STreeReturnNone (mem, stmt, out_mem, control) ->
@@ -758,13 +747,18 @@ and check_block_flow ?return_type mem = function
       else if strees = [] then ok
       else error "B-Seq has statements after non-normal control"
 
-and check_block_prefix strees stmts =
-  match strees, stmts with
+and check_block_prefix :
+    type mode.
+    mode stree list -> mode Syntax.stmt_seq_item list -> result =
+ fun strees items ->
+  match strees, items with
   | [], _ -> ok
-  | stree :: strees, stmt :: stmts ->
+  | stree :: strees, Syntax.Stmt stmt :: items ->
       let _, actual, _, _ = s_concl stree in
       check_stmt "B-Seq prefix statement" stmt actual >>= fun () ->
-      check_block_prefix strees stmts
+      check_block_prefix strees items
+  | _ :: _, Syntax.StmtSeqHole _ :: _ ->
+      error "B-Seq attempted to execute a statement-sequence hole"
   | _ :: _, [] -> error "B-Seq executed more statements than block contains"
 
 and check_block_completion strees stmts =
@@ -835,16 +829,10 @@ and check_ftree tree =
       >>= fun () ->
       check_control "F no-return control" ReturnVoid control
 
-(* This option controls only whether SyntaxChecker.check_file is run. The proof-level
-   program checks below still run even when use_check_file is false. *)
-let check_ptree ?(use_check_file = true) = function
+let check_ptree_rules = function
   | PTreeMainReturn (ftree, (file, mem, value)) ->
       check_memory_well_formed "P output" mem >>= fun () ->
       check_int_value "P value" value >>= fun () ->
-      (if use_check_file then
-         check_file_result "P-File" (SyntaxChecker.check_file file)
-       else ok)
-      >>= fun () ->
       (match SyntaxUtil.main_functions file with
       | [] -> error "P-Main missing main function"
       | _ :: _ :: _ -> error "P-Main has multiple main functions"
@@ -863,15 +851,144 @@ let check_ptree ?(use_check_file = true) = function
       | Return expected -> check_value "P-Main value" expected value
       | ReturnVoid | Normal | Break | Continue -> error "P-Main did not return a value"
 
-let check_tree = function
+let check_tree_rules = function
   | ETree etree -> check_etree etree
   | LTree ltree -> check_ltree ltree
   | ITree itree -> check_itree itree
   | STree stree -> check_stree stree
   | BTree btree -> check_btree btree
   | FTree ftree -> check_ftree ftree
-  | PTree ptree -> check_ptree ptree
+  | PTree ptree -> check_ptree_rules ptree
 
-let string_of_result = function
-  | Valid -> "ok"
-  | Invalid msg -> msg
+let check_ground_syntax : Syntax.ground tree -> result = function
+  | PTree ptree ->
+      let file, _, _ = p_concl ptree in
+      check_file_result "P-File" (SyntaxChecker.check_file file)
+  | ETree _ | LTree _ | ITree _ | STree _ | BTree _ | FTree _ -> ok
+
+let check_holed_exp label exp =
+  check_holed_syntax_result label (HoleSyntaxChecker.check_exp exp)
+
+let check_holed_lval label lval =
+  check_holed_syntax_result label (HoleSyntaxChecker.check_lval lval)
+
+let check_holed_instr label instr =
+  check_holed_syntax_result label (HoleSyntaxChecker.check_instr instr)
+
+let check_holed_stmt label stmt =
+  check_holed_syntax_result label (HoleSyntaxChecker.check_stmt stmt)
+
+let check_holed_block label block =
+  check_holed_syntax_result label (HoleSyntaxChecker.check_block block)
+
+let check_holed_fundec label fundec =
+  check_holed_syntax_result label (HoleSyntaxChecker.check_fundec fundec)
+
+let rec check_holed_etree_syntax etree =
+  let _, exp, _ = e_concl etree in
+  check_holed_exp "E-Syntax" exp >>= fun () ->
+  match etree with
+  | ETreeConst _ -> ok
+  | ETreeLval (ltree, _) | ETreeAddrOf (ltree, _)
+  | ETreeStartOf (ltree, _) ->
+      check_holed_ltree_syntax ltree
+  | ETreeUnOp (subtree, _) | ETreeLogicalOrLeftTrue (subtree, _)
+  | ETreeLogicalAndLeftFalse (subtree, _) ->
+      check_holed_etree_syntax subtree
+  | ETreeLogicalOrLeftFalse (left, right, _)
+  | ETreeLogicalAndLeftTrue (left, right, _)
+  | ETreeBinOp (left, right, _) ->
+      check_holed_etree_syntax left >>= fun () ->
+      check_holed_etree_syntax right
+
+and check_holed_ltree_syntax ltree =
+  let _, lval, _ = l_concl ltree in
+  check_holed_lval "L-Syntax" lval >>= fun () ->
+  match ltree with
+  | LTreeVar _ -> ok
+  | LTreeMem (etree, _) -> check_holed_etree_syntax etree
+  | LTreeIndex (base, index, _) ->
+      check_holed_ltree_syntax base >>= fun () ->
+      check_holed_etree_syntax index
+
+and check_holed_itree_syntax itree =
+  let _, instr, _ = i_concl itree in
+  check_holed_instr "I-Syntax" instr >>= fun () ->
+  match itree with
+  | ITreeSet (ltree, etree, _) ->
+      check_holed_ltree_syntax ltree >>= fun () ->
+      check_holed_etree_syntax etree
+  | ITreeCallVoid (callee, arguments, ftree, _) ->
+      check_holed_callee_syntax callee >>= fun () ->
+      check_list check_holed_etree_syntax arguments >>= fun () ->
+      check_holed_ftree_syntax ftree
+  | ITreeCallAssign (ltree, callee, arguments, ftree, _) ->
+      check_holed_ltree_syntax ltree >>= fun () ->
+      check_holed_callee_syntax callee >>= fun () ->
+      check_list check_holed_etree_syntax arguments >>= fun () ->
+      check_holed_ftree_syntax ftree
+
+and check_holed_callee_syntax = function
+  | CalleeTreeDirect (exp, _, fundec) ->
+      check_holed_exp "Callee-Syntax" exp >>= fun () ->
+      check_holed_fundec "Callee-Function-Syntax" fundec
+
+and check_holed_stree_syntax stree =
+  let _, stmt, _, _ = s_concl stree in
+  check_holed_stmt "S-Syntax" stmt >>= fun () ->
+  match stree with
+  | STreeInstr (itrees, _) -> check_list check_holed_itree_syntax itrees
+  | STreeReturnNone _ | STreeBreak _ | STreeContinue _ -> ok
+  | STreeReturnSome (etree, _) -> check_holed_etree_syntax etree
+  | STreeIfTrue (condition, body, _)
+  | STreeIfFalse (condition, body, _) ->
+      check_holed_etree_syntax condition >>= fun () ->
+      check_holed_btree_syntax body
+  | STreeLoopRepeat (body, rest, _)
+  | STreeLoopContinue (body, rest, _) ->
+      check_holed_btree_syntax body >>= fun () ->
+      check_holed_stree_syntax rest
+  | STreeLoopBreak (body, _) | STreeLoopReturn (body, _)
+  | STreeBlock (body, _) ->
+      check_holed_btree_syntax body
+
+and check_holed_btree_syntax btree =
+  let _, block, _, _ = b_concl btree in
+  check_holed_block "B-Syntax" block >>= fun () ->
+  match btree with
+  | BTreeSeq (strees, _) -> check_list check_holed_stree_syntax strees
+
+and check_holed_ftree_syntax ftree =
+  let _, fundec, _, _, _ = f_concl ftree in
+  check_holed_fundec "F-Syntax" fundec >>= fun () ->
+  match ftree with
+  | FTreeReturn (btree, _) | FTreeNoReturn (btree, _) ->
+      check_holed_btree_syntax btree
+
+and check_holed_ptree_syntax ptree =
+  let file, _, _ = p_concl ptree in
+  check_holed_syntax_result "P-Syntax"
+    (HoleSyntaxChecker.check_file file)
+  >>= fun () ->
+  match ptree with
+  | PTreeMainReturn (ftree, _) -> check_holed_ftree_syntax ftree
+
+let check_holed_syntax : Syntax.holed tree -> result = function
+  | ETree etree -> check_holed_etree_syntax etree
+  | LTree ltree -> check_holed_ltree_syntax ltree
+  | ITree itree -> check_holed_itree_syntax itree
+  | STree stree -> check_holed_stree_syntax stree
+  | BTree btree -> check_holed_btree_syntax btree
+  | FTree ftree -> check_holed_ftree_syntax ftree
+  | PTree ptree -> check_holed_ptree_syntax ptree
+
+let check_tree :
+    type syntax_mode. syntax_mode mode -> syntax_mode tree -> result =
+ fun mode tree ->
+  match mode with
+  | Ground ->
+      check_ground_syntax tree >>= fun () ->
+      check_tree_rules tree
+  | Holed ->
+      check_holed_syntax tree >>= fun () ->
+      check_tree_rules tree

@@ -17,6 +17,7 @@ type ikind =
   | IInt128
   | IUInt128
   *)
+[@@deriving eq]
 
 type t =
   | TVoid (* CIL: TVoid of attributes *)
@@ -38,6 +39,7 @@ type t =
   | TEnum of enuminfo
   | TBuiltin_va_list
   *)
+[@@deriving eq]
 
 let string_of_ikind = function
   | IInt -> "int"

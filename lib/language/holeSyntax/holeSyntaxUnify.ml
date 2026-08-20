@@ -1,22 +1,23 @@
-open HoleSyntax
+open Syntax
 
 module Substitution = HoleSubstitution
 
 type error =
   | Substitution_error of Substitution.error
-  | Expression_mismatch of exp * exp
-  | Lhost_mismatch of lhost * lhost
-  | Offset_mismatch of offset * offset
-  | Instruction_mismatch of instr * instr
-  | Instruction_list_mismatch of instr list * instr list
-  | Statement_mismatch of stmt * stmt
-  | Statement_kind_mismatch of stmtkind * stmtkind
-  | Statement_sequence_mismatch of stmt_seq_item list * stmt_seq_item list
-  | Init_mismatch of init * init
-  | Fundec_mismatch of fundec * fundec
-  | Global_mismatch of global * global
-  | File_mismatch of file * file
-  | Ast_mismatch of ast * ast
+  | Expression_mismatch of holed exp * holed exp
+  | Lhost_mismatch of holed lhost * holed lhost
+  | Offset_mismatch of holed offset * holed offset
+  | Instruction_mismatch of holed instr * holed instr
+  | Instruction_list_mismatch of holed instr list * holed instr list
+  | Statement_mismatch of holed stmt * holed stmt
+  | Statement_kind_mismatch of holed stmtkind * holed stmtkind
+  | Statement_sequence_mismatch of
+      holed stmt_seq_item list * holed stmt_seq_item list
+  | Init_mismatch of holed init * holed init
+  | Fundec_mismatch of holed fundec * holed fundec
+  | Global_mismatch of holed global * holed global
+  | File_mismatch of holed file * holed file
+  | Ast_mismatch of holed ast * holed ast
 
 let ( let* ) = Result.bind
 
@@ -341,7 +342,6 @@ let unify_file_under substitution left right =
     unify_globals substitution left.globals right.globals
 
 
-(* 굳이 없어도 되는 Hㅔㄹ퍼 *)
 let unify_ast_under substitution left right =
   if left = right then Ok substitution
   else

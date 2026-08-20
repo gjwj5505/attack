@@ -2,8 +2,8 @@ open Language
 
 module S = Syntax
 module B = BigStep
-module C = BigStepChecker
 module U = BigStepUtil
+module C = BigStepChecker
 
 let int_t = Typ.TInt Typ.IInt
 let void_t = Typ.TVoid
@@ -51,7 +51,7 @@ let function_var name return_type formals =
   var ~vglob:true name (function_type return_type formals)
 
 let stmt skind = { S.labels = []; skind; sid = None }
-let block bstmts = { S.bstmts }
+let block stmts = { S.bstmts = List.map (fun stmt -> S.Stmt stmt) stmts }
 let file globals = { S.fileName = "bigstepcheck-test.c"; globals }
 let int_exp n = S.Const (S.CInt (Int64.of_int n, Typ.IInt))
 let int_tree n = B.ETreeConst (mem0, int_exp n, must_value n)
@@ -94,7 +94,7 @@ let derive_example path =
 let expect_valid_example path =
   let tree = derive_example path in
   expect_valid ("accept_" ^ Filename.basename path)
-    (C.check_ptree ~use_check_file:false tree)
+    (C.check_tree C.Ground (B.PTree tree))
 
 let local_binding ?(typ = int_t) ?(value = must_value 1) name =
   let x = var name typ in
@@ -1066,7 +1066,7 @@ let run_function_and_program_errors () =
       valid
   in
   expect_invalid "reject_function_output" "F output"
-    (C.check_ptree ~use_check_file:false bad_output);
+    (C.check_ptree_rules bad_output);
   let bad_control =
     mutate_main_ftree
       (function
@@ -1076,7 +1076,7 @@ let run_function_and_program_errors () =
       valid
   in
   expect_invalid "reject_function_control" "F control"
-    (C.check_ptree ~use_check_file:false bad_control);
+    (C.check_ptree_rules bad_control);
   let bad_body_input =
     let fd = minimal_main (block []) in
     let ghost = var ~function_name:"main" "ghost" int_t in
@@ -1099,22 +1099,23 @@ let run_function_and_program_errors () =
       valid
   in
   expect_invalid "reject_program_output" "P-Main output"
-    (C.check_ptree ~use_check_file:false bad_p_output);
+    (C.check_ptree_rules bad_p_output);
   let bad_p_value =
     mutate_main_concl (fun (file, mem, _) -> (file, mem, must_value 99)) valid
   in
   expect_invalid "reject_program_value" "P-Main value"
-    (C.check_ptree ~use_check_file:false bad_p_value);
+    (C.check_ptree_rules bad_p_value);
   let bad_pointer_value =
     mutate_main_concl
       (fun (file, mem, _) -> (file, mem, Value.ptr bad_loc))
       valid
   in
   expect_invalid "reject_program_pointer_value" "P value: expected int value"
-    (C.check_ptree ~use_check_file:false bad_pointer_value);
+    (C.check_ptree_rules bad_pointer_value);
   let no_main_file = file [] in
   let bad_file = mutate_main_concl (fun (_, mem, value) -> (no_main_file, mem, value)) valid in
-  expect_invalid "reject_program_file" "missing main function" (C.check_ptree bad_file);
+  expect_invalid "reject_program_file" "missing main function"
+    (C.check_tree C.Ground (B.PTree bad_file));
   let other_main = minimal_main (block [ stmt (S.Return (Some (int_exp 0))) ]) in
   let mismatch_file =
     file [ S.GFun { other_main with S.svar = var ~vglob:true "main" int_t } ]
@@ -1123,7 +1124,7 @@ let run_function_and_program_errors () =
     mutate_main_concl (fun (_, mem, value) -> (mismatch_file, mem, value)) valid
   in
   expect_invalid "reject_program_main_function" "P-Main function"
-    (C.check_ptree ~use_check_file:false bad_main);
+    (C.check_ptree_rules bad_main);
   let no_return =
     let fd = minimal_main (block []) in
     let body_mem = Memory.enter_function mem0 in
@@ -1134,7 +1135,7 @@ let run_function_and_program_errors () =
        (file [ S.GFun fd ], out_mem, must_value 0))
   in
   expect_invalid "reject_program_no_return" "F no-return type"
-    (C.check_tree (B.PTree no_return))
+    (C.check_tree C.Ground (B.PTree no_return))
 
 let run_regression_errors () =
   let make_set_zero_stree lval loc mem =
@@ -1289,7 +1290,7 @@ let run_regression_errors () =
   in
   expect_invalid "reject_ghost_callee_function"
     "callee function"
-    (C.check_ptree ~use_check_file:false ghost_tree);
+    (C.check_ptree_rules ghost_tree);
   let fd_main = minimal_main (block [ stmt (S.Return (Some (int_exp 0))) ]) in
   let main_input = Memory.enter_function mem0 in
   let main_body_input = Memory.enter_function main_input in
@@ -1312,7 +1313,7 @@ let run_regression_errors () =
   in
   expect_invalid "reject_main_nonempty_input"
     "P-Main input"
-    (C.check_ptree ~use_check_file:false nonempty_main_input);
+    (C.check_ptree_rules nonempty_main_input);
   expect_invalid "reject_empty_execution_nonempty_block"
     "B-Seq empty execution"
     (C.check_btree
@@ -1333,6 +1334,112 @@ let run_regression_errors () =
     "function signature"
     (C.check_itree forged_call_void_tree)
 
+let run_holed_tree_tests () =
+  let holed_int_exp n : S.holed S.exp =
+    S.Const (S.CInt (Int64.of_int n, Typ.IInt))
+  in
+  let holed_stmt skind : S.holed S.stmt =
+    { S.labels = []; skind; sid = None }
+  in
+  let holed_block items : S.holed S.block = { S.bstmts = items } in
+  let left_true = holed_int_exp 1 in
+  let left_true_tree =
+    B.ETreeConst (mem0, left_true, must_value 1)
+  in
+  let logical_or =
+    S.BinOp (S.LOr, left_true, S.ExpHole 1, int_t)
+  in
+  expect_valid "accept_holed_short_circuit_or"
+    (C.check_tree C.Holed
+       (B.ETree
+          (B.ETreeLogicalOrLeftTrue
+             (left_true_tree, (mem0, logical_or, must_value 1)))));
+  let left_false = holed_int_exp 0 in
+  let left_false_tree =
+    B.ETreeConst (mem0, left_false, must_value 0)
+  in
+  let logical_and =
+    S.BinOp (S.LAnd, left_false, S.ExpHole 2, int_t)
+  in
+  expect_valid "accept_holed_short_circuit_and"
+    (C.check_tree C.Holed
+       (B.ETree
+          (B.ETreeLogicalAndLeftFalse
+             (left_false_tree, (mem0, logical_and, must_value 0)))));
+  expect_invalid "reject_holed_executed_expression" "unsupported expression"
+    (C.check_tree C.Holed
+       (B.ETree (B.ETreeConst (mem0, S.ExpHole 1, must_value 0))));
+  let empty_block = holed_block [] in
+  let skipped_else = holed_block [ S.StmtSeqHole 3 ] in
+  let selected_then =
+    B.BTreeSeq ([], (mem0, empty_block, mem0, B.Normal))
+  in
+  let if_true_stmt =
+    holed_stmt (S.If (left_true, empty_block, skipped_else))
+  in
+  expect_valid "accept_holed_unselected_if_branch"
+    (C.check_tree C.Holed
+       (B.STree
+          (B.STreeIfTrue
+             ( left_true_tree,
+               selected_then,
+               (mem0, if_true_stmt, mem0, B.Normal) ))));
+  let selected_hole_block = holed_block [ S.StmtSeqHole 4 ] in
+  let selected_hole_tree =
+    B.BTreeSeq
+      ([], (mem0, selected_hole_block, mem0, B.Normal))
+  in
+  let invalid_if_stmt =
+    holed_stmt (S.If (left_true, selected_hole_block, empty_block))
+  in
+  expect_invalid "reject_holed_selected_if_branch" "empty execution"
+    (C.check_tree C.Holed
+       (B.STree
+          (B.STreeIfTrue
+             ( left_true_tree,
+               selected_hole_tree,
+               (mem0, invalid_if_stmt, mem0, B.Normal) ))));
+  let return_exp = holed_int_exp 0 in
+  let return_value = must_value 0 in
+  let return_stmt = holed_stmt (S.Return (Some return_exp)) in
+  let return_tree =
+    B.STreeReturnSome
+      ( B.ETreeConst (mem0, return_exp, return_value),
+        (mem0, return_stmt, mem0, B.Return return_value) )
+  in
+  let return_tail_block =
+    holed_block [ S.Stmt return_stmt; S.StmtSeqHole 5 ]
+  in
+  expect_valid "accept_holed_tail_after_return"
+    (C.check_tree C.Holed
+       (B.BTree
+          (B.BTreeSeq
+             ( [ return_tree ],
+               ( mem0,
+                 return_tail_block,
+                 mem0,
+                 B.Return return_value ) ))));
+  let normal_stmt = holed_stmt (S.Instr []) in
+  let normal_tree =
+    B.STreeInstr ([], (mem0, normal_stmt, mem0, B.Normal))
+  in
+  let normal_tail_block =
+    holed_block [ S.Stmt normal_stmt; S.StmtSeqHole 6 ]
+  in
+  expect_invalid "reject_holed_tail_after_normal" "stopped before end"
+    (C.check_tree C.Holed
+       (B.BTree
+          (B.BTreeSeq
+             ([ normal_tree ], (mem0, normal_tail_block, mem0, B.Normal)))));
+  let nonfinal_hole_block =
+    holed_block [ S.StmtSeqHole 7; S.Stmt normal_stmt ]
+  in
+  expect_invalid "reject_holed_nonfinal_tail" "not final"
+    (C.check_tree C.Holed
+       (B.BTree
+          (B.BTreeSeq
+             ([], (mem0, nonfinal_hole_block, mem0, B.Normal)))))
+
 let () =
   List.iter expect_valid_example
     [ example_path "simple.c"; example_path "function_call.c"; example_path "fibonacci.c" ];
@@ -1343,4 +1450,5 @@ let () =
   run_statement_and_block_errors ();
   run_function_top_frame_tests ();
   run_function_and_program_errors ();
-  run_regression_errors ()
+  run_regression_errors ();
+  run_holed_tree_tests ()

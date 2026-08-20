@@ -1,7 +1,7 @@
 (* Structural checker for CIL-- syntax that may still contain holes. *)
 
-open HoleSyntax
-open HoleSyntaxUtil
+open Syntax
+open SyntaxUtil
 
 type hole_sort =
   | Expression

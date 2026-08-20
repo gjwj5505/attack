@@ -1,18 +1,18 @@
 open Language
 
-module S = HoleSyntax
+module S = Syntax
 module Sub = HoleSubstitution
 
 let int_t = Typ.TInt Typ.IInt
 
 let int_const n =
-  S.Exp.Const (Syntax.Exp.CInt (Int64.of_int n, Typ.IInt))
+  S.Const (Syntax.Exp.CInt (Int64.of_int n, Typ.IInt))
 
 let plus left right = S.BinOp (Syntax.PlusA, left, right, int_t)
-let stmt skind : S.stmt = { labels = []; skind; sid = None }
+let stmt skind : S.holed S.stmt = { labels = []; skind; sid = None }
 let known skind = S.Stmt (stmt skind)
 let return exp = known (S.Return (Some exp))
-let block bstmts : S.block = { bstmts }
+let block bstmts : S.holed S.block = { bstmts }
 
 let map_of_bindings bindings =
   List.fold_left

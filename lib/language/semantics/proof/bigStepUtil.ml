@@ -58,15 +58,15 @@ let i_concl = function
       concl
 
 let i_output_memory tree =
-  let _, _, mem = i_concl tree in
-  mem
+  let _, _, memory = i_concl tree in
+  memory
 
-let instrs_output_memory initial_mem = function
-  | [] -> initial_mem
-  | itrees -> i_output_memory (List.hd (List.rev itrees))
+let instrs_output_memory initial_memory = function
+  | [] -> initial_memory
+  | trees -> i_output_memory (List.hd (List.rev trees))
 
 let callee_fundec = function
-  | CalleeTreeDirect (_, _, fd) -> fd
+  | CalleeTreeDirect (_, _, fundec) -> fundec
 
 let s_concl = function
   | STreeInstr (_, concl)
@@ -84,19 +84,18 @@ let s_concl = function
       concl
 
 let s_output_memory tree =
-  let _, _, mem, _ = s_concl tree in
-  mem
+  let _, _, memory, _ = s_concl tree in
+  memory
 
 let s_control tree =
   let _, _, _, control = s_concl tree in
   control
 
-let b_concl = function
-  | BTreeSeq (_, concl) -> concl
+let b_concl = function BTreeSeq (_, concl) -> concl
 
 let b_output_memory tree =
-  let _, _, mem, _ = b_concl tree in
-  mem
+  let _, _, memory, _ = b_concl tree in
+  memory
 
 let b_control tree =
   let _, _, _, control = b_concl tree in
@@ -106,19 +105,18 @@ let f_concl = function
   | FTreeReturn (_, concl) | FTreeNoReturn (_, concl) -> concl
 
 let f_output_memory tree =
-  let _, _, _, mem, _ = f_concl tree in
-  mem
+  let _, _, _, memory, _ = f_concl tree in
+  memory
 
 let f_control tree =
   let _, _, _, _, control = f_concl tree in
   control
 
-let p_concl = function
-  | PTreeMainReturn (_, concl) -> concl
+let p_concl = function PTreeMainReturn (_, concl) -> concl
 
 let p_output_memory tree =
-  let _, mem, _ = p_concl tree in
-  mem
+  let _, memory, _ = p_concl tree in
+  memory
 
 let p_value tree =
   let _, _, value = p_concl tree in

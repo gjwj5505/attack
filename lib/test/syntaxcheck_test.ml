@@ -16,10 +16,10 @@ let local_var ?(vtemp = false) ~function_name name typ =
   }
 
 let stmt skind = { S.labels = []; skind; sid = None }
-let block bstmts = { S.bstmts }
+let block stmts = { S.bstmts = List.map (fun stmt -> S.Stmt stmt) stmts }
 
-let int_const n = S.Exp.Const (S.Exp.CInt (Int64.of_int n, Language.Typ.IInt))
-let var_exp var = S.Exp.Lval (S.Var var, S.NoOffset)
+let int_const n = S.Const (S.Exp.CInt (Int64.of_int n, Language.Typ.IInt))
+let var_exp var = S.Lval (S.Var var, S.NoOffset)
 
 let function_type return_type formals =
   Language.Typ.TFun
@@ -535,11 +535,11 @@ let main_returning exp =
   file [ S.GFun (main_fun [ stmt (S.Return (Some exp)) ]) ]
 
 let reject_undeclared_in_unop =
-  main_returning (S.Exp.UnOp (S.Exp.Neg, var_exp traversal_missing, int_t))
+  main_returning (S.UnOp (S.Exp.Neg, var_exp traversal_missing, int_t))
 
 let reject_undeclared_in_binop =
   main_returning
-    (S.Exp.BinOp
+    (S.BinOp
        (S.Exp.PlusA, int_const 1, var_exp traversal_missing, int_t))
 
 let reject_undeclared_in_set_lval =

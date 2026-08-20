@@ -1,13 +1,13 @@
 open Syntax
 
-type error =
+type 'mode error =
   | Unsupported_type of Typ.t
-  | Unsupported_lvalue of lval
-  | Unsupported_expression of Exp.t
+  | Unsupported_lvalue of 'mode lval
+  | Unsupported_expression of 'mode exp
   | Unsupported_unop of unop
   | Unsupported_binop of binop
-  | Expected_function of Exp.t
-  | Function_without_parameter_types of Exp.t
+  | Expected_function of 'mode exp
+  | Function_without_parameter_types of 'mode exp
   | Arity_mismatch of {
       expected : int;
       actual : int;
@@ -71,15 +71,18 @@ let check_binop op ~left_type ~right_type ~result_type =
   | BOr ->
       Error (Unsupported_binop op)
 
-let rec type_of_lval ((host, offset) as lval) =
+let rec type_of_lval : type mode. mode lval -> (Typ.t, mode error) result =
+ fun ((host, offset) as lval) ->
   match host, offset with
   | Var var, NoOffset ->
       let* typ = scalar_type var.vtype in
       Ok typ
   | Mem _, _ | _, Field _ | _, Index _ -> Error (Unsupported_lvalue lval)
 
-and type_of_exp exp =
+and type_of_exp : type mode. mode exp -> (Typ.t, mode error) result =
+ fun exp ->
   match exp with
+  | ExpHole _ -> Error (Unsupported_expression exp)
   | Const (CInt (_, ikind)) -> Ok (Typ.TInt ikind)
   | Lval lval -> type_of_lval lval
   | UnOp (op, sub_exp, typ) ->
@@ -95,7 +98,10 @@ and type_of_exp exp =
       Ok typ
   | AddrOf _ | StartOf _ -> Error (Unsupported_expression exp)
 
-let function_type_of_callee callee =
+let function_type_of_callee :
+    type mode.
+    mode exp -> (Typ.t * (string * Typ.t) list, mode error) result =
+ fun callee ->
   match callee with
   | Lval (Var var, NoOffset) -> (
       match var.vtype with
@@ -145,7 +151,7 @@ let check_return ~return_type exp =
       let* actual = type_of_exp exp in
       check_same_type ~expected:return_type ~actual
 
-let string_of_error = function
+let string_of_error : type mode. mode error -> string = function
   | Unsupported_type typ -> "unsupported type: " ^ Typ.string_of_t typ
   | Unsupported_lvalue lval ->
       "unsupported lvalue: " ^ Syntax.string_of_lval lval

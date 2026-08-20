@@ -48,7 +48,8 @@ let string_of_label = function
 
 let named_list name boxes = Box.node name boxes
 
-let rec box_of_exp = function
+let rec box_of_exp : type mode. mode exp -> Box.t = function
+  | ExpHole id -> Box.leaf "ExpHole" (Printf.sprintf "H%d" id)
   | Const constant -> Box.leaf "Const" (string_of_constant constant)
   | Lval lval -> Box.node "Lval" [ box_of_lval lval ]
   | UnOp (op, exp, typ) ->
@@ -64,14 +65,15 @@ let rec box_of_exp = function
   | AddrOf lval -> Box.node "AddrOf" [ box_of_lval lval ]
   | StartOf lval -> Box.node "StartOf" [ box_of_lval lval ]
 
-and box_of_lval (host, offset) =
+and box_of_lval : type mode. mode lval -> Box.t =
+ fun (host, offset) ->
   Box.node "lval" [ box_of_lhost host; box_of_offset offset ]
 
-and box_of_lhost = function
+and box_of_lhost : type mode. mode lhost -> Box.t = function
   | Var var -> Box.leaf "Var" (string_of_varinfo var)
   | Mem exp -> Box.node "Mem" [ box_of_exp exp ]
 
-and box_of_offset = function
+and box_of_offset : type mode. mode offset -> Box.t = function
   | NoOffset -> Box.leaf_name "NoOffset"
   | Field (field, offset) ->
       Box.node "Field"
@@ -101,7 +103,7 @@ let box_of_instr = function
         :: box_of_exp callee
         :: List.map box_of_exp args)
 
-let rec box_of_stmt stmt =
+let rec box_of_stmt : type mode. mode stmt -> Box.t = fun stmt ->
   let name =
     match stmt.sid with
     | None -> "stmt"
@@ -109,7 +111,7 @@ let rec box_of_stmt stmt =
   in
   Box.node name [ box_of_labels stmt.labels; box_of_stmtkind stmt.skind ]
 
-and box_of_stmtkind = function
+and box_of_stmtkind : type mode. mode stmtkind -> Box.t = function
   | Instr instrs -> named_list "Instr" (List.map box_of_instr instrs)
   | Return exp -> Box.node "Return" [ box_of_option box_of_exp "exp" exp ]
   | If (cond, then_block, else_block) ->
@@ -124,10 +126,14 @@ and box_of_stmtkind = function
   | Continue -> Box.leaf_name "Continue"
   | Block block -> Box.node "Block" [ box_of_block block ]
 
-and box_of_block block =
-  named_list "block" (List.map box_of_stmt block.bstmts)
+and box_of_stmt_seq_item : type mode. mode stmt_seq_item -> Box.t = function
+  | Stmt stmt -> box_of_stmt stmt
+  | StmtSeqHole id -> Box.leaf "StmtSeqHole" (Printf.sprintf "H%d" id)
 
-let rec box_of_init = function
+and box_of_block : type mode. mode block -> Box.t = fun block ->
+  named_list "block" (List.map box_of_stmt_seq_item block.bstmts)
+
+let rec box_of_init : type mode. mode init -> Box.t = function
   | SingleInit exp -> Box.node "SingleInit" [ box_of_exp exp ]
   | CompoundInit (typ, fields) ->
       Box.node
@@ -162,7 +168,7 @@ let box_of_global = function
 let box_of_file file =
   Box.node
     (Printf.sprintf "file %s size %s" file.fileName
-       (Size.to_string (Size.make (Size.sizeof_file file) 0)))
+       (Size.to_string (SyntaxSize.sizeof_file file)))
     (List.map box_of_global file.globals)
 
 let render_file file = Box.render (box_of_file file)

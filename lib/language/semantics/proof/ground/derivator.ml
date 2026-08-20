@@ -17,9 +17,9 @@ type error =
       expected : int;
       actual : int;
     }
-  | Missing_return of fundec
-  | Return_value_in_void_function of fundec
-  | Return_without_value_in_nonvoid_function of fundec
+  | Missing_return of ground fundec
+  | Return_value_in_void_function of ground fundec
+  | Return_without_value_in_nonvoid_function of ground fundec
   | Break_outside_loop
   | Continue_outside_loop
   | Out_of_fuel
@@ -50,7 +50,7 @@ let consume_fuel fuel =
 module FunMap = Map.Make (VarId)
 
 type context = {
-  functions : fundec FunMap.t;
+  functions : ground fundec FunMap.t;
 }
 
 let build_context file =
@@ -63,7 +63,7 @@ let build_context file =
   in
   { functions }
 
-let rec derive_lval mem (lval : lval) =
+let rec derive_lval mem (lval : ground lval) =
   match lval with
   | Var var, NoOffset ->
       let* loc = map_memory_error (Memory.loc_of_var var mem) in
@@ -278,11 +278,11 @@ and derive_stmt ctx fuel mem stmt =
                (btree, (mem, stmt, b_output_memory btree, b_control btree)), fuel)
       | Instr _ -> assert false
 
-and derive_block ctx fuel mem block =
+and derive_block ctx fuel mem (block : ground block) =
   let rec loop rev_strees fuel current_mem = function
     | [] ->
         Ok (BTreeSeq (List.rev rev_strees, (mem, block, current_mem, Normal)), fuel)
-    | stmt :: stmts ->
+    | Stmt stmt :: stmts ->
         let* stree, fuel = derive_stmt ctx fuel current_mem stmt in
         let stmt_mem = s_output_memory stree in
         let stmt_control = s_control stree in

@@ -149,19 +149,20 @@ let check_variable_reference declarations occurrence =
   match VarMap.find_opt occurrence.vid declarations with
   | None -> error (Undeclared_variable occurrence)
   | Some declaration ->
-      if SyntaxEqual.equal_varinfo occurrence declaration then Ok ()
+      if equal_varinfo occurrence declaration then Ok ()
       else
         error
           (Variable_declaration_mismatch { occurrence; declaration })
 
-let rec check_exp_variables declarations = function
-  | Exp.Const _ -> Ok ()
-  | Exp.Lval lval -> check_lval_variables declarations lval
-  | Exp.UnOp (_, exp, _) -> check_exp_variables declarations exp
-  | Exp.BinOp (_, left, right, _) ->
+let rec check_exp_variables declarations (exp : ground exp) =
+  match exp with
+  | Const _ -> Ok ()
+  | Lval lval -> check_lval_variables declarations lval
+  | UnOp (_, exp, _) -> check_exp_variables declarations exp
+  | BinOp (_, left, right, _) ->
       let* () = check_exp_variables declarations left in
       check_exp_variables declarations right
-  | Exp.AddrOf lval | Exp.StartOf lval ->
+  | AddrOf lval | StartOf lval ->
       check_lval_variables declarations lval
 
 and check_lval_variables declarations (host, offset) =
@@ -203,8 +204,10 @@ let rec check_stmt_variables declarations stmt =
       check_block_variables declarations else_block
   | Loop body | Block body -> check_block_variables declarations body
 
-and check_block_variables declarations block =
-  check_list (check_stmt_variables declarations) block.bstmts
+and check_block_variables declarations (block : ground block) =
+  check_list
+    (function Stmt stmt -> check_stmt_variables declarations stmt)
+    block.bstmts
 
 let rec check_init_variables declarations = function
   | SingleInit exp -> check_exp_variables declarations exp
@@ -263,9 +266,11 @@ let check_main file =
 let rec check_block_control ~in_loop block =
   check_stmt_list_control ~in_loop block.bstmts
 
-and check_stmt_list_control ~in_loop = function
+and check_stmt_list_control ~in_loop
+    (items : ground stmt_seq_item list) =
+  match items with
   | [] -> Ok ()
-  | stmt :: stmts ->
+  | Stmt stmt :: stmts ->
       let* () = check_stmt_control ~in_loop stmt in
       check_stmt_list_control ~in_loop stmts
 
@@ -293,9 +298,11 @@ let check_control_flow file =
 let rec check_block_returns ~return_type block =
   check_stmt_list_returns ~return_type block.bstmts
 
-and check_stmt_list_returns ~return_type = function
+and check_stmt_list_returns ~return_type
+    (items : ground stmt_seq_item list) =
+  match items with
   | [] -> Ok ()
-  | stmt :: stmts ->
+  | Stmt stmt :: stmts ->
       let* () = check_stmt_returns ~return_type stmt in
       check_stmt_list_returns ~return_type stmts
 

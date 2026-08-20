@@ -1,16 +1,3 @@
-module S = Syntax
-
-(* CIL-- calls have a callee expression:
-
-     Call of lval option * Exp.t * Exp.t list
-
-   When function calls are implemented, callee resolution should become an
-   explicit proof component, e.g. a callee_tree, so direct calls and later
-   function-pointer calls are handled in one place. The call instruction tree
-   should describe the caller-side effect of the instruction; the function tree
-   should describe callee frame setup, body execution, and return.
-*)
-
 type memory = Memory.t
 type value = Value.t
 
@@ -23,75 +10,83 @@ type control =
 
 type loc = Memory.loc
 
-(* expression *)
-type e_concl = memory * S.Exp.t * value
-(* lval *)
-type l_concl = memory * S.lval * loc
-(* single instruction : Set, Call *)
-type i_concl = memory * S.instr * memory
-(* statement : instruction, return, break, continue, if, loop, ... *)
-type s_concl = memory * S.stmt * memory * control
-(* block *)
-type b_concl = memory * S.block * memory * control
-(* function *)
-type f_concl = memory * S.fundec * value list * memory * control
-(* total program : execute main function *)
-type p_concl = S.file * memory * value
+type 'mode e_concl = memory * 'mode Syntax.exp * value
+type 'mode l_concl = memory * 'mode Syntax.lval * loc
+type 'mode i_concl = memory * 'mode Syntax.instr * memory
+type 'mode s_concl = memory * 'mode Syntax.stmt * memory * control
+type 'mode b_concl = memory * 'mode Syntax.block * memory * control
 
-type tree =
-  | ETree of etree
-  | LTree of ltree
-  | ITree of itree
-  | STree of stree
-  | BTree of btree
-  | FTree of ftree
-  | PTree of ptree
+type 'mode f_concl =
+  memory * 'mode Syntax.fundec * value list * memory * control
 
-and etree =
-  | ETreeConst of e_concl
-  | ETreeLval of ltree * e_concl
-  | ETreeUnOp of etree * e_concl
-  | ETreeLogicalOrLeftTrue of etree * e_concl
-  | ETreeLogicalOrLeftFalse of etree * etree * e_concl
-  | ETreeLogicalAndLeftFalse of etree * e_concl
-  | ETreeLogicalAndLeftTrue of etree * etree * e_concl
-  | ETreeBinOp of etree * etree * e_concl (* logical 제외 *)
-  | ETreeAddrOf of ltree * e_concl
-  | ETreeStartOf of ltree * e_concl
+type 'mode p_concl = 'mode Syntax.file * memory * value
 
-and ltree =
-  | LTreeVar of l_concl
-  | LTreeMem of etree * l_concl
-  | LTreeIndex of ltree * etree * l_concl
+type 'mode tree =
+  | ETree of 'mode etree
+  | LTree of 'mode ltree
+  | ITree of 'mode itree
+  | STree of 'mode stree
+  | BTree of 'mode btree
+  | FTree of 'mode ftree
+  | PTree of 'mode ptree
 
-and itree =
-  | ITreeSet of ltree * etree * i_concl
-  | ITreeCallVoid of callee_tree * etree list * ftree * i_concl
-  | ITreeCallAssign of ltree * callee_tree * etree list * ftree * i_concl
+and 'mode etree =
+  | ETreeConst of 'mode e_concl
+  | ETreeLval of 'mode ltree * 'mode e_concl
+  | ETreeUnOp of 'mode etree * 'mode e_concl
+  | ETreeLogicalOrLeftTrue of 'mode etree * 'mode e_concl
+  | ETreeLogicalOrLeftFalse of
+      'mode etree * 'mode etree * 'mode e_concl
+  | ETreeLogicalAndLeftFalse of 'mode etree * 'mode e_concl
+  | ETreeLogicalAndLeftTrue of
+      'mode etree * 'mode etree * 'mode e_concl
+  | ETreeBinOp of 'mode etree * 'mode etree * 'mode e_concl
+  | ETreeAddrOf of 'mode ltree * 'mode e_concl
+  | ETreeStartOf of 'mode ltree * 'mode e_concl
 
-and callee_tree =
-  | CalleeTreeDirect of S.Exp.t * S.varinfo * S.fundec
+and 'mode ltree =
+  | LTreeVar of 'mode l_concl
+  | LTreeMem of 'mode etree * 'mode l_concl
+  | LTreeIndex of 'mode ltree * 'mode etree * 'mode l_concl
 
-and stree =
-  | STreeInstr of itree list * s_concl
-  | STreeReturnNone of s_concl
-  | STreeReturnSome of etree * s_concl
-  | STreeBreak of s_concl
-  | STreeContinue of s_concl
-  | STreeIfTrue of etree * btree * s_concl
-  | STreeIfFalse of etree * btree * s_concl
-  | STreeLoopRepeat of btree * stree * s_concl
-  | STreeLoopContinue of btree * stree * s_concl
-  | STreeLoopBreak of btree * s_concl
-  | STreeLoopReturn of btree * s_concl
-  | STreeBlock of btree * s_concl
+and 'mode itree =
+  | ITreeSet of 'mode ltree * 'mode etree * 'mode i_concl
+  | ITreeCallVoid of
+      'mode callee_tree * 'mode etree list * 'mode ftree * 'mode i_concl
+  | ITreeCallAssign of
+      'mode ltree
+      * 'mode callee_tree
+      * 'mode etree list
+      * 'mode ftree
+      * 'mode i_concl
 
-and btree =
-  | BTreeSeq of stree list * b_concl
+and 'mode callee_tree =
+  | CalleeTreeDirect of
+      'mode Syntax.exp * Syntax.varinfo * 'mode Syntax.fundec
 
-and ftree =
-  | FTreeReturn of btree * f_concl
-  | FTreeNoReturn of btree * f_concl
+and 'mode stree =
+  | STreeInstr of 'mode itree list * 'mode s_concl
+  | STreeReturnNone of 'mode s_concl
+  | STreeReturnSome of 'mode etree * 'mode s_concl
+  | STreeBreak of 'mode s_concl
+  | STreeContinue of 'mode s_concl
+  | STreeIfTrue of 'mode etree * 'mode btree * 'mode s_concl
+  | STreeIfFalse of 'mode etree * 'mode btree * 'mode s_concl
+  | STreeLoopRepeat of 'mode btree * 'mode stree * 'mode s_concl
+  | STreeLoopContinue of 'mode btree * 'mode stree * 'mode s_concl
+  | STreeLoopBreak of 'mode btree * 'mode s_concl
+  | STreeLoopReturn of 'mode btree * 'mode s_concl
+  | STreeBlock of 'mode btree * 'mode s_concl
 
-and ptree =
-  | PTreeMainReturn of ftree * p_concl
+and 'mode btree =
+  | BTreeSeq of 'mode stree list * 'mode b_concl
+
+and 'mode ftree =
+  | FTreeReturn of 'mode btree * 'mode f_concl
+  | FTreeNoReturn of 'mode btree * 'mode f_concl
+
+and 'mode ptree =
+  | PTreeMainReturn of 'mode ftree * 'mode p_concl
+
+type ground_tree = Syntax.ground tree
+type holed_tree = Syntax.holed tree

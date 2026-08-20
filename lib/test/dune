@@ -23,3 +23,7 @@
 (test
  (name bigstepcheck_test)
  (libraries language))
+
+(test
+ (name size_test)
+ (libraries language))

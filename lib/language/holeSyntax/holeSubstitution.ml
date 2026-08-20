@@ -1,4 +1,4 @@
-open HoleSyntax
+open Syntax
 
 module HoleIdMap = Map.Make (struct
   type t = hole_id
@@ -17,8 +17,8 @@ end)
     The domains of [exps] and [stmt_seqs] must be disjoint because one hole ID
     has exactly one sort within a proof component. *)
 type t = {
-  exps : exp HoleIdMap.t;
-  stmt_seqs : stmt_seq_item list HoleIdMap.t;
+  exps : holed exp HoleIdMap.t;
+  stmt_seqs : holed stmt_seq_item list HoleIdMap.t;
 }
 
 type hole_ids = {

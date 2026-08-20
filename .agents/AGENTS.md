@@ -1,57 +1,119 @@
-Always follow these rules:
+# Project Agent Instructions
 
-- Work in small steps
-- Modify only one file at a time
-- Explain briefly before coding
-- Wait for user confirmation before continuing
-- Do NOT run shell commands unless the user explicitly asks for that specific
-  action. This includes `dune build`, tests, example runs, `git`, and other
-  verification commands.
-- You may freely read and explore files to understand the project
-- `.agents/생각 끄적끄적` is the user's private scratch file. Never read,
-  inspect, modify, move, rename, delete, quote, or summarize its contents.
-- Modify files only with `apply_patch`; do not use Python, shell redirection,
-  heredocs, `cat > file`, or similar write methods for edits.
-- When adding prune rules, include a short code comment showing the form of
-  program/expression/command being removed.
-- When the user gives a durable workflow instruction, add it to this
-  `AGENTS.md` file after approval.
-- Treat a user reply of `rr` as confirmation or approval equivalent to `ㅇㅇ`.
-- During design discussions, keep durable conclusions, hypotheses, and next
-  actions updated in `.agents/CONTEXT.md` as the conversation progresses.
-- Keep `.agents/LANGUAGE.md` for stable language/semantics design and
-  `.agents/CONTEXT.md` for current state, recent changes, and next actions.
-- Do not delete or overwrite user-written content without explicit approval.
-- Before modifying files, show the planned diff/patch and present options to
-  the user; apply changes only after the user confirms.
-- When explaining code or design, be concise and explain one function or concept
-  at a time. Wait for the user to confirm understanding before moving to the
-  next one.
+These instructions apply only to this project and supplement `~/.codex/AGENTS.md`.
 
-Start by reading `.agents/CONTEXT.md`, then inspect only the files relevant to
-the current request. Prefer concise status updates in Korean.
+When this file explicitly overrides a global instruction, follow this file within the stated scope.
 
-Attack workflow:
-- When synthesis finds a successful analyzer attack, inspect why the analyzer
-  produced the bad result.
-- Strengthen the analyzer against that weakness in small approved steps.
-- Re-run the relevant attack/example/tests after the fix.
-- Record each successful attack and fix in `.agents/analyzer-attack-log.md`
-  using the format: date - name - metadata including git version and analyzer
-  engine when available - attack program - analyzer weakness - strengthening
-  method.
+## Rule priority
 
-Design/implementation workflow:
-- For semantics-heavy work, discuss the design before coding.
-- Present concrete options and tradeoffs when a design choice is open; let the
-  user make the final decision.
-- Record durable decisions in `.agents/CONTEXT.md` or `.agents/LANGUAGE.md`
-  before or alongside implementation.
-- Implement the chosen design in small patches.
-- After implementation, walk through the code with the user one function or
-  concept at a time.
-- When the walkthrough reveals unclear naming, duplicated responsibility, or an
-  awkward proof/semantic structure, refactor it before moving to the next major
-  feature.
-- Treat proof-tree shape, runtime semantics, checker policy, and CLI wiring as
-  separate design concerns unless the user explicitly asks to combine them.
+This document is organized into three levels:
+
+1. **Critical project rules** protect private files and project-specific invariants.
+2. **Operational workflows** define how project work should proceed.
+3. **Reference rules** describe project-specific documentation responsibilities.
+
+Within this file, Critical project rules take precedence over Operational and Reference rules.
+
+# Part I — Critical project rules
+
+## Protected private file
+
+The file `.agents/생각 끄적끄적` is private and off-limits.
+
+- Never read, inspect, modify, move, rename, delete, quote, summarize, or infer its contents.
+- Do not use indirect evidence to reconstruct or reveal its contents.
+
+## Project-specific command policy
+
+This section explicitly specializes the global command policy.
+
+- Read-only inspection commands remain allowed under the global rules.
+- Do not run `dune build`, tests, example programs, Git commands, or other verification commands unless:
+  - the user explicitly approves that command or command scope; or
+  - an active continuous-work approval explicitly covers it.
+- Do not treat permission to edit code as permission to run verification commands unless the approved scope includes verification.
+
+## Semantic separation
+
+Treat the following as separate design concerns unless the user explicitly asks to combine them:
+
+- proof-tree shape;
+- runtime semantics;
+- checker policy;
+- CLI wiring.
+
+Do not merge changes across these concerns merely because they are related.
+
+# Part II — Operational workflows
+
+## Project startup
+
+At the start of project work:
+
+1. Read this file.
+2. Read `.agents/CONTEXT.md`.
+3. Inspect only the files relevant to the current request.
+
+Read `.agents/README.md` when human-facing project background or usage information is relevant.
+
+## Project documentation
+
+Use the project documentation files as follows:
+
+- `.agents/AGENTS.md`: durable project-specific workflow instructions and constraints.
+- `.agents/CONTEXT.md`: current project state, recent changes, active hypotheses, blockers, and next actions.
+- `.agents/LANGUAGE.md`: stable language and semantics design.
+- `.agents/README.md`: human-facing project documentation.
+
+When the user approves a durable workflow change specific to this project, update `.agents/AGENTS.md`.
+
+Update `.agents/CONTEXT.md` at roughly the granularity of a meaningful Git commit:
+
+- record coherent changes in project state;
+- record relevant design decisions, hypotheses, blockers, and next actions;
+- do not update it for every minor discussion or mechanical edit.
+
+Record stable language or semantics decisions in `.agents/LANGUAGE.md`, not `.agents/CONTEXT.md`.
+
+## Semantics-heavy design workflow
+
+For work involving semantics or proof structure:
+
+1. Discuss the design before implementation.
+2. Present concrete options and tradeoffs when more than one reasonable design exists.
+3. Record durable decisions in `.agents/LANGUAGE.md` or `.agents/CONTEXT.md`, as appropriate.
+4. Implement the chosen design in small, approved atomic change sets.
+5. Briefly explain the resulting code and design after implementation.
+
+When implementation reveals unclear naming, duplicated responsibility, or an awkward proof or semantic structure:
+
+- report the issue;
+- propose a focused refactoring;
+- do not silently mix it into the current change set unless approved.
+
+## Analyzer attack workflow
+
+When synthesis finds a successful analyzer attack:
+
+1. Inspect why the analyzer produced the bad result.
+2. Identify the analyzer weakness responsible for the attack.
+3. Propose a focused strengthening step.
+4. Strengthen the analyzer in small, approved atomic change sets.
+5. Re-run the relevant attack, example, or tests after approval or within an active scope that covers verification.
+6. Record the successful attack and fix in `.agents/analyzer-attack-log.md`.
+
+Use this log format:
+
+```text
+date - name - metadata - attack program - analyzer weakness - strengthening method
+```
+
+Include Git version and analyzer engine in the metadata when available.
+
+## Prune rules
+
+When adding a prune rule:
+
+- include a short code comment;
+- show the form of program, expression, or command being removed;
+- keep the comment focused on the matched form rather than restating the implementation.

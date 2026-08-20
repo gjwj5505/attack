@@ -25,7 +25,7 @@ Pipelines:
 -pp:  C source -> GoblintCil -> CIL-- -> SyntaxChecker.check_file -> CIL -> pretty C
 -ast: C source -> GoblintCil -> CIL-- -> SyntaxChecker.check_file -> SVG AST
 -big: C source -> GoblintCil -> CIL-- -> SyntaxChecker.check_file
-        -> Derivator.derive_file -> BigStepChecker.check_ptree
+        -> Derivator.derive_file -> BigStepChecker.check_tree Ground
         -> SVG proof tree
 ```
 
@@ -48,31 +48,42 @@ dune exec bin/main.exe -- -big examples/fibonacci.c
 
 ## Key Files
 
-- `lib/language/syntax/syntax.ml`: CIL-- AST.
-- `lib/language/holeSyntax/holeSyntax.ml`: hole-aware CIL-- AST with expression
-  and final statement-sequence holes.
+- `lib/language/syntax/syntax.ml`: unified mode-indexed CIL-- AST; `ground`
+  excludes holes and `holed` admits expression and statement-sequence holes.
 - `lib/language/holeSyntax/holeSubstitution.ml`: sort-separated, normalized,
-  idempotent hole substitutions.
+  idempotent substitutions over `Syntax.holed`.
 - `lib/language/holeSyntax/holeSyntaxUnify.ml`: structural unification under an
-  existing substitution.
+  existing substitution over `Syntax.holed`.
+- `lib/language/holeSyntax/holeSyntaxChecker.ml`: raw structural and static
+  checker for `Syntax.holed`, without implicit substitution or unification.
 - `lib/language/typ.ml`: CIL-- type subset.
 - `lib/language/cilBridge.ml`: GoblintCil CIL <-> CIL-- conversion.
 - `lib/language/syntax/syntaxChecker.ml`: thin CIL-- syntax checker.
 - `lib/language/semantics/runtime/`: locations, values, value operations, and
   memory.
-- `lib/language/semantics/proof/ground/bigStep.ml`: proof tree types.
+- `lib/language/semantics/proof/bigStepUtil.ml`: mode-polymorphic common
+  proof-tree accessors and control utilities.
+- `lib/language/semantics/proof/bigStepCheckerCore.ml`: syntax-independent
+  proof-checker result, runtime-value, memory, and function-frame checks.
+- `lib/language/semantics/proof/ground/bigStep.ml`: unified mode-indexed
+  Big-Step proof tree with `ground_tree` and `holed_tree` aliases.
 - `lib/language/semantics/proof/ground/derivator.ml`: ground Big-Step derivation.
-- `lib/language/semantics/proof/ground/bigStepChecker.ml`: proof tree checker.
+- `lib/language/semantics/proof/ground/bigStepChecker.ml`: unified ground/holed
+  proof-tree checker.
 - `lib/language/semantics/typeUtil.ml`: scalar type side conditions for the
   proof checker.
+- `lib/language/semantics/proof/ground/size.ml`: shared one-dimensional integer
+  size carrier and arithmetic.
+- `lib/language/syntax/syntaxSize.ml`: mode-polymorphic static AST size for raw
+  syntax bottom-up synthesis.
+- `lib/language/semantics/proof/ground/proofSize.ml`: mode-polymorphic pure
+  proof size, independent of conclusion syntax.
 - `lib/test/syntaxcheck_test.ml`: direct CIL-- syntax checker tests.
 - `lib/test/holeSyntaxCheck_test.ml`: hole-aware syntax checker tests.
 - `lib/test/holeSubstitution_test.ml`: substitution and invariant tests.
 - `lib/test/holeSyntaxUnify_test.ml`: hole-aware structural unification tests.
 - `lib/test/bigstepcheck_test.ml`: Big-Step checker regression tests.
-- `lib/language/semantics/proof/ground/size.ml`: the current, pre-migration
-  `(program size, proof size)` implementation; the selected synthesis design
-  replaces this with separate raw-syntax and proof-size accounting.
+- `lib/test/size_test.ml`: scalar, syntax-size, and pure proof-size tests.
 
 Removed old handwritten parser files:
 
@@ -90,10 +101,9 @@ Removed old handwritten parser files:
   bitwise operators are unsupported in the current derivator/checker path.
 - `SyntaxChecker.check_file` is intentionally structural. Runtime definedness belongs
   in Big-Step derivation and proof checking.
-- `-big` runs `SyntaxChecker.check_file` before derivation, then validates the proof
-  with `BigStepChecker.check_ptree ~use_check_file:false`. That option only
-  controls whether `SyntaxChecker.check_file` is called again; proof-level program
-  checks still run.
+- `-big` runs `SyntaxChecker.check_file` before derivation, then validates the
+  proof with `BigStepChecker.check_tree Ground`. The authoritative checker also
+  validates the ground file stored in a whole-program conclusion.
 
 ## Recent Checker Status
 
@@ -134,14 +144,60 @@ statement, block, function, and program-level errors, including both
 coverage includes nested caller restoration, callee-local disposal, global
 update propagation, and forged-memory rejection.
 
+2026-08-13 GADT migration checkpoint:
+
+- `Syntax` and `BigStep` are unified mode-indexed type families;
+- the CIL bridge, syntax pretty-printer/checker, ground derivator,
+  `BigStepChecker`, size accounting, CLI-facing library, and ground tests have
+  been adapted without changing the executable proof rules;
+- `BigStepUtil` remains a separate non-functor module over the unified proof
+  type;
+- `opam exec --switch=5.4-test -- dune build` and the full
+  `opam exec --switch=5.4-test -- dune test` suite pass;
+- `HoleSubstitution`, `HoleSyntaxUnify`, and `HoleSyntaxChecker` now use
+  `Syntax.holed` directly; the duplicate `HoleSyntax` AST and its duplicate
+  util/pretty modules have been removed.
+
+2026-08-14 unified proof-checker checkpoint:
+
+- `BigStepChecker.check_tree Ground/Holed` is the single authoritative entry
+  point for both modes of the indexed proof tree;
+- ground whole-program trees are structurally validated with `SyntaxChecker`,
+  while holed trees are traversed and every proof conclusion is independently
+  validated with `HoleSyntaxChecker`;
+- holed checking is raw: it neither applies a substitution nor unifies syntax;
+- unresolved expression holes are accepted only in a right operand skipped by
+  short-circuit `LAnd`/`LOr`, and statement-sequence holes only in an unselected
+  `if` branch or a block tail skipped after non-normal control;
+- attempting to execute a hole, stopping normally before a tail hole, or using
+  a non-final statement-sequence hole is rejected;
+- the eight new holed-proof regression cases and the full
+  `opam exec --switch=5.4-test -- dune test` suite pass.
+
+2026-08-14 size-separation checkpoint:
+
+- the old `(program size, proof size)` pair has been removed from the active
+  language library; `Size.t` is now a shared one-dimensional integer carrier;
+- `SyntaxSize` computes mode-polymorphic static AST size for raw-program
+  bottom-up synthesis;
+- `ProofSize` computes mode-polymorphic Big-Step proof size by counting only
+  proof constructors and their premises, never conclusion syntax;
+- CLI and SVG labels report syntax size and proof size through the appropriate
+  measurement;
+- `size_test.ml` has 13 passing scalar/syntax/proof cases, including ground and
+  holed proofs and conclusion-syntax independence;
+- `opam exec --switch=5.4-test -- dune build`, the dedicated size test, and the
+  full `opam exec --switch=5.4-test -- dune test` suite pass.
+
 ## Proof-Skeleton and Hole-Completion Search Design
 
 This is the selected direction for reconnecting synthesis. It supersedes the
 provisional plan to order proof components by `(program footprint, proof size)`.
-The hole-syntax foundation has been implemented, while hole-aware proof types,
-component freshening/freezing, canonical hole renumbering, and synthesis
-integration remain pending. `HoleSubstitution` and `HoleSyntaxUnify` are
-implemented and tested.
+The hole-syntax foundation, unified holed proof type, and raw holed-proof
+checker have been implemented. Component freshening/freezing, canonical hole
+renumbering, and synthesis integration remain pending. `HoleSubstitution`,
+`HoleSyntaxUnify`, and the raw syntax/proof checkers are implemented and tested
+over `Syntax.holed` and `BigStep.holed_tree`.
 
 ### Why Program Size Leaves the Proof Order
 
@@ -304,23 +360,34 @@ incorrect.
 
 ### Hole-Syntax Type Boundary
 
-Hole syntax and proof types live beside the concrete `Syntax` and
-`BigStep` types. Hole-independent leaf types such as `Typ.t`, `VarId`,
-`varinfo`, constants, operators, fields, and labels are reused directly.
-Recursive syntax types are mirrored in `HoleSyntax` exactly when they can
-transitively contain a hole. `HoleBigStep` will mirror the concrete proof rules
-with hole syntax in their conclusions. The only new syntax holes are
-expression holes and statement-sequence holes.
+Hole syntax and proof types are mode instances of the unified `Syntax` and
+`BigStep` families. Hole-independent leaf types such as `Typ.t`, `VarId`,
+`varinfo`, constants, operators, fields, and labels are reused directly. Only
+recursive types that can transitively contain a hole carry a mode parameter.
+The only syntax holes are expression holes and statement-sequence holes.
 
-Implementation checkpoint (2026-07-24):
+Implementation checkpoint (2026-08-13):
 
-- `HoleSyntax`, its checker, utility, and pretty-printing modules are active;
+- unified `Syntax` and `BigStep` GADT families and their ground execution path
+  are active;
+- `HoleSubstitution`, `HoleSyntaxUnify`, and `HoleSyntaxChecker` operate on
+  `Syntax.holed`; common utilities, pretty-printing, and size traversal are
+  mode-polymorphic;
 - `HoleSubstitution` supports expression and statement-sequence bindings,
   statement-list splicing, occurs checks, composition, and normalized
   idempotent extension;
-- `HoleSyntaxUnify` structurally unifies every `HoleSyntax` layer, including
+- `HoleSyntaxUnify` structurally unifies every `Syntax.holed` layer, including
   expressions, blocks, functions, files, and the generic AST wrapper, while
   threading an existing substitution;
+- `BigStep` defines the proof-tree schema once, indexed by the same mode as the
+  syntax in each conclusion; `BigStepUtil` supplies shared accessors without a
+  functor;
+- `BigStepCheckerCore` contains the checker result type and checks that depend
+  only on shared runtime, memory, value, and `varinfo` types; syntax inspection
+  and mode-polymorphic proof-rule validation remain in `BigStepChecker`;
+- `BigStepChecker.check_tree Ground/Holed` checks either mode through one
+  witness-indexed API. Holed checking is raw and accepts unresolved holes only
+  where the represented execution has no corresponding premise;
 - `holeSyntaxUnify_test.ml` has 23 passing success/failure cases covering
   recursive refinement, empty and non-empty tail completion, canonical
   hole-to-hole aliases, mismatch paths, occurs checks, cross-sort rejection,
@@ -398,8 +465,8 @@ every conclusion and is validated by `SyntaxChecker`, `Derivator`,
 
 ### Hole Identity Across Proof Conclusions
 
-Inside one `HoleSyntax` AST, hole IDs identify distinct static positions and
-therefore cannot repeat. Across different conclusions of one `HoleBigStep`
+Inside one holed syntax AST, hole IDs identify distinct static positions and
+therefore cannot repeat. Across different conclusions of one holed `BigStep`
 component, the same ID identifies the same unknown static position. This is the
 reason IDs are present even though an isolated hole AST would not otherwise
 need them. Hole IDs are component-local administrative names, not globally
@@ -438,8 +505,8 @@ preserves that sharing while intermediate holes remain.
 
 ```ocaml
 type t = {
-  exps : HoleSyntax.exp IntMap.t;
-  stmt_seqs : HoleSyntax.stmt_seq_item list IntMap.t;
+  exps : Syntax.holed Syntax.exp IntMap.t;
+  stmt_seqs : Syntax.holed Syntax.stmt_seq_item list IntMap.t;
 }
 ```
 
@@ -489,12 +556,20 @@ is pushed through all old right-hand sides. The empty substitution is the base
 case. Arbitrary idempotent substitutions cannot simply be composed without
 these compatibility and occurs checks.
 
-Comparisons, checking, pretty-printing, and unification should use
-substitution-aware views that dereference at holes without first allocating an
-entire rewritten AST. The flat invariant makes each bound-ID lookup one map
-step, although traversal of its resolved term is still required. A hard apply
-(zonk/materialization) is reserved for final concrete `Syntax`/`BigStep`
-construction and may memoize shared source nodes.
+Synthesis-time comparison and unification may use substitution-aware views that
+dereference at holes without first allocating an entire rewritten AST. The flat
+invariant makes each bound-ID lookup one map step, although traversal of its
+resolved term is still required. Raw pretty-printing and the planned
+holed-proof checker, however, do not implicitly consult a substitution. The
+checker will inspect exactly the `Syntax.holed` values stored in the supplied
+`BigStep.holed_tree`, including raw hole IDs, and never unify terms. A caller
+that wants to check a substitution-refined tree must explicitly apply the
+substitution to the whole tree first and pass the resulting holed tree to the
+checker.
+A hard apply (zonk/materialization) is therefore normally reserved for final
+concrete `Syntax`/`BigStep` construction or an explicit diagnostic/checking
+projection; it is never an implicit checker side effect and may memoize shared
+source nodes.
 
 Before a component enters a pool, a freeze step normalizes its substitution,
 removes unreachable bindings, canonically renumbers reachable hole IDs across
@@ -657,21 +732,27 @@ proof subtrees and unify their complete hole-aware static syntax.
 ### Implementation Phases
 
 1. **Hole representation and unification**
-   - `HoleSyntax`, its utilities, pretty-printer, checker, and dedicated tests
-     are implemented while reusing hole-independent concrete leaf types.
+   - Unified mode-indexed `Syntax` and `BigStep` definitions are implemented;
+     the ground derivation/checking/rendering path is migrated and tested.
+   - Substitution, unification, raw hole checking, common utilities,
+     pretty-printing, size traversal, and dedicated tests use `Syntax.holed`
+     directly. The duplicate hole AST, util, and pretty modules are removed.
    - Hole IDs are checked as unique within one AST/conclusion; cross-conclusion
-     reuse remains to be tested at the `HoleBigStep` level.
+     reuse remains to be tested at the `BigStep.holed_tree` level.
    - `HoleSubstitution`, idempotent extension/composition,
      substitution-aware apply operations, `HoleSyntaxUnify`, and occurs checks
      are implemented and tested.
    - Component freshening, unreachable-binding removal, freeze, and canonical
      renumbering remain pending.
-   - Add `HoleBigStep`, whose immutable proof tree is paired with a persistent
-     component-local substitution.
+   - The shared indexed proof schema, non-functor utility module,
+     syntax-independent checker foundation, and unified raw ground/holed proof
+     checker are implemented; persistent component-local substitution pairing
+     remains.
 2. **Proof/code dual synthesis**
    - Add raw-fragment metadata for free loop control and return effects.
-   - Separate raw static syntax size from proof size, update component pools and
-     join indexes, and rewrite the corresponding partition rules.
+   - Raw static syntax size and proof size are implemented as independent
+     one-dimensional measurements. Update component pools and join indexes and
+     rewrite the corresponding partition rules.
    - Rewrite `grow_prog.ml` as the call-free raw expression/block generator and
      `grow_proof.ml` as the hole-aware finite-proof generator supporting loops,
      direct calls, recursion, and mutual recursion through strict proof
@@ -685,15 +766,13 @@ proof subtrees and unify their complete hole-aware static syntax.
    - Implement compatible function declaration/definition handling, migrate
      tests, re-enable the synthesis/analyzer libraries, and connect the CLI.
 
-Current partial migration provides `Syntax.ast`, the `HoleSyntax` module family,
-CIL-- component-set layers, and placeholder CIL-- objective types. The component
-layers still carry concrete syntax/proof payloads and must be adapted to
-`HoleBigStep` components paired with `HoleSubstitution`. `bottom_up.ml`,
+Current partial migration provides indexed `Syntax.ast` and `BigStep.tree`,
+hole operations over `Syntax.holed`, CIL-- component-set layers, and placeholder
+CIL-- objective types. The component layers still carry concrete syntax/proof
+payloads and must be adapted to `BigStep.holed_tree` components paired with
+`HoleSubstitution`. `bottom_up.ml`,
 `attack.ml`, the grow modules, synthesis dune re-enabling, and CLI connection
 remain pending.
-
-Each implementation step changes one file at a time. Before each change, show
-the planned patch and wait for approval.
 
 Presentation note:
 
@@ -702,12 +781,19 @@ Presentation note:
 
 ## Next Actions
 
-1. Define `HoleBigStep` and pair each immutable proof tree with its
-   component-local `HoleSubstitution`.
-2. Implement component freshening, unreachable-binding removal, freeze, and
-   canonical hole renumbering for stable pool identity.
-3. Add raw expression/block synthesis and hole-aware proof synthesis, including
-   their proof/code pool join indexes for repeated loop and function executions.
+The next implementation change set starts with pool infrastructure. Grow rules,
+completion, and Sparrow reconnection come only after the two pool boundaries and
+their component identities are fixed.
+
+1. Define a proof-pool component that pairs each immutable
+   `BigStep.holed_tree` with its persistent local `HoleSubstitution`; add the
+   freshening, unreachable-binding removal, freeze, and canonical hole
+   renumbering operations required for stable pool identity.
+2. Replace the old two-dimensional pool and partition interfaces with separate
+   `SyntaxSize`-keyed `CodePool` and `ProofSize`-keyed `ProofPool` structures,
+   then define their lookup and join indexes.
+3. Build raw expression/block grow rules and hole-aware proof grow rules on top
+   of those pools, including joins for repeated loop and function executions.
 
 ## Deferred Semantics Work
 

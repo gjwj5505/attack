@@ -5,14 +5,11 @@
  (modules
   typ
   syntax
-  holeSyntax
   holeSubstitution
   holeSyntaxUnify
   syntaxUtil
-  holeSyntaxUtil
+  syntaxSize
   syntaxPretty
-  holeSyntaxPretty
-  syntaxEqual
   cilBridge
   syntaxChecker
   holeSyntaxChecker
@@ -21,10 +18,14 @@
   valueOp
   memory
   typeUtil
+  bigStepCheckerCore
   bigStep
   bigStepUtil
   bigStepChecker
   derivator
   size
+  proofSize
   visualizer)
+ (preprocess
+  (pps ppx_deriving.eq))
  (libraries goblint-cil pretty))

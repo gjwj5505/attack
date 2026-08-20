@@ -27,7 +27,7 @@ type t = {
 }
 
 let concrete_of_ptree tree =
-  let _, _, return_value = BigStepUtil.p_concl tree in
+  let _, _, return_value = BigStep.p_concl tree in
   match return_value with
   | Value.Int return_value -> Ok { return_value }
   | Value.Ptr _ -> Error "main returned a non-integer value"

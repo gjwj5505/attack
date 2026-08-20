@@ -41,18 +41,64 @@ CIL is used for parsing, pretty-printing, library utilities, and sanity checks.
 CIL-- is the source of truth for synthesis, Big-Step semantics, proof trees, and
 attack objectives.
 
-CIL-- follows CIL constructor shapes where useful:
+CIL-- follows CIL constructor shapes where useful. Its recursive syntax is a
+mode-indexed GADT family with two intended modes:
+
+```ocaml
+type ground
+type holed
+```
+
+`ground` syntax statically excludes holes, while `holed` syntax permits them.
+Only types that transitively contain a hole receive the mode parameter:
+
+- `exp`, `lval`, `lhost`, and `offset`;
+- `instr`;
+- `stmt`, `stmtkind`, `stmt_seq_item`, and `block`;
+- `fundec`, `init`, `initinfo`, `global`, `file`, and `ast`.
+
+Hole-independent leaf types such as `id`, `VarId`, `varinfo`, `fieldinfo`,
+constants, operators, and labels remain unindexed and are shared directly.
+
+CIL-- otherwise follows CIL constructor shapes where useful:
 
 - `file -> global list`
 - `GFun -> fundec`
 - `fundec -> svar, sformals, slocals, sbody`
-- `block -> stmt list`
+- `block -> stmt_seq_item list`
 - `stmt -> stmtkind`
 - `instr` for control-flow-free actions
 - `lval = lhost * offset`
 - `lhost = Var | Mem`
 - `offset = NoOffset | Field | Index`
 - `exp` is side-effect-free
+
+Blocks retain the ordinary OCaml list type in both modes:
+
+```ocaml
+type 'mode block = {
+  bstmts : 'mode stmt_seq_item list;
+}
+
+and _ stmt_seq_item =
+  | Stmt : 'mode stmt -> 'mode stmt_seq_item
+  | StmtSeqHole : hole_id -> holed stmt_seq_item
+```
+
+Consequently, ground blocks contain only `Stmt` items, while holed blocks may
+also contain `StmtSeqHole`. Ground statements pay the small administrative cost
+of the `Stmt` wrapper so that block traversal and proof checking can be shared
+without defining a second statement-list representation. The GADT enforces the
+hole sort but not the block-shape invariant: a direct `StmtSeqHole` occurs at
+most once and only as the final item, which remains a structural checker
+responsibility.
+
+The core syntax and proof-tree definitions now use unified indexed `Syntax`
+and `BigStep` types instead of separate ground and hole-aware type families.
+Ground derivation uses the `ground` instances; synthesis, unification, and
+substitution use the `holed` instances. `HoleSubstitution`,
+`HoleSyntaxUnify`, and `HoleSyntaxChecker` operate directly on
+`Syntax.holed`; there is no second hole-aware AST definition.
 
 CIL-- records are immutable for now. If later passes need labels, statement ids,
 CFG metadata, analysis annotations, or proof annotations attached after
@@ -308,13 +354,13 @@ CIL-- expressions are pure. Expression conclusions therefore have no output
 memory:
 
 ```ocaml
-type e_concl = memory * Exp.t * value
+type 'mode e_concl = memory * 'mode exp * value
 ```
 
 All side effects are represented by instructions:
 
 ```ocaml
-type i_concl = memory * instr * memory
+type 'mode i_concl = memory * 'mode instr * memory
 ```
 
 `Call (None, ...)` means that the call instruction does not assign the return
@@ -400,6 +446,18 @@ program is measured only after completion and may be used for reporting,
 result ordering, or a separate output bound; it is not a proof construction
 order.
 
+The implementation keeps the common scalar carrier in `Size.t = int` but
+separates the two measurements:
+
+- `SyntaxSize` recursively counts syntax constructors and syntax metadata for
+  raw-program bottom-up synthesis;
+- `ProofSize` recursively counts Big-Step proof constructors and never inspects
+  conclusion syntax.
+
+`CalleeTreeDirect` contributes one proof node even though `callee_tree` is not a
+separate component-pool bucket. The enclosing call rule constructs that leaf
+and combines it with the argument and function proof premises.
+
 The syntax wrapper `Syntax.ast` mirrors the syntax component layers for
 documentation and future shared dispatch. The component pool still keeps
 separate buckets for each layer because grow rules need typed inputs such as
@@ -407,29 +465,53 @@ separate buckets for each layer because grow rules need typed inputs such as
 
 ## Big-Step Checker
 
-`lib/language/semantics/proof/ground/bigStepChecker.ml` validates that a Big-Step proof
-tree is consistent with its conclusion and with the CIL-- program structure.
+`lib/language/semantics/proof/ground/bigStepChecker.ml` validates that a
+mode-indexed Big-Step proof tree is consistent with its conclusion and with the
+CIL-- program structure. Ground and holed proofs share one authoritative API:
+
+```ocaml
+type _ mode =
+  | Ground : Syntax.ground mode
+  | Holed : Syntax.holed mode
+
+val check_tree : 'mode mode -> 'mode BigStep.tree -> result
+```
 
 There are two useful checking levels:
 
-- subtree checks validate expression, lvalue, instruction, statement, block, and
-  function proof fragments;
-- `check_ptree` validates whole-program proof trees, including the file/main
-  structure.
+- rule-level helpers validate expression, lvalue, instruction, statement,
+  block, function, and program proof fragments;
+- `check_tree Ground/Holed` combines the corresponding syntax checker with
+  those proof rules.
 
 Whole-program checking verifies:
 
-- optionally, `SyntaxChecker.check_file file`;
+- the conclusion file's syntax and hole-shape invariants;
 - exactly one `main` exists in the file;
 - the proof's function is that `main`;
 - `main` is called with no arguments;
 - the function proof checks;
 - the program conclusion memory and return value match the function proof.
 
-`check_ptree` defaults to `use_check_file:true`. The option controls only
-whether `SyntaxChecker.check_file` is run; proof-level program checks still run
-either way. The CLI `-big` path already runs `SyntaxChecker.check_file` before derivation, so
-it calls `check_ptree ~use_check_file:false` after constructing the proof tree.
+`check_tree Ground` uses `SyntaxChecker.check_file` for a whole-program tree.
+`check_tree Holed` traverses the proof and uses the corresponding
+`HoleSyntaxChecker` entry point independently for every conclusion. This
+preserves the policy that IDs may repeat across conclusions but not inside one
+conclusion. The holed checker is deliberately raw: it does not apply a
+`HoleSubstitution` and does not unify repeated syntax. A caller that wants to
+check a refined view must explicitly apply its substitution first.
+
+An unresolved hole is valid only when the represented execution skipped that
+syntax and therefore has no proof premise for it:
+
+- `ExpHole` may occur in the unevaluated right operand of a short-circuited
+  `LAnd` or `LOr`;
+- `StmtSeqHole` may occur in an unselected `if` branch or in the final suffix of
+  a block skipped after `Return`, `ReturnVoid`, `Break`, or `Continue`.
+
+An executed expression or selected branch cannot remain a hole. A block cannot
+stop normally before a tail hole, and the ordinary hole-syntax rule that a
+direct statement-sequence hole is final still applies.
 
 Function return types are context-sensitive. Standalone statement/block checks
 can omit a return type, but function checking passes the enclosing function
@@ -466,7 +548,9 @@ Two checker invariants are easy to break and should be preserved:
 Regression tests live in `lib/test/bigstepcheck_test.ml`. They run the current
 success examples and construct invalid proof trees to check representative
 error messages across the expression, lvalue, instruction, call/type,
-statement, block, function, and program layers.
+statement, block, function, and program layers. Dedicated holed cases cover
+short-circuit operands, selected and unselected branches, and accepted/rejected
+block tails.
 
 ## Sparrow Compatibility
 

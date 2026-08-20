@@ -168,7 +168,7 @@ let fundec_svar_of_cil vi =
   | Cil.TFun (_, _, true, _) -> unsupported "varargs function"
   | _ -> unsupported "non-function svar"
 
-let rec lval_to_cil var_tbl (host, offset) =
+let rec lval_to_cil var_tbl ((host, offset) : S.ground S.lval) =
   let* host =
     match host with
     | S.Var v -> (
@@ -186,7 +186,8 @@ let rec lval_to_cil var_tbl (host, offset) =
   let* offset = offset_to_cil var_tbl offset in
   Ok (cil_host, offset)
 
-and offset_to_cil var_tbl = function
+and offset_to_cil var_tbl (offset : S.ground S.offset) =
+  match offset with
   | S.NoOffset -> Ok Cil.NoOffset
   | S.Field _ -> unsupported "struct or union field offset"
   | S.Index (e, offset) ->
@@ -194,7 +195,8 @@ and offset_to_cil var_tbl = function
       let* offset = offset_to_cil var_tbl offset in
       Ok (Cil.Index (e, offset))
 
-and lval_of_cil function_name (host, offset) =
+and lval_of_cil function_name (host, offset) :
+    (S.ground S.lval, error) result =
   let* host =
     match host with
     | Cil.Var vi ->
@@ -207,7 +209,9 @@ and lval_of_cil function_name (host, offset) =
   let* offset = offset_of_cil function_name offset in
   Ok (host, offset)
 
-and offset_of_cil function_name = function
+and offset_of_cil function_name offset :
+    (S.ground S.offset, error) result =
+  match offset with
   | Cil.NoOffset -> Ok S.NoOffset
   | Cil.Field _ -> unsupported "struct or union field offset"
   | Cil.Index (e, offset) ->
@@ -287,50 +291,52 @@ and binop_of_cil = function
   | Cil.LAnd -> Ok S.Exp.LAnd
   | Cil.LOr -> Ok S.Exp.LOr
 
-and exp_to_cil var_tbl = function
-  | S.Exp.Const c -> Ok (Cil.Const (constant_to_cil c))
-  | S.Exp.Lval lv ->
+and exp_to_cil var_tbl (exp : S.ground S.exp) =
+  match exp with
+  | S.Const c -> Ok (Cil.Const (constant_to_cil c))
+  | S.Lval lv ->
       let* lv = lval_to_cil var_tbl lv in
       Ok (Cil.Lval lv)
-  | S.Exp.UnOp (op, e, typ) ->
+  | S.UnOp (op, e, typ) ->
       let* e = exp_to_cil var_tbl e in
       Ok (Cil.UnOp (unop_to_cil op, e, typ_to_cil typ))
-  | S.Exp.BinOp (op, e1, e2, typ) ->
+  | S.BinOp (op, e1, e2, typ) ->
       let* e1 = exp_to_cil var_tbl e1 in
       let* e2 = exp_to_cil var_tbl e2 in
       Ok (Cil.BinOp (binop_to_cil op, e1, e2, typ_to_cil typ))
-  | S.Exp.AddrOf lv ->
+  | S.AddrOf lv ->
       let* lv = lval_to_cil var_tbl lv in
       Ok (Cil.AddrOf lv)
-  | S.Exp.StartOf lv ->
+  | S.StartOf lv ->
       let* lv = lval_to_cil var_tbl lv in
       Ok (Cil.StartOf lv)
 
-and exp_of_cil function_name = function
+and exp_of_cil function_name exp : (S.ground S.exp, error) result =
+  match exp with
   | Cil.Const c ->
       let* c = constant_of_cil c in
-      Ok (S.Exp.Const c)
+      Ok (S.Const c)
   | Cil.Lval lv ->
       let* lv = lval_of_cil function_name lv in
-      Ok (S.Exp.Lval lv)
+      Ok (S.Lval lv)
   | Cil.UnOp (op, e, typ) ->
       let* op = unop_of_cil op in
       let* e = exp_of_cil function_name e in
       let* typ = typ_of_cil typ in
-      Ok (S.Exp.UnOp (op, e, typ))
+      Ok (S.UnOp (op, e, typ))
   | Cil.BinOp (op, e1, e2, typ) ->
       let* op = binop_of_cil op in
       let* e1 = exp_of_cil function_name e1 in
       let* e2 = exp_of_cil function_name e2 in
       let* typ = typ_of_cil typ in
-      Ok (S.Exp.BinOp (op, e1, e2, typ))
+      Ok (S.BinOp (op, e1, e2, typ))
   | Cil.CastE _ -> unsupported "cast expression"
   | Cil.AddrOf lv ->
       let* lv = lval_of_cil function_name lv in
-      Ok (S.Exp.AddrOf lv)
+      Ok (S.AddrOf lv)
   | Cil.StartOf lv ->
       let* lv = lval_of_cil function_name lv in
-      Ok (S.Exp.StartOf lv)
+      Ok (S.StartOf lv)
   | Cil.SizeOf _ -> unsupported "sizeof type expression"
   | Cil.Real _ -> unsupported "real-part expression"
   | Cil.Imag _ -> unsupported "imaginary-part expression"
@@ -386,18 +392,23 @@ let label_of_cil = function
   | Cil.CaseRange _ -> unsupported "case range label"
   | Cil.Default _ -> unsupported "default label"
 
-let rec block_to_cil var_tbl block =
-  let* stmts = list_map_result (stmt_to_cil var_tbl) block.S.bstmts in
+let rec block_to_cil var_tbl (block : S.ground S.block) =
+  let* stmts =
+    list_map_result
+      (function S.Stmt stmt -> stmt_to_cil var_tbl stmt)
+      block.S.bstmts
+  in
   Ok (Cil.mkBlock stmts)
 
-and stmt_to_cil var_tbl stmt =
+and stmt_to_cil var_tbl (stmt : S.ground S.stmt) =
   let* skind = stmtkind_to_cil var_tbl stmt.S.skind in
   let cil_stmt = Cil.mkStmt skind in
   cil_stmt.Cil.labels <- List.map label_to_cil stmt.S.labels;
   (match stmt.S.sid with Some sid -> cil_stmt.Cil.sid <- sid | None -> ());
   Ok cil_stmt
 
-and stmtkind_to_cil var_tbl = function
+and stmtkind_to_cil var_tbl (stmtkind : S.ground S.stmtkind) =
+  match stmtkind with
   | S.Instr instrs ->
       let* instrs = list_map_result (instr_to_cil var_tbl) instrs in
       Ok (Cil.Instr instrs)
@@ -428,7 +439,7 @@ and block_of_cil function_name block =
   let* bstmts =
     list_map_result (stmt_of_cil function_name) block.Cil.bstmts
   in
-  Ok { S.bstmts }
+  Ok { S.bstmts = List.map (fun stmt -> S.Stmt stmt) bstmts }
 
 and stmt_of_cil function_name stmt =
   let* labels = list_map_result label_of_cil stmt.Cil.labels in
@@ -622,7 +633,7 @@ let roundtrip_file file =
 
 let check_roundtrip_file file =
   let* file' = roundtrip_file file in
-  if SyntaxEqual.equal_file file file' then Ok ()
+  if S.equal_file file file' then Ok ()
   else Error (Roundtrip_mismatch "CIL-- file changed after CIL-- -> CIL -> CIL--")
 
 let parse_c_file_as_file path =
