@@ -12,12 +12,29 @@ let escape_xml ?(preserve_space = false) s =
     s;
   Buffer.contents b
 
+let string_width s =
+  let len = String.length s in
+  let rec loop i acc =
+    if i >= len then acc
+    else
+      let c = Char.code s.[i] in
+      let step =
+        if c land 0b1000_0000 = 0 then 1
+        else if c land 0b1110_0000 = 0b1100_0000 then 2
+        else if c land 0b1111_0000 = 0b1110_0000 then 3
+        else if c land 0b1111_1000 = 0b1111_0000 then 4
+        else 1
+      in
+      loop (i + step) (acc + 1)
+  in
+  loop 0 0
+
 let write_lines path lines =
   let char_width = 8 in
   let line_height = 16 in
   let margin = 16 in
   let max_len =
-    List.fold_left (fun acc line -> max acc (String.length line)) 0 lines
+    List.fold_left (fun acc line -> max acc (string_width line)) 0 lines
   in
   let width = max 1 ((max_len * char_width) + (2 * margin)) in
   let height = max 1 ((List.length lines * line_height) + (2 * margin)) in

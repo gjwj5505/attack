@@ -12,6 +12,23 @@ type side =
   | Top
   | Bottom
 
+let string_width s =
+  let len = String.length s in
+  let rec loop i acc =
+    if i >= len then acc
+    else
+      let c = Char.code s.[i] in
+      let step =
+        if c land 0b1000_0000 = 0 then 1
+        else if c land 0b1110_0000 = 0b1100_0000 then 2
+        else if c land 0b1111_0000 = 0b1110_0000 then 3
+        else if c land 0b1111_1000 = 0b1111_0000 then 4
+        else 1
+      in
+      loop (i + step) (acc + 1)
+  in
+  loop 0 0
+
 let make_box s =
   let raw_lines = String.split_on_char '\n' s in
   let rec trim_empty = function
@@ -20,7 +37,7 @@ let make_box s =
   in
   let lines = raw_lines |> trim_empty |> List.rev |> trim_empty |> List.rev in
   let lines = if lines = [] then [ "" ] else lines in
-  let width = List.fold_left (fun acc l -> max acc (String.length l)) 0 lines in
+  let width = List.fold_left (fun acc l -> max acc (string_width l)) 0 lines in
   { lines; width; height = List.length lines }
 
 let empty_box = { lines = []; width = 0; height = 0 }
@@ -35,7 +52,7 @@ let pad side b target_h =
     | Bottom -> padding @ b.lines
 
 let pad_lines b lines =
-  List.map (fun s -> s ^ String.make (b.width - String.length s) ' ') lines
+  List.map (fun s -> s ^ String.make (b.width - string_width s) ' ') lines
 
 let make_conclusion ?(verbose = false) mem subject result =
   let boxes =
@@ -129,6 +146,54 @@ let build_proof rule_name premises conclusion_box =
     width = max_w;
     height = List.length p_lines + 1 + List.length c_lines;
   }
+
+let build_plain_proof premises conclusion_box =
+  let gap = 3 in
+  let premise_box =
+    match premises with
+    | [] -> empty_box
+    | [ p ] -> p
+    | ps ->
+        let max_ph = List.fold_left (fun acc b -> max acc b.height) 0 ps in
+        let padded_ps =
+          List.map
+            (fun b -> { b with lines = pad Bottom b max_ph; height = max_ph })
+            ps
+        in
+        List.fold_left
+          (fun acc b ->
+            let combined =
+              List.map2
+                (fun s1 s2 -> s1 ^ String.make gap ' ' ^ s2)
+                acc.lines b.lines
+            in
+            {
+              lines = combined;
+              width = acc.width + gap + b.width;
+              height = max_ph;
+            })
+          (List.hd padded_ps) (List.tl padded_ps)
+  in
+  let max_w = max premise_box.width conclusion_box.width in
+  let line = String.make max_w '-' in
+  let center_lines b w =
+    if b.width = 0 && b.height = 0 then []
+    else
+      let left_pad = (w - b.width) / 2 in
+      let right_pad = w - b.width - left_pad in
+      List.map
+        (fun s -> String.make left_pad ' ' ^ s ^ String.make right_pad ' ')
+        b.lines
+  in
+  let p_lines = center_lines premise_box max_w in
+  let c_lines = center_lines conclusion_box max_w in
+  {
+    lines = p_lines @ [ line ] @ c_lines;
+    width = max_w;
+    height = List.length p_lines + 1 + List.length c_lines;
+  }
+
+let write_box_svg path box = Pretty.Svg.write_lines path box.lines
 
 let string_of_exp = Syntax.Exp.string_of_t
 let string_of_lval = Syntax.string_of_lval
