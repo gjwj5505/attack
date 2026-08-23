@@ -1,0 +1,8 @@
+(executables
+ (names
+  manual_big
+  core_countdown_proof
+  core_countdown_proof_x1
+  core_sequence_proof
+  core_recursive_call_proof)
+ (libraries language))
