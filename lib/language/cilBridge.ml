@@ -395,7 +395,8 @@ let label_of_cil = function
 let rec block_to_cil var_tbl (block : S.ground S.block) =
   let* stmts =
     list_map_result
-      (function S.Stmt stmt -> stmt_to_cil var_tbl stmt)
+      (fun (item : S.ground S.stmt_seq_item) ->
+        match item with S.Stmt stmt -> stmt_to_cil var_tbl stmt)
       block.S.bstmts
   in
   Ok (Cil.mkBlock stmts)
