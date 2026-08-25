@@ -1,0 +1,51 @@
+\documentclass[border=8pt]{standalone}
+\usepackage{tikz}
+\usepackage{xcolor}
+\usetikzlibrary{arrows.meta, positioning, fit, backgrounds, calc}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{kotex}
+
+\definecolor{Ink}{RGB}{26,34,43}
+\definecolor{Deep}{RGB}{0,57,127}
+\definecolor{Faint}{RGB}{124,138,153}
+\definecolor{Match}{RGB}{215,110,55}
+
+\begin{document}
+\begin{tikzpicture}[
+    tt/.style     = {font=\ttfamily\small, color=Ink, inner sep=1pt},
+    rulel/.style  = {draw=Ink, line width=0.4pt},
+    x=1cm, y=1cm,
+]
+
+% Innermost: condition false at x=100
+\node[tt] (c100) at (0, 5.6) {\{x: 100\} $\vdash$ (x < 100) $\Rightarrow$ 0};
+\draw[rulel] ($(c100.south west)+(-0.20,-0.10)$) -- ($(c100.south east)+(0.20,-0.10)$);
+\node[tt] (w100) at (0, 5.0) {\{x: 100\} $\vdash$ while (x < 100) x := x+1 $\Rightarrow$ \{x: 100\}};
+
+% dots (many iterations elided)
+\node[tt] (dots) at (0, 4.35) {$\vdots$};
+\node[font=\sffamily\footnotesize, color=Match] at (5.5, 4.35) {\bfseries ($\approx$100단 반복)};
+
+% one more visible iteration
+\node[tt] (c1L)  at (-4.6, 3.7) {\{x: 1\} $\vdash$ (x < 100) $\Rightarrow$ 1};
+\node[tt] (c1R)  at ( 0.5, 3.7) {\{x: 1\} $\vdash$ x := x+1 $\Rightarrow$ \{x: 2\}};
+\node[tt] (c1RR) at ( 5.9, 3.7) {\{x: 2\} $\vdash$ while $\ldots$ $\Rightarrow$ \{x: 100\}};
+\draw[rulel] ($(c1L.south west)+(-0.20,-0.10)$) -- ($(c1RR.south east)+(0.20,-0.10)$);
+\node[tt] (w1)   at (0.7, 3.05) {\{x: 1\} $\vdash$ while (x < 100) x := x+1 $\Rightarrow$ \{x: 100\}};
+
+% one final iteration (x=0 -> x=1 -> ... eventually 100)
+\node[tt] (c0L)  at (-4.6, 2.35) {\{x: 0\} $\vdash$ (x < 100) $\Rightarrow$ 1};
+\node[tt] (c0R)  at ( 0.5, 2.35) {\{x: 0\} $\vdash$ x := x+1 $\Rightarrow$ \{x: 1\}};
+\node[tt] (c0RR) at ( 5.9, 2.35) {\{x: 1\} $\vdash$ while $\ldots$ $\Rightarrow$ \{x: 100\}};
+\draw[rulel] ($(c0L.south west)+(-0.20,-0.10)$) -- ($(c0RR.south east)+(0.20,-0.10)$);
+\node[tt] (w0)   at (0.7, 1.7) {\{x: 0\} $\vdash$ while (x < 100) x := x+1 $\Rightarrow$ \{x: 100\}};
+
+% Combine with x:=0 assignment at the very bottom (align y)
+\node[tt, anchor=east] (asg)  at (-6.4, 1.7) {\{\} $\vdash$ x := 0 $\Rightarrow$ \{x: 0\}};
+\draw[rulel] (-9.6, 1.35) -- (7.7, 1.35);
+\node[tt] (root) at (-1.0, 0.85)
+   {\{\} $\vdash$ x := 0; while (x < 100) x := x+1 $\Rightarrow$ \{x: 100\}};
+
+\end{tikzpicture}
+\end{document}

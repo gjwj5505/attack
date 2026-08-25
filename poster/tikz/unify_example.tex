@@ -1,0 +1,74 @@
+\documentclass[border=10pt]{standalone}
+\usepackage{tikz}
+\usepackage{xcolor}
+\usepackage{listings}
+\usetikzlibrary{arrows.meta, positioning, fit, backgrounds, calc}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{kotex}
+
+\definecolor{Ink}{RGB}{26,34,43}
+\definecolor{Deep}{RGB}{0,57,127}
+\definecolor{Faint}{RGB}{124,138,153}
+\definecolor{Comment}{RGB}{124,138,153}
+
+\lstdefinestyle{code}{
+  basicstyle = \ttfamily\small\color{Ink},
+  commentstyle = \color{Comment}\itshape,
+  keywordstyle = \color{Ink}\bfseries,
+  showstringspaces = false,
+  columns = fullflexible,
+  keepspaces = true,
+  language = C,
+  morekeywords = {return},
+  literate = {??}{{{\color{Faint}\bfseries ??}}}2,
+  xleftmargin = 0pt,
+  aboveskip=0pt, belowskip=0pt,
+}
+
+\begin{document}
+\begin{tikzpicture}[
+    lbl/.style   = {font=\sffamily\small\itshape, color=Comment, anchor=west},
+    op/.style    = {font=\sffamily\Large\bfseries, color=Faint},
+    x=1cm, y=1cm,
+]
+
+% -------- Panel A --------
+\node[lbl] (Alabel) at (0, 0) {// A};
+\node[anchor=north west] (A) at (Alabel.south west) {
+\begin{lstlisting}[style=code]
+if (x > 0 && ??) {
+  return 0;
+}
+??
+\end{lstlisting}
+};
+
+% -------- Panel B --------
+\node[lbl] (Blabel) at (7, 0) {// B};
+\node[anchor=north west] (B) at (Blabel.south west) {
+\begin{lstlisting}[style=code]
+if (?? && ??) {
+  ??
+}
+x = 1;
+\end{lstlisting}
+};
+
+% -------- Panel A ⊔ B --------
+\node[lbl] (Ulabel) at (14, 0) {// A $\sqcup$ B\quad (unify 결과)};
+\node[anchor=north west] (U) at (Ulabel.south west) {
+\begin{lstlisting}[style=code]
+if (x > 0 && ??) {
+  return 0;
+}
+x = 1;
+\end{lstlisting}
+};
+
+% -------- Operators --------
+\node[op] at (6.55, -1.85) {$\sqcup$};
+\node[op] at (13.55, -1.85) {$=$};
+
+\end{tikzpicture}
+\end{document}

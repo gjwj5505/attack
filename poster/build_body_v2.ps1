@@ -232,14 +232,14 @@ try {
   [void](New-Text $sl "라이스 정리[[Rice's Theorem]] 때문에 분석기는 안전성 · 유한성 · 정밀도 셋 중 하나는 반드시 포기한다." $L 512 $CW 60 19 $Ink -Bold)
 
   $tw = ($CW - 32) / 3
-  New-Node $sl "안전성" "soundness · 실제 값을 빠뜨리지 않음"  $L                  580 $tw 70 $Deep  $Deep $Paper $Light 17
-  New-Node $sl "유한성" "termination · 언젠가 멈춤"            ($L + $tw + 16)     580 $tw 70 $Deep  $Deep $Paper $Light 17
-  New-Node $sl "정밀도" "completeness · 쓸데없이 넓힘"         ($L + 2 * $tw + 32) 580 $tw 70 $Paper $Mid  $Mid   $Mid   17
+  New-Node $sl "안전성" "soundness · 실제 값을 빠뜨리지 않음"  $L                  580 $tw 70 $Paper $Rule $Deep  $Body 17
+  New-Node $sl "유한성" "termination · 언젠가 멈춤"            ($L + $tw + 16)     580 $tw 70 $Paper $Rule $Deep  $Body 17
+  New-Node $sl "정밀도" "completeness · 쓸데없이 넓힘"         ($L + 2 * $tw + 32) 580 $tw 70 $Paper $Rule $Deep  $Body 17
   [void](New-Text $sl "셋 다 만족하는 분석기는 없다. 우리는 앞의 둘을 지키는 분석기를 공격한다." $L 660 $CW 24 14 $Faint)
 
   [void](New-Text $sl "그러면 남는 것은 정밀도 하나다. 그것이 어느 지점에서 깨지는지를 사람 없이 자동으로 찾아내는 일이 곧 공격이다." $L 694 $CW 52 15 $Body)
-  [void](New-RBox $sl $L 754 $CW 46 $Deep -R 10)
-  [void](New-Text $sl "요약 결과가 모든 값[[top = (-inf, +inf)]]으로 무너지는 지점이 가장 좋은 공격" ($L + 24) 754 ($CW - 48) 46 16 $Paper -Bold -VAlign 3)
+  [void](New-RBox $sl $L 754 $CW 46 $Lav -R 10)
+  [void](New-Text $sl "요약 결과가 모든 값[[top = (-inf, +inf)]]으로 무너지는 지점이 가장 좋은 공격" ($L + 24) 754 ($CW - 48) 46 16 $Deep -Bold -VAlign 3)
 
   [void](New-Code $sl "x = 1;`nwhile (-x) { x = 0; }`nx = x * x;" $L 816 $CW 96 15)
   [void](New-Text $sl "구체 실행  x = 0" $L 922 340 26 15 $Ink -Bold -Font $MONO)
@@ -281,12 +281,12 @@ try {
   [void](New-Text $sl "이런 갈래가 남아 있으면 한 프로그램에 실행이 여러 개 대응된다. 그러면 공격에 성공한 것처럼 보여도 사실은 그 갈래 탓일 수 있다." $L 1264 $CW 52 15 $Body)
   [void](New-Text $sl "갈래를 없애면, 프로그램 하나에 증명나무가 딱 하나로 정해진다." $L 1324 $CW 30 16 $Ink -Bold)
 
-  [void](New-RBox $sl $L 1362 $CW 84 $Deep -R 12)
+  [void](New-RBox $sl $L 1362 $CW 84 $Lav -R 12)
   $formula = "∃  지점 L, 변수 x.    분석 결과(L, x)  ⊋  실제 실행 의미(L, x)"
-  $fs = New-Text $sl $formula $L 1372 $CW 34 19 $Paper -Bold -Align 2
+  $fs = New-Text $sl $formula $L 1372 $CW 34 19 $Deep -Bold -Align 2
   Set-MathGlyph $fs $formula ([char]0x2203) 22
   Set-MathGlyph $fs $formula ([char]0x228B) 24
-  [void](New-Text $sl "어떤 프로그램 지점[[label]]과 변수에서, 요약된 결과가 실제 실행 의미보다 진짜로 더 크다[[strictly greater]]" $L 1406 $CW 24 13.5 $Light -Align 2)
+  [void](New-Text $sl "어떤 프로그램 지점[[label]]과 변수에서, 요약된 결과가 실제 실행 의미보다 진짜로 더 크다[[strictly greater]]" $L 1406 $CW 24 13.5 $Faint -Align 2)
   [void](New-Text $sl "진짜로 더 크다 = 어림잡은 값 안에, 실제로는 절대 나올 수 없는 값이 섞여 있다." $L 1458 $CW 40 13.5 $Body)
 
   New-Section $sl $R 1016 $CW "04" "증명나무를 합성하는 이유"
@@ -303,11 +303,11 @@ try {
   New-Node $sl "멈추는지 모른다"   "판정 불가"            1369 1270 221 58 $Paper $Rule $Faint $Faint 15
   [void](New-Rule $sl ($R + 24) 1342 ($R + $CW - 24) 1342 $Rule 1)
   [void](New-Text $sl "증명나무를 먼저 — 되는 길" ($R + 24) 1352 400 22 14 $Deep -Bold -Track 1.5)
-  New-Node $sl "증명나무 지어내기" "실행 의미를 먼저"     889  1378 210 58 $Deep $Deep $Paper $Light 15
+  New-Node $sl "증명나무 지어내기" "실행 의미를 먼저"     889  1378 210 58 $Lav $Mid $Deep $Body 15
   [void](New-Rule $sl 1103 1407 1125 1407 $Mid 1.8 -Arrow)
-  New-Node $sl "뿌리의 결론"       "프로그램은 따라 나옴" 1129 1378 210 58 $Deep $Deep $Paper $Light 15
+  New-Node $sl "뿌리의 결론"       "프로그램은 따라 나옴" 1129 1378 210 58 $Lav $Mid $Deep $Body 15
   [void](New-Rule $sl 1343 1407 1365 1407 $Mid 1.8 -Arrow)
-  New-Node $sl "실행이 존재한다"   "판정 가능"            1369 1378 221 58 $Deep $Deep $Paper $Light 15
+  New-Node $sl "실행이 존재한다"   "판정 가능"            1369 1378 221 58 $Lav $Mid $Deep $Body 15
 
   [void](New-Text $sl "유한한 증명나무가 있다는 것은, 곧 그 실행이 존재한다는 뜻이다." $R 1466 $CW 34 17 $Ink -Bold)
 
@@ -347,17 +347,17 @@ try {
   [void](New-Text $sl "실행되지 않은 자리를 구멍[[hole]]으로 남기면, 크기를 그냥 마디 수로 정의할 수 있다." $R 1600 $CW 60 19 $Ink -Bold)
 
   [void](New-Code $sl "if (x || ?H1) {`n  return 0;`n} else {`n  ?H2`n}" $R 1672 420 152 15)
-  New-Chip $sl "?H1" 1310 1684 62 32 $Deep $Paper 14 -1 $MONO
+  New-Chip $sl "?H1" 1310 1684 62 32 $Mid $Paper 14 -1 $MONO
   [void](New-Text $sl "앞에서 이미 결판나 계산하지 않은 오른쪽 항" 1384 1684 226 46 13.5 $Ink)
-  New-Chip $sl "?H2" 1310 1756 62 32 $Mid $Paper 14 -1 $MONO
+  New-Chip $sl "?H2" 1310 1756 62 32 $Light $Deep 14 -1 $MONO
   [void](New-Text $sl "선택되지 않은 갈림길, 또는 return 뒤에 잘린 문장 꼬리" 1384 1756 226 62 13.5 $Ink)
 
   [void](New-Text $sl "구멍이 놓일 수 있는 자리 — 이 셋뿐" $R 1842 $CW 22 13.5 $Mid -Bold -Track 1.5)
   [void](New-Bullets $sl @("if 문의 선택되지 않은 갈림길[[branch]]",
                            "차례로 이어진 문장[[sequence]]의 맨 끝 — return · break · continue 뒤",
                            "&& / || 에서 앞에서 결판나[[short-circuit]] 계산하지 않은 오른쪽 항") $R 1868 $CW 90 14.5 $Ink 6)
-  [void](New-RBox $sl $R 1966 $CW 46 $Deep -R 10)
-  [void](New-Text $sl "올바른 증명나무에서 구멍은 절대 실행되지 않는다" ($R + 24) 1966 ($CW - 48) 46 16 $Paper -Bold -VAlign 3)
+  [void](New-RBox $sl $R 1966 $CW 46 $Lav -R 10)
+  [void](New-Text $sl "올바른 증명나무에서 구멍은 절대 실행되지 않는다" ($R + 24) 1966 ($CW - 48) 46 16 $Deep -Bold -VAlign 3)
 
   [void](New-Text $sl "짝맞추기[[unification]] — 왜 필요한가" $R 2032 $CW 22 13.5 $Mid -Bold -Track 1.5)
   [void](New-Text $sl "반복문과 제 자신을 부르는 함수에서는 같은 자리가 여러 번 실행된다. 그때 나온 조각들은 서로 실제로 같아야 한다. 타입 추론[[type inference]]에서 쓰는 것과 같은 짝맞추기로 맞추고, 나무와 갈아끼우기[[substitution]]를 따로 들고 다닌다." $R 2058 $CW 84 14.5 $Body)

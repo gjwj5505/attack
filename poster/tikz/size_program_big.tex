@@ -1,0 +1,38 @@
+\documentclass[border=8pt]{standalone}
+\usepackage{tikz}
+\usepackage{xcolor}
+\usetikzlibrary{arrows.meta, positioning, fit, backgrounds, calc}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{kotex}
+
+\definecolor{Ink}{RGB}{26,34,43}
+\definecolor{Deep}{RGB}{0,57,127}
+\definecolor{Faint}{RGB}{124,138,153}
+\definecolor{Match}{RGB}{215,110,55}
+
+\begin{document}
+\begin{tikzpicture}[
+    tt/.style     = {font=\ttfamily\small, color=Ink, inner sep=1pt},
+    rulel/.style  = {draw=Ink, line width=0.4pt},
+    x=1cm, y=1cm,
+]
+
+% Condition axiom (loop cond immediately false at x=1)
+\node[tt] (cond) at (0, 3.4) {\{x: 1\} $\vdash$ (x < 1) $\Rightarrow$ 0};
+\draw[rulel] ($(cond.south west)+(-0.25,-0.10)$) -- ($(cond.south east)+(0.25,-0.10)$);
+
+% Conclusion: while doesn't iterate — body is dead code but syntactically large
+\node[tt, anchor=north west] (concl) at (-3.6, 2.7)
+   {\{x: 1\} $\vdash$ while (x < 1)\ $\Rightarrow$ \{x: 1\}};
+\node[tt, anchor=north west] (b1) at (-1.3, 2.15) {x := (x + 1);};
+\node[tt, anchor=north west] (b2) at (-1.3, 1.65) {x := (x + 1);};
+\node[tt, anchor=north west] (b3) at (-1.3, 1.15) {x := (x + 1);};
+\node[tt, anchor=north west] (b4) at (-1.3, 0.65) {x := (x + 1)};
+
+% caption
+\node[font=\sffamily\footnotesize, color=Match, anchor=west] at (2.8, 1.4)
+   {\bfseries body 4문장은 안 실행};
+
+\end{tikzpicture}
+\end{document}
